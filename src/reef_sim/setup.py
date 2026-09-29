@@ -23,6 +23,7 @@ setup(
         ('share/' + package_name + '/assets', glob('assets/*.json')),
     ],
     install_requires=['setuptools'],
+    tests_require=['pytest'],
     zip_safe=True,
     maintainer='orswan',
     maintainer_email='orswan@stanford.edu',
