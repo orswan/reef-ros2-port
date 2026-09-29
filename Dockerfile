@@ -31,6 +31,12 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 #   util-linux  setsid/flock (session-based teardown, single supervisor)
 #   curl        noVNC readiness probe
 #   shellcheck  lint for the project's shell scripts
+#   python3-matplotlib, python3-numpy
+#               reef_sim bag analysis and plots (otherwise only present via
+#               recommends)
+#   ros-jazzy-rosbag2, ros-jazzy-rosbag2-py, ros-jazzy-rosbag2-storage-mcap
+#               recording and reading the X3 scenario bags (already in the
+#               ros-base image; listed because reef_sim depends on them)
 # The ROS apt repository keeps only current versions, so versions are recorded
 # at build time (/etc/reef-image-packages.txt), not pinned.
 # DL3008: see above. DL3015: recommends are installed on purpose (as in the original).
@@ -47,6 +53,11 @@ RUN apt-get update \
         util-linux \
         curl \
         shellcheck \
+        python3-matplotlib \
+        python3-numpy \
+        ros-jazzy-rosbag2 \
+        ros-jazzy-rosbag2-py \
+        ros-jazzy-rosbag2-storage-mcap \
     && rm -rf /var/lib/apt/lists/* \
     && dpkg-query -W -f='${Package}\t${Version}\n' | sort > /etc/reef-image-packages.txt
 
