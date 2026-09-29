@@ -20,11 +20,13 @@ managed=0
 command -v reef-desktop >/dev/null && managed=1
 require_wm="${REEF_REQUIRE_WM:-$managed}"
 
-x_up() { timeout 2 xdpyinfo >/dev/null 2>&1; }
+# Probes are time-limited but generous: a busy software-rendered X server can
+# answer slowly.
+x_up() { timeout 5 xdpyinfo >/dev/null 2>&1; }
 wm_name() {
   local id
-  id="$(timeout 2 xprop -root _NET_SUPPORTING_WM_CHECK 2>/dev/null | awk '/window id/{print $NF}')"
-  [[ -n "$id" ]] && timeout 2 xprop -id "$id" _NET_WM_NAME 2>/dev/null | cut -d'"' -f2
+  id="$(timeout 5 xprop -root _NET_SUPPORTING_WM_CHECK 2>/dev/null | awk '/window id/{print $NF}')"
+  [[ -n "$id" ]] && timeout 5 xprop -id "$id" _NET_WM_NAME 2>/dev/null | cut -d'"' -f2
 }
 
 if [[ "${1:-}" == "--start" ]]; then

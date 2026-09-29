@@ -42,7 +42,7 @@ start_unrelated_sim() {  # headless demo on plain /clock; stands in for "another
   # shellcheck disable=SC2016  # $$ and $@ belong to the inner bash
   ROS_DOMAIN_ID="$1" GZ_PARTITION="$2" REEF_HEADLESS=1 \
     setsid -w bash -c 'echo $$ >"$1"; shift; exec "$@"' _ "$sid_file" \
-    "$REEF_ROOT/scripts/run_clock_demo.sh" >"$out_dir/unrelated_sim.log" 2>&1 &
+    "$REEF_ROOT/scripts/run_clock_demo.sh" </dev/null >"$out_dir/unrelated_sim.log" 2>&1 &
   unrelated_leader=$!
   for _ in $(seq 50); do [[ -s "$sid_file" ]] && break; sleep 0.1; done
   unrelated_sid="$(cat "$sid_file")"; rm -f "$sid_file"
@@ -89,7 +89,7 @@ disrupt_case() {  # name action(TERM|INT|HANG_OBSERVER|KILL_BRIDGE) expected
   # window + 15 s = 20 s) is reached while the stopped observer never exits.
   REEF_HEADLESS=1 REEF_CHECK_SECONDS=$([[ "$sig" == HANG_OBSERVER ]] && echo 3 || echo 30) \
     REEF_STARTUP_TIMEOUT=$([[ "$sig" == HANG_OBSERVER ]] && echo 2 || echo 60) \
-    "$C" >"$log" 2>&1 &
+    "$C" </dev/null >"$log" 2>&1 &
   local chk=$! obs="" sid="" note=""
   # Wait (bounded) for the observer and the owned bridge to be running.
   for _ in $(seq 150); do
@@ -133,7 +133,7 @@ bridge_case() {  # name expected domain partition: lone clock bridge + observer
   local name="$1" expected="$2" topic="/reef_regress_bridge_$$_$RANDOM/clock"
   ROS_DOMAIN_ID="$3" GZ_PARTITION="$4" ros2 run ros_gz_bridge parameter_bridge \
     '/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock' --ros-args -r "/clock:=$topic" \
-    -r __node:=regress_bridge >"$out_dir/bridge_$RANDOM.log" 2>&1 &
+    -r __node:=regress_bridge </dev/null >"$out_dir/bridge_$RANDOM.log" 2>&1 &
   local br=$!
   run_fg "$name" "$expected" ROS_DOMAIN_ID="$3" -- \
     python3 "$REEF_ROOT/scripts/clock_check.py" 2 8 --topic "$topic" --publisher-node regress_bridge
@@ -148,7 +148,7 @@ startup_case() {  # name signal(TERM|INT) expected delay_s|hook
   local log="$out_dir/${name//[^A-Za-z0-9]/_}.log" t0=$SECONDS
   local P="reef_regress_startup_$$_$RANDOM$RANDOM" extra=() leader=""
   [[ "$when" == hook ]] && extra=(REEF_TEST_REGISTER_DELAY=3)
-  env REEF_HEADLESS=1 REEF_TEST_GZ_PARTITION="$P" "${extra[@]}" "$C" >"$log" 2>&1 &
+  env REEF_HEADLESS=1 REEF_TEST_GZ_PARTITION="$P" "${extra[@]}" "$C" </dev/null >"$log" 2>&1 &
   local chk=$!
   if [[ "$when" == hook ]]; then
     local c

@@ -83,7 +83,9 @@ def generate_launch_description():
              parameters=[params_file, sim_time], condition=IfCondition(enable_range)),
         runner,
         ExecuteProcess(
-            cmd=['ros2', 'bag', 'record', '--use-sim-time', '-s', 'mcap',
+            # Keyboard controls off: a recorder reading a terminal from the
+            # background is stopped by SIGTTIN (seen with `docker compose exec`).
+            cmd=['ros2', 'bag', 'record', '--use-sim-time', '--disable-keyboard-controls', '-s', 'mcap',
                  '-o', PathJoinSubstitution([output_dir, 'bag']), '--topics', *RECORDED_TOPICS],
             name='recorder', output='screen', condition=IfCondition(record)),
         RegisterEventHandler(OnProcessExit(

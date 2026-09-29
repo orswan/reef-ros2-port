@@ -95,7 +95,10 @@ python3 "$REEF_ROOT/scripts/x3_manifest.py" start "$run_dir" \
 # separate optional viewer and not required for a valid recording.
 required=("^gz sim -r -s " "parameter_bridge" "imu_noise" "scenario_runner" "ros2 bag record")
 if [[ "$headless" == false ]]; then
-  "$REEF_ROOT/scripts/check_display.sh" >/dev/null || fail 2 "browser desktop not ready (scripts/check_display.sh)"
+  if ! display_report="$("$REEF_ROOT/scripts/check_display.sh" 2>&1)"; then
+    echo "$display_report"
+    fail 2 "browser desktop not ready (scripts/check_display.sh output above)"
+  fi
 fi
 gui_seen=0
 [[ "$enable_range" == true ]] && required+=("range_sensor")

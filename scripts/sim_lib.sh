@@ -24,8 +24,9 @@ sim_start_session() {  # log cmd...: start cmd in a new session; sets launch_pid
   # setsid -w keeps $! alive exactly as long as the session leader. env
   # --default-signal undoes bash's SIGINT ignore for background jobs.
   # shellcheck disable=SC2016  # $$ and $@ belong to the inner bash
+  # stdin from /dev/null: nothing in the session may read the caller's terminal.
   setsid -w env --default-signal=INT bash -c 'echo $$ >"$1"; shift; exec "$@"' _ "$sid_file" "$@" \
-    >"$log" 2>&1 &
+    </dev/null >"$log" 2>&1 &
   launch_pid=$!
   for _ in $(seq 50); do [[ -s "$sid_file" ]] && break; sleep 0.1; done
   sid="$(cat "$sid_file")"
