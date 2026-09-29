@@ -137,6 +137,59 @@ bridge_case() {  # name expected domain partition: lone clock bridge + observer
   kill -INT -- "-$br" 2>/dev/null; wait_exit "$br" 10 || { kill -KILL -- "-$br" 2>/dev/null; wait "$br"; }
 }
 
+tagged_pids() {  # pids whose environment carries this exact (unique) GZ_PARTITION
+  local p
+  for p in /proc/[0-9]*; do
+    tr '\0' '\n' <"$p/environ" 2>/dev/null | grep -qx "GZ_PARTITION=$1" && echo "${p#/proc/}"
+  done
+}
+
+reap_tagged() {  # stop survivors of a failed case; the unique partition proves ownership
+  local s
+  for s in $(for p in $(tagged_pids "$1"); do ps -o sid= -p "$p"; done | sort -u); do
+    pkill -INT -s "$s"; sleep 2; pkill -KILL -s "$s" 2>/dev/null
+  done
+}
+
+startup_case() {  # name signal(TERM|INT) expected delay_s|hook
+  # Signal the checker before it registers its demo session. "hook" holds the
+  # window open with REEF_TEST_REGISTER_DELAY and signals once the checker's
+  # child session leader exists; a number signals that long after start.
+  local name="$1" sig="$2" expected="$3" when="$4"
+  local log="$out_dir/${name//[^A-Za-z0-9]/_}.log" t0=$SECONDS
+  local P="reef_regress_startup_$$_$RANDOM$RANDOM" extra=() leader=""
+  [[ "$when" == hook ]] && extra=(REEF_TEST_REGISTER_DELAY=3)
+  env REEF_HEADLESS=1 REEF_TEST_GZ_PARTITION="$P" "${extra[@]}" "$C" >"$log" 2>&1 &
+  local chk=$!
+  if [[ "$when" == hook ]]; then
+    local c
+    for _ in $(seq 150); do
+      for c in $(pgrep -P "$chk"); do
+        [[ "$(ps -o sid= -p "$c" | tr -d ' ')" == "$c" ]] && { leader=$c; break 2; }
+      done
+      sleep 0.05
+    done
+    if [[ -z "$leader" ]]; then
+      record "$name" "$expected" "setup" "$(( SECONDS - t0 ))" "demo session leader never appeared"
+      kill -TERM "$chk"; wait_exit "$chk" 20; reap_tagged "$P"; return
+    fi
+  else
+    sleep "$when"
+  fi
+  local launched; launched="$(grep -c '^Launched' "$log")"
+  case "$sig" in
+    INT) kill -INT -- "-$chk" ;;
+    TERM) kill -TERM "$chk" ;;
+  esac
+  local rc=0; wait_exit "$chk" 30 || rc=$?
+  local left; left="$(tagged_pids "$P" | wc -l)"
+  local note="signalled before registration=$([[ $launched == 0 ]] && echo yes || echo no)"
+  [[ -n "$leader" ]] && note+=" (demo session $leader existed)"
+  note+="; tagged survivors=$left"
+  if (( left > 0 )); then rc="$rc+leak"; reap_tagged "$P"; fi
+  record "$name" "$expected" "$rc" "$(( SECONDS - t0 ))" "$note"
+}
+
 echo "Regression output: $out_dir"
 disp_before="$(display_pids | sort | tr '\n' ' ')"
 echo "Display service pids before: $disp_before"
@@ -181,6 +234,14 @@ disrupt_case "5 SIGTERM during observation" TERM 143
 disrupt_case "6 SIGINT (Ctrl-C to group) during obs." INT 130
 disrupt_case "8 timeout: observer hung (SIGSTOP)" HANG_OBSERVER 124
 disrupt_case "9 owned bridge killed mid-run" KILL_BRIDGE 2
+
+# 10./11. Interruption before the demo session is registered (startup window).
+startup_case "10 SIGTERM before session registration" TERM 143 hook
+startup_case "11 SIGINT (group) before registration" INT 130 hook
+# 12. Unhooked sweep across startup timing, including before traps exist.
+for d in 0 0.1 0.2 0.3 0.4 0.6 0.8 1.0 1.4 1.8; do
+  startup_case "12 SIGTERM sweep at ${d}s after start" TERM 143 "$d"
+done
 
 disp_after="$(display_pids | sort | tr '\n' ' ')"
 if [[ "$disp_before" == "$disp_after" ]]; then note="unchanged: $disp_after"; rc=0; else note="before=[$disp_before] after=[$disp_after]"; rc=1; fi

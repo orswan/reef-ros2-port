@@ -7,6 +7,8 @@
 # Knobs: REEF_CHECK_SECONDS (window, default 5), REEF_STARTUP_TIMEOUT (wait for
 # first clock message, default 60), REEF_TEST_ROS_DOMAIN_ID (default: random
 # 1-101), REEF_TEST_GZ_PARTITION (default: unique per run).
+# Test-only: REEF_TEST_REGISTER_DELAY=<s> pauses inside the startup window
+# (demo launched, session not yet registered) so regressions can signal there.
 #
 # Why another simulation cannot make this pass:
 #   * Gazebo: a per-run GZ_PARTITION, so the owned bridge only hears the owned
@@ -70,7 +72,19 @@ stop_pid() {  # stop one owned child: TERM, bounded wait, KILL, reap
   wait "$pid" 2>/dev/null || true
 }
 
+recover_sid() {  # find the demo session from launch_pid if registration never finished
+  [[ -z "$sid" && -n "$launch_pid" ]] || return 0
+  local c
+  # setsid -w either becomes the session leader itself or forks one child that does.
+  for c in "$launch_pid" $(pgrep -P "$launch_pid"); do
+    if [[ "$(ps -o sid= -p "$c" 2>/dev/null | tr -d ' ')" == "$c" ]]; then
+      sid="$c"; return 0
+    fi
+  done
+}
+
 stop_session() {  # stop the demo session this script created, and nothing else
+  recover_sid
   [[ "$sid" =~ ^[0-9]+$ ]] && (( sid > 1 )) && [[ "$sid" != "$own_sid" ]] || return 0
   local sig
   for sig in INT TERM KILL; do
@@ -86,6 +100,7 @@ cleanup() {
   trap '' INT TERM
   stop_pid "$obs_pid"
   stop_session
+  [[ -n "$sid_file" ]] && rm -f "$sid_file"
   if [[ -n "$sid" ]] && pgrep -s "$sid" >/dev/null; then
     echo "WARN processes remain in demo session $sid" >&2
   fi
@@ -95,9 +110,16 @@ cleanup() {
   fi
   exit "$rc"
 }
+on_int() { echo "INTERRUPTED (SIGINT)"; exit 130; }
+on_term() { echo "INTERRUPTED (SIGTERM)"; exit 143; }
+normal_traps() { trap on_int INT; trap on_term TERM; }
+# During startup a signal is only recorded. Children are started and their pids
+# registered first, so cleanup always knows what to stop.
+pending=""
+defer_traps() { trap 'pending=${pending:-130}' INT; trap 'pending=${pending:-143}' TERM; }
+sid_file=""
 trap cleanup EXIT
-trap 'echo "INTERRUPTED (SIGINT)"; exit 130' INT
-trap 'echo "INTERRUPTED (SIGTERM)"; exit 143' TERM
+normal_traps
 
 fail() { echo "FAIL $2"; exit "$1"; }
 
@@ -111,14 +133,17 @@ env_matches() {  # pid: process runs with this test's ROS domain and Gazebo part
 # for exactly as long as the demo, whether or not setsid needs to fork.
 # env --default-signal undoes the SIGINT ignore that bash applies to background
 # jobs, so the launch and gz processes respond to INT normally.
+defer_traps
 sid_file="$(mktemp)"
 setsid -w env --default-signal=INT bash -c 'echo $$ >"$1"; shift; exec "$@"' _ "$sid_file" \
   "$REEF_ROOT/scripts/run_clock_demo.sh" "clock_topic:=$clock_topic" >"$log" 2>&1 &
 launch_pid=$!
+[[ -n "${REEF_TEST_REGISTER_DELAY:-}" ]] && sleep "$REEF_TEST_REGISTER_DELAY"
 for _ in $(seq 50); do [[ -s "$sid_file" ]] && break; sleep 0.1; done
 sid="$(cat "$sid_file")"
-rm -f "$sid_file"
-[[ -n "$sid" ]] || fail 2 "demo session did not start"
+rm -f "$sid_file"; sid_file=""
+if [[ -n "$pending" ]]; then normal_traps; (( pending == 130 )) && on_int || on_term; fi
+if [[ -z "$sid" ]]; then normal_traps; fail 2 "demo session did not start"; fi
 
 echo "Launched clock demo: session=$sid ROS_DOMAIN_ID=$ROS_DOMAIN_ID GZ_PARTITION=$GZ_PARTITION"
 echo "  topic=$clock_topic headless=$headless log=$log"
@@ -126,6 +151,8 @@ echo "  topic=$clock_topic headless=$headless log=$log"
 env --default-signal=INT python3 "$REEF_ROOT/scripts/clock_check.py" "$window" "$startup" \
   --topic "$clock_topic" --publisher-node clock_bridge &
 obs_pid=$!
+normal_traps
+if [[ -n "$pending" ]]; then (( pending == 130 )) && on_int || on_term; fi
 
 # --- Monitor until the observer finishes; fail fast if the owned demo dies.
 limit=$(( ${startup%.*} + ${window%.*} + 15 ))
