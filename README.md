@@ -19,12 +19,13 @@ Every command below is labelled with where it runs:
 
 | Path | Purpose |
 |---|---|
-| `src/` | ROS 2 packages (colcon source space); empty for now |
+| `src/` | ROS 2 packages (colcon source space): `reef_sim` (X3 scenario) |
 | `sim/` | Gazebo worlds and launch files for demos/tests |
 | `scripts/` | Launch and check scripts; they set up their own environment |
 | `docs/` | Migration notes; `docs/setup/` has the original container recipe |
 | `Dockerfile`, `compose.yaml`, `.devcontainer/`, `docker/` | Dev container definition |
 | `reference/` | Upstream ROS 1 clones for reading only. Ignored by Git; `COLCON_IGNORE` keeps colcon out |
+| `assets/`, `recordings/` | Downloaded Gazebo models and scenario recordings. Ignored by Git, kept on the Mac |
 
 ## Dev container
 
@@ -120,7 +121,7 @@ a capture of exactly what noVNC displays.
 
 ```bash
 scripts/validate_devcontainer.sh         # image, desktop, headless + GUI clock checks, negative case (~1 min)
-scripts/validate_devcontainer.sh --full  # also the 28-case clock-check regression suite (~2 min more)
+scripts/validate_devcontainer.sh --full  # also the clock and X3 regression suites (~9 min more; run setup_assets.py first)
 ```
 
 The same from the **Mac terminal**:
@@ -144,6 +145,42 @@ reef-desktop status                      # desktop services; `reef-desktop logs`
 
 Gazebo is started only by these scripts, never by the desktop services, so the
 desktop is up before any simulation begins.
+
+### X3 quadrotor scenario (data for the REEF port)
+
+A bounded Gazebo flight (settle, ascend, forward, left, back, descend) that
+records ground truth, IMU, and an idealized downward range, then checks and
+plots the recording. The vehicle is flown by Gazebo's own velocity controller,
+which uses **simulation truth**; this is a data source, not REEF control.
+Interfaces, frames, conventions, and acceptance criteria are in
+[docs/X3_SCENARIO.md](docs/X3_SCENARIO.md).
+
+**Container terminal:**
+
+```bash
+scripts/setup_assets.py              # once: download + verify the pinned X3 model into assets/ (~22 MB)
+scripts/run_x3_scenario.sh           # headless flight, recording, analysis (~80 s); prints the run directory
+scripts/run_x3_scenario.sh --gui     # same, with Gazebo shown at http://127.0.0.1:8081/vnc.html
+scripts/regress_x3_scenario.sh       # regression suite (~7 min)
+ros2 run reef_sim analyze_x3_bag recordings/<run>   # re-analyze (after: source install/setup.bash)
+```
+
+The same from the **Mac terminal**: `docker compose exec dev scripts/setup_assets.py`,
+then `docker compose exec dev scripts/run_x3_scenario.sh`.
+
+Each run writes `recordings/x3_<time>_<id>/`: `manifest.yaml` (source revision,
+model version and checksums, parameters, seeds, outcome), `bag/` (rosbag2,
+MCAP), and `analysis/*.png`. On the Mac the same files are under
+`~/ros2_ws/reef_ros2/recordings/`. Runs are offline: they fail if Gazebo
+fetches anything from Fuel. For replay, see docs/X3_SCENARIO.md §8.
+
+With `--gui`, the browser desktop shows a *Gazebo Sim* window. The world is
+`x3_flight`, the entity tree lists `x3`, and a small quadrotor climbs to about
+2 m and flies a square; scroll to zoom in.
+
+Third-party asset: X3 UAV model by Open Robotics (Carlos Agüero, Cole
+Biesemeyer), Gazebo Fuel, CC BY 4.0. `src/reef_sim/models/reef_x3` is derived
+from it (see `src/reef_sim/assets/x3_uav_v4.json`).
 
 ### Daily use
 
@@ -170,8 +207,10 @@ Dockerfile, replaces the container.
 | Kept | Where |
 |---|---|
 | Everything under `~/ros2_ws/reef_ros2`: source, docs, `build/`, `install/`, `log/` (these three are ignored by Git) | Bind mount on the Mac |
-| Future project-owned Gazebo models and worlds (commit them under `sim/models/`, `sim/worlds/`) | Bind mount, in Git |
-| Gazebo Fuel downloads (e.g. the X3 UAV, ~93 MB) and Gazebo GUI settings, `/root/.gz` | Docker volume `reef_ros2_gz` |
+| Project-owned Gazebo models and worlds (`src/reef_sim/models`, `src/reef_sim/worlds`, `sim/worlds`) | Bind mount, in Git |
+| Pinned third-party Gazebo models (`assets/models/`, e.g. the X3 UAV, ~93 MB), installed by `scripts/setup_assets.py`, checksummed by the committed manifest | Bind mount, ignored by Git |
+| Scenario recordings (`recordings/`) | Bind mount, ignored by Git |
+| Ad-hoc Gazebo Fuel downloads and Gazebo GUI settings, `/root/.gz` (the X3 scenario does not use this cache) | Docker volume `reef_ros2_gz` |
 
 | Lost | Why |
 |---|---|
@@ -234,6 +273,10 @@ diff <(grep -v '^#' docker/original-packages.txt) /tmp/reef-new-packages.txt | l
 | `REEF_TEST_REGISTER_DELAY` | unset | test-only: pauses `check_clock_demo.sh` inside its startup window |
 | `REEF_REQUIRE_WM` | `1` in the dev container, `0` in the original | `check_display.sh`: whether a missing window manager fails |
 | `REEF_TEST_DESKTOP_DISPLAY`, `_VNC_PORT`, `_WEB_PORT` | `150`, `5950`, `6150` | `test_desktop.sh` spare display and ports |
+| `REEF_X3_PARAMS` | `src/reef_sim/config/x3_scenario.yaml` | `run_x3_scenario.sh` parameters file |
+| `REEF_X3_OUT` | `recordings/x3_<time>_<id>` | `run_x3_scenario.sh` run directory |
+| `REEF_ASSETS_DIR` | `assets/models` | asset location (`setup_assets.py`, `run_x3_scenario.sh`) |
+| `REEF_X3_ENABLE_RANGE` | `1` | test-only: `0` omits the range stream |
 
 `check_clock_demo.sh` isolates itself with a per-run Gazebo partition and ROS
 topic, and fails if its own launch dies. Exit codes are 0 pass, 1 clock check
@@ -243,9 +286,10 @@ failed, 2 demo failed, 124 timeout, 130/143 interrupted. See
 To recreate the reference clones, see the commit table in
 [docs/MIGRATION.md](docs/MIGRATION.md#2-reference-sources-inspection-only-never-built).
 
-## Building (once packages exist)
+## Building
 
-**Container terminal**, from this directory (in the original container, not
+`scripts/run_x3_scenario.sh` builds `reef_sim` itself. To build by hand,
+**container terminal**, from this directory (in the original container, not
 from `/root/ros2_ws`, whose colcon run would also discover `reef_ros2/src`):
 
 ```bash

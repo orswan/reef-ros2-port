@@ -358,6 +358,12 @@ window ("Gazebo Sim", `gz-sim-gui`) was confirmed mapped on `:99` via
 
 ## 6. Candidate Harmonic multicopter example for the next task
 
+> **Status: implemented** as `src/reef_sim` (see §10 and
+> [X3_SCENARIO.md](X3_SCENARIO.md)). The audit below is kept as written. Where
+> it says [A], §10 records what was then verified: odometry child frame FLU
+> [V]; the X3 is loaded from pinned local assets rather than the Fuel cache
+> [V]; the range is idealized from truth rather than an altimeter.
+
 **Recommended: `multicopter_velocity_control.sdf`** (in
 `/opt/ros/jazzy/opt/gz_sim_vendor/share/gz/gz-sim8/worlds/`). [V] file present.
 The simpler `quadcopter.sdf` has only motor models, so it has no closed-loop
@@ -424,20 +430,53 @@ How it maps onto REEF [A]:
    or compiled out for the Gazebo path?
 3. Which frame should be used at the ROS 2 boundary: keep REEF's NED/body-level internally with
    converters at the Gazebo bridge (recommended), or switch to REP-103?
-4. Should the X3 model be vendored into `sim/models/` for offline, deterministic runs?
+4. ~~Should the X3 model be vendored for offline runs?~~ Resolved: pinned,
+   checksummed download into `assets/` (ignored by Git), verified before every
+   run, with Fuel fetching blocked during runs (§10).
 5. Which controller path should close the loop on REEF estimates (ported `reef_control`,
    or a custom Gazebo system), given that the stock velocity controller uses truth?
 
-## 8. Proposed next steps
+## 8. Next task: choose and port the REEF estimator baseline
 
-1. Bring up `multicopter_velocity_control` (X3 only) with the IMU/altimeter added,
-   and bridge `/clock`, IMU, odometry, and twist command. Verify hover and step commands.
-2. Port `reef_msgs` to `src/reef_msgs` (ament_cmake, rosidl).
-3. Port `reef_estimator` to `src/reef_estimator` (rclcpp, parameters, QoS
-   transient_local for the formerly latched topics), preserving the filter math
-   unchanged.
-4. Add frame-conversion adapters and an estimator-vs-truth comparison, with the
-   vehicle still flown by the truth-fed controller (see §6 validation limit).
+Inputs now available: recordings from `scripts/run_x3_scenario.sh` (truth,
+IMU, idealized range, phase labels, manifest) and the conversions in
+[X3_SCENARIO.md §5](X3_SCENARIO.md#5-conversions-reef-integration-will-need).
+
+1. **Port `reef_msgs`** to `src/reef_msgs` (ament_cmake + rosidl: the 11
+   messages, plus the `dynamics` / `matrix_operation` helpers as an exported C++
+   library).
+2. **Port the estimator core unchanged** into `src/reef_estimator`: `Estimator`,
+   `XYEstimator`, `ZEstimator`, and `XYZEstimator` as a ROS-agnostic C++ library,
+   with a thin rclcpp node for parameters, subscriptions, and publishers
+   (transient-local QoS for the formerly latched outputs). Fix the relative
+   `dynamics.h` include. Put the `RCRaw` mocap switch behind a build option.
+3. **Build both baselines from the same port.** Implement master `e4179f48` and
+   the simulation branch `95987b51` as two parameter/behaviour sets: the Z
+   model, per-step model rebuild vs fixed dt, gravity initialization, the XY
+   update flag, χ² gating, and noise parameters, per the §2 table. Do not merge
+   or "fix" either one silently.
+4. **Write a sim adapter node** (`reef_sim` or a new `reef_sim_bridge`). It
+   converts IMU FLU → FRD; supplies attitude from truth, **labelled
+   idealized**, until an attitude estimator exists; converts range to the sonar
+   input, dropping ±inf and making a documented choice about tilt compensation;
+   and optionally provides mocap-like pose/velocity from truth (NED /
+   body-level, labelled idealized).
+5. **Replay-based comparison.** Run each baseline on the same recorded bags
+   (`ros2 bag play … --exclude-topics /x3/cmd_vel`) and score `xyz_estimate`
+   against truth with a script like `analyze_x3_bag`. Metrics: z and ż RMS
+   error, XY velocity RMS error, and behaviour at takeoff and during
+   out-of-range sonar. Because the data is synthetic and the attitude
+   idealized, **choose the baseline on behaviour and code-health grounds**,
+   using these numbers as a sanity check, not as hardware validation.
+6. **Record the decision** (open question 1) with the evidence, and keep the
+   losing variant runnable for comparison until real data exists.
+
+Acceptance for that task: both variants build and run on replayed bags with
+finite outputs; the error metrics are reported per phase; the adapter's
+conversions are unit-tested with known rotations and at-rest IMU samples.
+
+REEF-in-the-loop control (open question 5) stays out of scope until the
+estimator runs on replayed data.
 
 ## 9. Reproducible dev container
 
@@ -506,3 +545,27 @@ restart`, browser view on 8081, and the VS Code Dev Containers flow. [A] VS Code
 honours the top-level `name: reef_ros2` in `compose.yaml` (devcontainers CLI
 behaviour), so VS Code and terminal share one compose project. The README has
 a `docker ps` check for this.
+
+## 10. X3 simulation data milestone (branch `feature/x3-sim-dataset`)
+
+Implemented in `src/reef_sim` plus `scripts/{setup_assets.py,run_x3_scenario.sh,
+regress_x3_scenario.sh,x3_manifest.py,sim_lib.sh}`. The interface
+specification and results are in [X3_SCENARIO.md](X3_SCENARIO.md). Findings,
+checked against installed files and version-matched sources (gz-sim 8.15.0,
+gz-math 7.7.0, gz-sensors 8):
+
+| Finding | Evidence | Consequence |
+|---|---|---|
+| OdometryPublisher: the pose is the model's exact world pose; the twist is a finite difference of pose, averaged over 10 samples, in the body frame; stamps are sim time | `OdometryPublisher.cc` (`SetWindowSize(10)`, `RotateVectorReverse`) [V] | the truth twist is labelled near-truth (about 10 ms lag); analysis checks it against d(pose)/dt |
+| MulticopterVelocityControl interprets the command in the body frame (`pose.linear() * cmd.linear`) and feeds back simulator truth | `LeeVelocityController.cc`, `Common.cc` [V] | scenario commands are body FLU; yaw is held |
+| Gazebo IMU at rest reports (0, 0, +9.80) m/s² in FLU (specific force) | recorded bag [V] | REEF needs FLU → FRD, giving −g at rest |
+| ros_gz_bridge fills an unpopulated IMU orientation with zeros and covariance 0 (not REP 145's −1) | recorded bag [V] | `imu_noise` sets `orientation_covariance[0] = -1` and zeroes the quaternion |
+| Gazebo sensor noise is not reproducible with `gz sim --seed`: a global RNG is shared with systems running concurrently in `PostUpdate` | two same-seed runs differed by √2·σ; `Rand.cc`, `ServerConfig.cc`, `GaussianNoiseModel.cc` [V] | noise added in ROS, keyed by (seed, stamp); same-seed runs agree to 8·10⁻⁵ m/s² RMS |
+| Combined GUI mode (`gz sim -r world`) makes the server wait for a world-path handshake from the GUI (`wait_gui` defaults to 1, undocumented in `--help`); a missed handshake left the server stuck before loading the world | 1 of 4 early GUI runs; `cmdsim.rb.in`, `gz.cc` [V] | the server always runs with `-s`, the GUI as a separate `gz sim -g` viewer; 3/3 GUI reruns plus the suite passed |
+| `ros2 launch` sends SIGINT and then SIGTERM only to the `gz` Ruby wrapper, so the `gz sim` server can survive it as an orphan | trial run [V] | runs still end with session teardown (INT → TERM → KILL) |
+| X3 v4 references its meshes as `model://x3/...`, and texture `x3.png` relatively; license CC BY 4.0 | archive and Fuel metadata [V] | installed to `assets/models/x3`, with attribution recorded |
+
+Follow-up: switch `sim/launch/clock_demo.launch.py` to the `-s` + `-g` split
+as well. Migrating `check_clock_demo.sh` onto `scripts/sim_lib.sh` would
+remove duplicated session logic; it was left unchanged here because it is
+reviewed code with its own regression suite.

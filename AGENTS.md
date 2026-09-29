@@ -52,6 +52,24 @@ holds the verified findings, pinned upstream commits, and open decisions.
 - No physical flight recordings exist. Validate against Gazebo ground truth.
 - Do not commit build outputs, reference clones, or recordings (see `.gitignore`).
 
+## Simulation data rules (`src/reef_sim`, docs/X3_SCENARIO.md)
+
+- Keep **truth** (`/x3/truth/...`) separate from **measurements** (`/x3/imu`,
+  `/x3/range`). Anything derived from truth must say so in its topic
+  documentation. Never put truth into a measurement field (for example IMU
+  orientation).
+- The stock Gazebo velocity controller flies on truth. Do not describe
+  scenario results as REEF-in-the-loop or as hardware validation.
+- Third-party models: pin them in `src/reef_sim/assets/*.json` (URL, version,
+  license, SHA-256) and install them with `scripts/setup_assets.py` into
+  `assets/` (ignored by Git). Runs must stay offline; `run_x3_scenario.sh`
+  enforces this.
+- Add noise in ROS with generators keyed by (seed, stamp), not with Gazebo
+  sensor noise, which is not reproducible (see MIGRATION.md §10).
+- Run the Gazebo server with `-s`. If a GUI is needed, start it as a separate
+  `gz sim -g` viewer.
+- After changing `reef_sim` or the X3 scripts, run `scripts/regress_x3_scenario.sh`.
+
 ## Reporting
 
 - In docs and reports, label findings **[V] verified** (observed here) or
