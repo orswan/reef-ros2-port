@@ -6,6 +6,7 @@
 # Exit status: 0 if every case matched its expectation, 1 otherwise.
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/env.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/test_lib.sh"
 reef_reexec_clean "$@"
 reef_setup_env
 set -m  # background jobs get their own process group; SIGINT is not ignored
@@ -137,20 +138,6 @@ bridge_case() {  # name expected domain partition: lone clock bridge + observer
   kill -INT -- "-$br" 2>/dev/null; wait_exit "$br" 10 || { kill -KILL -- "-$br" 2>/dev/null; wait "$br"; }
 }
 
-tagged_pids() {  # pids whose environment carries this exact (unique) GZ_PARTITION
-  local p
-  for p in /proc/[0-9]*; do
-    tr '\0' '\n' <"$p/environ" 2>/dev/null | grep -qx "GZ_PARTITION=$1" && echo "${p#/proc/}"
-  done
-}
-
-reap_tagged() {  # stop survivors of a failed case; the unique partition proves ownership
-  local s
-  for s in $(for p in $(tagged_pids "$1"); do ps -o sid= -p "$p"; done | sort -u); do
-    pkill -INT -s "$s"; sleep 2; pkill -KILL -s "$s" 2>/dev/null
-  done
-}
-
 startup_case() {  # name signal(TERM|INT) expected delay_s|hook
   # Signal the checker before it registers its demo session. "hook" holds the
   # window open with REEF_TEST_REGISTER_DELAY and signals once the checker's
@@ -188,6 +175,37 @@ startup_case() {  # name signal(TERM|INT) expected delay_s|hook
   note+="; tagged survivors=$left"
   if (( left > 0 )); then rc="$rc+leak"; reap_tagged "$P"; fi
   record "$name" "$expected" "$rc" "$(( SECONDS - t0 ))" "$note"
+}
+
+reap_containment_case() {  # name: reap_tagged must spare untagged members of the session
+  local name="$1" t0=$SECONDS tag="reef_regress_reap_$$_$RANDOM$RANDOM"
+  local res="$out_dir/reap_result.txt" log="$out_dir/13_reap_containment.log"
+  rm -f "$res"
+  # Everything runs in a session created only for this case, so a faulty
+  # helper can only hurt this throwaway session. Inside it: the helper's shell,
+  # an untagged sentinel (same session and process group), a tagged process in
+  # the same group, and a tagged process in its own group.
+  setsid -w bash -c '
+    source "$1"; tag="$2"; res="$3"
+    sleep 300 & sentinel=$!
+    GZ_PARTITION="$tag" sleep 301 & t1=$!
+    GZ_PARTITION="$tag" setsid sleep 302 &
+    for _ in $(seq 50); do [[ $(tagged_pids "$tag" | wc -l) -ge 2 ]] && break; sleep 0.1; done
+    before=$(tagged_pids "$tag" | wc -l)
+    reap_tagged "$tag"; rc=$?
+    alive=no; kill -0 "$sentinel" 2>/dev/null && alive=yes
+    echo "helper_rc=$rc tagged_before=$before tagged_left=$(tagged_pids "$tag" | wc -l) sentinel_alive=$alive shell_survived=yes" >"$res"
+    kill "$sentinel"; wait "$sentinel" 2>/dev/null
+    exit 0' _ "$REEF_ROOT/scripts/test_lib.sh" "$tag" "$res" >"$log" 2>&1 &
+  local inner=$! rc=0
+  wait_exit "$inner" 60 || rc=$?
+  local out; out="$(cat "$res" 2>/dev/null || echo "no result (helper shell did not survive)")"
+  local ok=0
+  [[ "$out" == *"helper_rc=0 "* && "$out" == *"tagged_before=2 "* && "$out" == *"tagged_left=0 "* \
+     && "$out" == *"sentinel_alive=yes"* && "$out" == *"shell_survived=yes"* ]] || ok=1
+  (( rc == 0 )) || ok=1
+  [[ -z "$(tagged_pids "$tag")" ]] || { ok=1; out+=" (tagged left after case)"; reap_tagged "$tag"; }
+  record "$name" 0 "$ok" "$(( SECONDS - t0 ))" "$out"
 }
 
 echo "Regression output: $out_dir"
@@ -242,6 +260,9 @@ startup_case "11 SIGINT (group) before registration" INT 130 hook
 for d in 0 0.1 0.2 0.3 0.4 0.6 0.8 1.0 1.4 1.8; do
   startup_case "12 SIGTERM sweep at ${d}s after start" TERM 143 "$d"
 done
+
+# 13. Failure-path cleanup must signal only tagged processes, not their session.
+reap_containment_case "13 reap_tagged spares untagged session peers"
 
 disp_after="$(display_pids | sort | tr '\n' ' ')"
 if [[ "$disp_before" == "$disp_after" ]]; then note="unchanged: $disp_after"; rc=0; else note="before=[$disp_before] after=[$disp_after]"; rc=1; fi

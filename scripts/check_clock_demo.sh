@@ -124,7 +124,7 @@ normal_traps
 fail() { echo "FAIL $2"; exit "$1"; }
 
 env_matches() {  # pid: process runs with this test's ROS domain and Gazebo partition
-  local e; e="$(tr '\0' '\n' <"/proc/$1/environ" 2>/dev/null)" || return 1
+  local e; e="$(tr '\0' '\n' 2>/dev/null <"/proc/$1/environ")" || return 1
   grep -qx "ROS_DOMAIN_ID=$ROS_DOMAIN_ID" <<<"$e" && grep -qx "GZ_PARTITION=$GZ_PARTITION" <<<"$e"
 }
 
