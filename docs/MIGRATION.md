@@ -265,17 +265,32 @@ stopped by layer 3 directly, and by layers 1–2 independently (cases 4c, 4e, 4f
 below).
 
 Cleanup: the observer is a tracked child that is terminated (TERM, then KILL
-after 5 s) and reaped. The demo runs in a session created by the checker, and
+after 5 s) and reaped. From the demo launch until both the demo's session id and
+the observer's pid are registered, INT/TERM are only recorded and acted on
+immediately afterwards, so cleanup always knows what to stop. As a backstop, if
+the session id is still unknown, cleanup recovers it from the launch pid (only
+that pid or its direct child is accepted as session leader). The demo runs in a session created by the checker, and
 teardown uses `pkill -s <sid>` only after checking that the sid is not the
 checker's own session. Traps cover normal exit, failure, timeout, SIGINT, and
 SIGTERM. Exit statuses: 0 pass, 1 clock check failed, 2 owned demo failed or
 bad input, 124 timeout, 130 SIGINT, 143 SIGTERM.
 
-### Regression results (`scripts/regress_clock_check.sh`, 2026-09-29, run at `3d6e779`)
+### Startup interruption leak (found in the second review, fixed in `81ae28a`)
+
+At `3d6e779`, a signal that arrived after the demo was launched but before its
+session id was registered ran cleanup with an empty sid. The checker exited 143
+and left the whole demo running. Reproduced here 3/3 before the fix: exit 143
+with 4 survivors each time (`ros2 launch`, the gz wrapper, `gz sim`, and
+`parameter_bridge`). After the fix, the same reproduction gave exit 143 with 0
+survivors, 3/3. Survivors were identified by each attempt's unique
+`GZ_PARTITION` in `/proc/<pid>/environ`. The earlier interruption cases had
+all waited until the observer was active, so they could not hit this window.
+
+### Regression results (`scripts/regress_clock_check.sh`, 2026-09-29, run on code identical to `81ae28a`)
 
 | # | Case | Expected | Actual | Time | Evidence |
 |---|---|---|---|---|---|
-| 1 | Headless success | 0 | 0 | 10 s | PASS |
+| 1 | Headless success | 0 | 0 | 11 s | PASS |
 | 2 | GUI success on existing `:99` | 0 | 0 | 10 s | PASS; server, GUI, and bridge env verified |
 | 3 | No clock (fresh topic, nothing running) | 1 | 1 | 3 s | `FAIL no message … within 3s` |
 | 4a | Sanity: unrelated sim is publishing `/clock` in domain D | 0 | 0 | 5 s | PASS |
@@ -284,11 +299,14 @@ bad input, 124 timeout, 130 SIGINT, 143 SIGTERM.
 | 4g | Control: lone bridge in the *same* partition | 0 | 0 | 3 s | PASS |
 | 4b | Unrelated sim + checker with `REEF_DISPLAY=:197`, same domain D | 2 | 2 | 2 s | `FAIL owned demo launch exited early` |
 | 4c | As 4b, and forced onto the unrelated sim's domain **and** partition | 2 | 2 | 1 s | `FAIL owned demo launch exited early` |
-| 4d | Unrelated sim + valid headless checker in domain D | 0 | 0 | 9 s | PASS (coexists) |
+| 4d | Unrelated sim + valid headless checker in domain D | 0 | 0 | 11 s | PASS (coexists) |
 | 5 | SIGTERM to the checker during observation | 143 | 143 | 4 s | observer gone; demo session 4 procs → 0 |
-| 6 | SIGINT to the checker's process group (Ctrl-C) during observation | 130 | 130 | 4 s | observer gone; demo session 4 procs → 0 |
-| 8 | Timeout: observer SIGSTOPped, deadline 20 s | 124 | 124 | 27 s | `FAIL timed out after 20s`; stopped observer killed |
-| 9 | Owned bridge killed mid-run | 2 | 2 | 4 s | `FAIL required process 'parameter_bridge' exited` |
+| 6 | SIGINT to the checker's process group (Ctrl-C) during observation | 130 | 130 | 5 s | observer gone; demo session 4 procs → 0 |
+| 8 | Timeout: observer SIGSTOPped, deadline 20 s | 124 | 124 | 26 s | `FAIL timed out after 20s`; stopped observer killed |
+| 9 | Owned bridge killed mid-run | 2 | 2 | 5 s | `FAIL required process 'parameter_bridge' exited` |
+| 10 | SIGTERM before session registration (`REEF_TEST_REGISTER_DELAY=3` holds the window open; signalled once the demo session existed) | 143 | 143 | 4 s | 0 tagged survivors |
+| 11 | SIGINT to the checker's group before registration (same hook) | 130 | 130 | 1 s | 0 tagged survivors |
+| 12 | Unhooked SIGTERM sweep at 0, 0.1, 0.2, 0.3, 0.4, 0.6, 0.8, 1.0, 1.4, 1.8 s after start (≤0.4 s landed before registration, ≥0.6 s after) | 143 ×10 | 143 ×10 | 0–12 s | 0 tagged survivors in every run |
 | 7 | Display services (Xvfb, x11vnc, websockify PIDs) | unchanged | unchanged | n/a | 2346 2358 2359 2534 before and after |
 
 The suite checks ownership before every signal. The observer must be the
@@ -296,6 +314,11 @@ checker's child, and the demo session leader must be the checker's child or
 grandchild. The suite's own unrelated sim is stopped the same way. After each
 suite run, no `gz sim`, `parameter_bridge`, `clock_check`, or `ros2 launch`
 processes remained. Times and clock rates are observations, not thresholds.
+The slowest sweep case (1.4 s, 12 s total) was `gz sim` ignoring SIGINT while
+still initializing: `ros2 launch` waited its standard 5 s before escalating to
+SIGTERM. Teardown stayed bounded and complete. The launch-pid recovery backstop
+in cleanup has not been exercised directly, because signal deferral keeps it from
+being needed on every path that was tested.
 
 Earlier observations with the first version (still representative of the
 demo itself): headless RTF about 0.98 at about 960 Hz; GUI RTF 0.89–0.95. The GUI

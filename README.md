@@ -62,6 +62,7 @@ its Mac-side path depends on how the container was created.
 | `REEF_STARTUP_TIMEOUT` | `60` | wait for first clock message |
 | `REEF_TEST_ROS_DOMAIN_ID` | random 1–101 | `check_clock_demo.sh` (overrides `ROS_DOMAIN_ID`) |
 | `REEF_TEST_GZ_PARTITION` | unique per run | `check_clock_demo.sh` (overrides `GZ_PARTITION`) |
+| `REEF_TEST_REGISTER_DELAY` | unset | test-only: pauses `check_clock_demo.sh` inside its startup window |
 
 `check_clock_demo.sh` isolates itself with a per-run Gazebo partition and ROS
 topic, and fails if its own launch dies. Exit codes are 0 pass, 1 clock check

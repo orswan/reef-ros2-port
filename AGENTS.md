@@ -51,6 +51,10 @@ holds the verified findings, pinned upstream commits, and open decisions.
 - Tests must own what they observe: use a per-run `GZ_PARTITION` and unique
   ROS topic names, and monitor the launched processes. A ROS domain ID or
   `LOCALHOST` discovery alone is not isolation.
+- Register a child's pid or session before a signal can trigger cleanup
+  (record signals during startup and act on them afterwards). Include an
+  interruption test inside every startup window, not only once the test is
+  running.
 - Before signalling any process, check that the test started it (parent/session
   ownership). Never signal by broad `pgrep -f` patterns: they also match the
   shell whose command line contains the pattern. Never touch the Xvfb, x11vnc,
