@@ -58,5 +58,13 @@ fi
 
 if pgrep -x x11vnc >/dev/null; then echo "OK   x11vnc"; else echo "WARN x11vnc not running (GUI will not be viewable)"; fi
 if pgrep -f "websockify" >/dev/null; then echo "OK   noVNC websockify"; else echo "WARN websockify not running"; fi
-if (( managed )); then reef-desktop status | sed 's/^/     /'; fi
+# Service status is informational: Gazebo's GUI needs only the X server (and,
+# in the dev container, the window manager). A slow or failed noVNC probe
+# affects browser viewing, not the simulation, so it must not fail this check.
+if (( managed )); then
+  report_rc=0
+  report="$(reef-desktop status 2>&1)" || report_rc=$?
+  while IFS= read -r line; do echo "     $line"; done <<<"$report"
+  (( report_rc == 0 )) || echo "WARN reef-desktop status reports a failed service; browser viewing may be affected"
+fi
 exit $status

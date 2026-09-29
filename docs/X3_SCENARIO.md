@@ -264,6 +264,17 @@ two failures, and a false pass, were test-harness problems, since fixed:
   `ros2 bag play`, backgrounded in a `docker compose exec` terminal, was
   stopped by SIGTTIN.
 
+A second dev-container run showed the actual GUI-case cause. X, the window
+manager, x11vnc, and websockify were all OK, but the informational
+`reef-desktop status` block (whose noVNC HTTP probe had failed once) aborted
+`check_display.sh` through `set -e`/`pipefail`. This was reproduced with a
+stand-in `reef-desktop` and fixed: that block is informational now, and a failed
+service there is a WARN, because the GUI needs only X and the window manager.
+The probe itself stayed fast here (0.05-0.13 s, even with a Gazebo GUI and a
+browser-like WebSocket stream), so the one-off probe failure on the Mac is
+unexplained, most likely transient load. `reef-desktop`'s probe limit is now
+5 s (takes effect after the next image rebuild).
+
 After the fixes, the full suite was rerun in the original container under the
 same conditions, inside a pseudo-terminal with a GUI clock demo left running
 on domain 0 and `:99`: 13/13 PASS. The clock suite under a pseudo-terminal: 28/28.
