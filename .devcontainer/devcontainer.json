@@ -1,0 +1,36 @@
+// VS Code Dev Containers configuration for the REEF ROS 2 dev container.
+// Uses the same compose.yaml as the Mac-terminal workflow, so both start the
+// same container (reef_ros2_dev), image, mounts, and port (127.0.0.1:8081).
+{
+  "name": "REEF ROS 2 (Jazzy + Gazebo Harmonic)",
+  "dockerComposeFile": ["../compose.yaml"],
+  "service": "dev",
+  "workspaceFolder": "/root/ros2_ws/reef_ros2",
+
+  // Keep the image's CMD (reef-desktop run): the desktop starts with the
+  // container, not with a VS Code attach, so it is never started twice.
+  "overrideCommand": false,
+  // Closing VS Code leaves the container (and desktop) running; stop it
+  // explicitly with `docker compose stop` (README "Daily use").
+  "shutdownAction": "none",
+
+  // Waits for the container-managed desktop; it never starts one.
+  "postStartCommand": "scripts/check_display.sh --start",
+
+  // The browser endpoint is already published by compose on 127.0.0.1:8081.
+  // Do not auto-forward the internal ports as well.
+  "portsAttributes": {
+    "6080": { "label": "noVNC (use http://127.0.0.1:8081/vnc.html)", "onAutoForward": "ignore" },
+    "5900": { "label": "x11vnc (internal)", "onAutoForward": "ignore" }
+  },
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-vscode.cpptools",
+        "ms-python.python",
+        "timonwong.shellcheck"
+      ]
+    }
+  }
+}

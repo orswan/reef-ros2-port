@@ -1,0 +1,40 @@
+# REEF ROS 2 dev container: the single definition used by both the Mac
+# terminal (`docker compose ...` in ~/ros2_ws/reef_ros2) and VS Code
+# (.devcontainer/devcontainer.json points here).
+#
+# It is separate from the original ros2_novnc_container: different container
+# name, image, network, and host port (8081, not 8080).
+name: reef_ros2
+
+services:
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      platforms: ["linux/amd64"]
+    image: reef_ros2_dev:jazzy
+    platform: linux/amd64
+    container_name: reef_ros2_dev
+    hostname: reef-ros2-dev
+    init: true            # tini as PID 1 reaps orphaned processes
+    ports:
+      # Browser desktop: http://127.0.0.1:8081/vnc.html on the Mac.
+      - "127.0.0.1:8081:6080"
+    volumes:
+      # Project source (this directory) at the same path as in the original
+      # container. Everything else under /root is container-local.
+      - type: bind
+        source: .
+        target: /root/ros2_ws/reef_ros2
+      # Gazebo Fuel model cache and GUI settings (~/.gz). A named volume, so
+      # downloaded models survive container replacement without entering Git.
+      - type: volume
+        source: gz-data
+        target: /root/.gz
+    working_dir: /root/ros2_ws/reef_ros2
+    restart: "no"         # started explicitly; see README "Daily use"
+    stop_grace_period: 20s
+
+volumes:
+  gz-data:
+    name: reef_ros2_gz    # fixed name, independent of the compose project name

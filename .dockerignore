@@ -1,0 +1,6 @@
+# The image needs only docker/ from the repository; source code is bind-mounted
+# at runtime (compose.yaml). Allow-list so builds, reference clones, logs, and
+# recordings never enter the build context.
+**
+!docker/
+!docker/**

@@ -1,0 +1,178 @@
+#!/usr/bin/env bash
+# Browser desktop for the REEF dev container: Xvfb + Fluxbox + x11vnc + noVNC.
+#
+#   reef-desktop run            supervise the desktop in the foreground (the
+#                               container's main process; see Dockerfile CMD)
+#   reef-desktop status [-q]    exit 0 only if every service is up and answering
+#   reef-desktop wait [secs]    block until status passes (default 60 s)
+#   reef-desktop logs           tail the service logs
+#
+# Gazebo is never started here. Simulations are launched separately (scripts/)
+# once the desktop is up.
+#
+# Environment (defaults match the Dockerfile/compose configuration):
+#   REEF_DESKTOP_DISPLAY   X display number without colon  (99)
+#   REEF_DESKTOP_SCREEN    Xvfb screen geometry            (1280x1024x24)
+#   REEF_DESKTOP_VNC_PORT  x11vnc port, localhost only     (5900)
+#   REEF_DESKTOP_WEB_PORT  noVNC/websockify port           (6080)
+#   REEF_DESKTOP_STATE     pid/lock directory              (/run/reef-desktop)
+#   REEF_DESKTOP_LOGS      log directory                   (/var/log/reef-desktop)
+set -uo pipefail
+
+DNUM="${REEF_DESKTOP_DISPLAY:-99}"
+SCREEN="${REEF_DESKTOP_SCREEN:-1280x1024x24}"
+VNC_PORT="${REEF_DESKTOP_VNC_PORT:-5900}"
+WEB_PORT="${REEF_DESKTOP_WEB_PORT:-6080}"
+STATE="${REEF_DESKTOP_STATE:-/run/reef-desktop}"
+LOGS="${REEF_DESKTOP_LOGS:-/var/log/reef-desktop}"
+NOVNC_WEB="${REEF_DESKTOP_NOVNC_WEB:-/usr/share/novnc/}"
+DISP=":$DNUM"
+SERVICES=(xvfb fluxbox x11vnc websockify)   # start order; each depends on the previous
+
+log() { printf '%s reef-desktop: %s\n' "$(date '+%F %T')" "$*"; }
+
+# --- probes ---------------------------------------------------------------
+# Every probe is time-limited: an X client that connects while Xvfb is still
+# initializing can block indefinitely (observed with xdpyinfo), and bash defers
+# the TERM trap until a foreground command returns.
+x_ready()   { DISPLAY="$DISP" timeout 2 xdpyinfo >/dev/null 2>&1; }
+wm_ready()  { DISPLAY="$DISP" timeout 2 xprop -root _NET_SUPPORTING_WM_CHECK 2>/dev/null | grep -q 'window id'; }
+port_open() { timeout 1 bash -c "</dev/tcp/127.0.0.1/$1" 2>/dev/null; }
+web_ready() { curl -fs -o /dev/null --max-time 2 "http://127.0.0.1:$WEB_PORT/vnc.html"; }
+
+ready() {  # service -> 0 when it is serving
+  case "$1" in
+    xvfb) x_ready ;;
+    fluxbox) wm_ready ;;
+    x11vnc) port_open "$VNC_PORT" ;;
+    websockify) web_ready ;;
+  esac
+}
+
+pid_of() { cat "$STATE/$1.pid" 2>/dev/null; }
+alive() {  # running and not a zombie (the supervisor is every service's parent)
+  local p st; p="$(pid_of "$1")"
+  [[ -n "$p" ]] && st="$(ps -o stat= -p "$p" 2>/dev/null)" && [[ "$st" != Z* ]]
+}
+
+# --- service control (only called by the supervisor) ----------------------
+clear_stale_x_lock() {
+  # After `docker restart`, /tmp keeps Xvfb's lock and socket although the
+  # server is gone. Xvfb then refuses to start ("Server is already active").
+  local lock="/tmp/.X${DNUM}-lock" pid
+  [[ -e "$lock" ]] || return 0
+  pid="$(tr -d ' ' <"$lock" 2>/dev/null)"
+  if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null && grep -qa Xvfb "/proc/$pid/cmdline" 2>/dev/null; then
+    log "ERROR display $DISP is held by running Xvfb pid $pid (not ours)"
+    return 1
+  fi
+  log "removing stale X lock for $DISP (pid '${pid}' not running)"
+  rm -f "$lock" "/tmp/.X11-unix/X${DNUM}"
+}
+
+launch() {  # service: start in background, record pid, wait for readiness
+  local svc="$1" out="$LOGS/$1.log"
+  case "$svc" in
+    xvfb)
+      clear_stale_x_lock || return 1
+      Xvfb "$DISP" -screen 0 "$SCREEN" -nolisten tcp >>"$out" 2>&1 & ;;
+    fluxbox)
+      DISPLAY="$DISP" fluxbox >>"$out" 2>&1 & ;;
+    x11vnc)
+      # Same flags as the original start_vnc.sh, minus -bg (so the supervisor
+      # can track it), plus -localhost: only websockify needs to reach it.
+      x11vnc -display "$DISP" -forever -shared -nopw -localhost \
+        -rfbport "$VNC_PORT" >>"$out" 2>&1 & ;;
+    websockify)
+      websockify --web="$NOVNC_WEB" "$WEB_PORT" "localhost:$VNC_PORT" >>"$out" 2>&1 & ;;
+  esac
+  echo $! >"$STATE/$svc.pid"
+  local i
+  for i in $(seq 100); do        # up to 10 s
+    ready "$svc" && { log "$svc ready (pid $(pid_of "$svc"))"; return 0; }
+    alive "$svc" || break
+    sleep 0.1
+  done
+  log "ERROR $svc did not become ready; see $out"
+  return 1
+}
+
+halt() {  # service
+  local p; p="$(pid_of "$1")"
+  if [[ -n "$p" ]] && kill -0 "$p" 2>/dev/null; then
+    kill -TERM "$p" 2>/dev/null
+    for _ in $(seq 30); do kill -0 "$p" 2>/dev/null || break; sleep 0.1; done
+    kill -KILL "$p" 2>/dev/null
+    wait "$p" 2>/dev/null
+  fi
+  rm -f "$STATE/$1.pid"
+}
+
+halt_all() { local i; for (( i=${#SERVICES[@]}-1; i>=0; i-- )); do halt "${SERVICES[i]}"; done; }
+
+start_from() {  # index: stop this service and its dependents, then start them in order
+  local i
+  for (( i=${#SERVICES[@]}-1; i>=$1; i-- )); do halt "${SERVICES[i]}"; done
+  for (( i=$1; i<${#SERVICES[@]}; i++ )); do launch "${SERVICES[i]}" || return 1; done
+}
+
+cmd_run() {
+  mkdir -p "$STATE" "$LOGS"
+  exec 9>"$STATE/supervisor.lock"
+  if ! flock -n 9; then
+    log "already running (lock $STATE/supervisor.lock held); not starting a second desktop"
+    exit 0
+  fi
+  echo $$ >"$STATE/supervisor.pid"
+  trap 'log "stopping"; halt_all; rm -f "$STATE/supervisor.pid"; exit 0' TERM INT
+  log "starting desktop on $DISP (web :$WEB_PORT -> vnc :$VNC_PORT)"
+  local backoff=1
+  until start_from 0; do
+    log "startup failed; retrying in ${backoff}s"; halt_all; sleep "$backoff"
+    (( backoff = backoff < 30 ? backoff * 2 : 30 ))
+  done
+  log "desktop ready: http://127.0.0.1:$WEB_PORT/vnc.html inside the container"
+  # Supervise: if a service exits, restart it and everything that depends on it.
+  local i
+  while :; do
+    for (( i=0; i<${#SERVICES[@]}; i++ )); do
+      if ! alive "${SERVICES[i]}"; then
+        log "${SERVICES[i]} exited; restarting it and its dependents"
+        until start_from "$i"; do sleep 2; done
+        break
+      fi
+    done
+    sleep 2 & wait $!   # interruptible by TERM
+  done
+}
+
+cmd_status() {
+  local quiet=0 ok=0 svc
+  [[ "${1:-}" == -q || "${1:-}" == --quiet ]] && quiet=1
+  for svc in "${SERVICES[@]}"; do
+    if ready "$svc"; then
+      (( quiet )) || printf 'OK   %-10s\n' "$svc"
+    else
+      ok=1; (( quiet )) || printf 'FAIL %-10s\n' "$svc"
+    fi
+  done
+  (( quiet )) || printf '     display %s, web port %s, vnc port %s (localhost)\n' "$DISP" "$WEB_PORT" "$VNC_PORT"
+  return $ok
+}
+
+cmd_wait() {
+  local limit="${1:-60}" start=$SECONDS
+  until cmd_status -q; do
+    (( SECONDS - start >= limit )) && { cmd_status; echo "desktop not ready after ${limit}s"; return 1; }
+    sleep 0.5
+  done
+  cmd_status
+}
+
+case "${1:-}" in
+  run) cmd_run ;;
+  status) shift; cmd_status "$@" ;;
+  wait) shift; cmd_wait "$@" ;;
+  logs) tail -n 50 -F "$LOGS"/*.log ;;
+  *) sed -n '2,20p' "$0"; exit 2 ;;
+esac
