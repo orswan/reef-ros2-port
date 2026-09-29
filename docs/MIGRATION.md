@@ -27,6 +27,7 @@ Evidence labels used throughout:
 | Git identity | `user.name=orswan`, `user.email=orswan@stanford.edu` (global) | [V] |
 | Network | github.com and fuel.gazebosim.org reachable | [V] |
 | Recordings | None available | [V] as stated; so offline validation must use simulation |
+| Mac-host commands | `docker exec ros2_novnc_container …` and the browser URL (README) | [A] written for the Mac host; not executed, since this work ran inside the container with no host access |
 
 ### Environment hazards found
 
@@ -36,9 +37,17 @@ Evidence labels used throughout:
    `:99`. All `scripts/*.sh` therefore re-exec under `env -i` and source only
    `/opt/ros/jazzy` (plus this repo's own `install/` once it exists).
    See `scripts/env.sh`.
-2. **[V] Jazzy always sets `ROS_AUTOMATIC_DISCOVERY_RANGE=SUBNET`** (from the
-   `ros_environment` hook). The scripts override it to `LOCALHOST`. Set
-   `REEF_DISCOVERY_RANGE` to change that.
+2. **[V] Jazzy defaults `ROS_AUTOMATIC_DISCOVERY_RANGE` to `SUBNET` only if
+   it is unset.** The `ros_environment` hook is
+   `set-if-unset;ROS_AUTOMATIC_DISCOVERY_RANGE;SUBNET`. Sourcing
+   `/opt/ros/jazzy/setup.bash` with the variable unset gives `SUBNET`, and with
+   `LOCALHOST` preset it keeps `LOCALHOST`. (The first version of this document
+   wrongly said the hook always sets it.) After the scripts' `env -i` re-exec the
+   variable is always unset, so the scripts set it explicitly: `LOCALHOST` by default,
+   or `REEF_DISCOVERY_RANGE` if given. A caller's own value is not passed through,
+   because any sourced shell carries `SUBNET` from this same default and that
+   value does not show intent. `LOCALHOST` limits discovery reach; it is **not**
+   test isolation (see §5).
 3. **[V] The parent workspace crawls into this repo.** `colcon list` run from
    `/root/ros2_ws` discovers packages under `reef_ros2/`. With
    `reference/COLCON_IGNORE` removed, it picked up the ROS 1
@@ -47,7 +56,9 @@ Evidence labels used throughout:
    `/root/ros2_ws`. Always build from `/root/ros2_ws/reef_ros2`.
 4. **[V] `gz sim` puts its server and GUI in separate process groups.**
    Killing the launch's process group leaves them running.
-   `scripts/check_clock_demo.sh` tears down by session ID instead.
+   `scripts/check_clock_demo.sh` tears down by session ID instead, and only the
+   session it created. Headless `gz sim -s` runs the server inside the
+   `gz sim -r -s …` process; the GUI mode forks `gz sim server` and `gz sim gui`.
 5. **[A] macOS bind mount.** The underlying filesystem may be case-insensitive,
    and file-watching and permissions may differ from native Linux. Keep file
    names case-unique.
@@ -87,11 +98,32 @@ fetched at the pinned commits.
 | setpoint_generator | n/a | `aa28ee42` |
 | dubins_path | n/a | `5a740a6d` |
 
-**[V] The estimator versions differ.** The sim bundle's estimator is the
-`simulation` branch. Compared with master, its diff touches measurement rejection
-in `xyz_estimator.cpp`/`z_estimator.cpp` and `z_est_params.yaml`. Before
-porting, decide which behavior is the baseline. The recommendation is to port master
-and make the Gazebo-specific rejection change a parameter.
+### Estimator differences: master `e4179f48` vs sim pin `95987b51` [V]
+
+The sim bundle's estimator is the `simulation` branch. From
+`git diff e4179f48 95987b51` (9 files, +24/−80), plus reading the
+surrounding code in both commits, the differences go well beyond measurement
+rejection. A single rejection toggle does **not** reproduce the simulation branch.
+This task only records the differences. The choice of baseline is still open (§7).
+
+| Area | master `e4179f48` | sim pin `95987b51` |
+|---|---|---|
+| Z process model `F` | `[[1, dt, 0], [0, 1, −dt], [0, 0, 1]]`: the bias enters velocity only, with a negative sign | `[[1, dt, dt²/2], [0, 1, +dt], [0, 0, 1]]`: the bias enters velocity with a positive sign, and also enters position |
+| Z model timing | `ZEstimator::updateLinearModel()` rebuilds `F`, `B`, and `Q = Q0·dt` at init and **on every IMU propagation**, using `dt` measured from IMU stamps. The constructor's `dt = 0.005` is overwritten by the `estimator_dt` param (default 0.002) before first use | `updateLinearModel()` and `Q0` removed. `F`/`B` are built **once** in the constructor with hard-coded `dt = 0.002`. The runtime `dt` from `estimator_dt` and from IMU stamps is still assigned but never rebuilds the Z matrices. `Q = z_Q · estimator_dt` is applied once at init |
+| Gravity initialization | Averages the initial accelerometer samples, then **overrides** the magnitude with `9.81` (and logs it) | Uses the **measured** average accelerometer magnitude |
+| XY update flag | With `enable_partial_update: true` (the shipped default), `newRgbdMeasurement` is **not cleared** after `partialUpdate()`. After the first XY measurement (RGB-D or mocap XY), the stored measurement is re-applied on every IMU step. Only the full-update branch clears it | Cleared after both partial and full updates |
+| χ² (Mahalanobis) gating | Applied to RGB-D velocity, sonar, mocap XY, and mocap Z | **Disabled** (commented out) for all four. The sonar `range <= max_range` check remains. The `mahalanobis_d_*` params are still read but no longer used for these gates |
+| `enable_measurements` (`basic_params.yaml`) | `false`. This flag gates only `rgbdTwistCallback`, so RGB-D velocity updates are dropped | `true` |
+| `z_P0`, `z_P0_flying` bias variance | 0.01 | 0.09 |
+| `z_Q` (accel noise, bias random walk) | `[0.03, 0.0001]` | `[0.03, 0.001]` |
+| `z_R_flying` | 0.00016 | 0.0016 |
+| `z_x0`, `z_beta`, `z_R0` | same numeric values (only formatting changed) | same |
+| Build | `add_dependencies(... ${catkin_EXPORTED_TARGETS})` | adds `reef_msgs_generate_messages_cpp reef_msgs` |
+| Files | has `LICENSE` (MIT, 2020) and `params/wren_camera.yaml` | both absent |
+
+Unchanged between the two: `estimator.cpp` (KF propagate/update/partialUpdate),
+`xy_estimator.*`, `sensor_manager.*`, `xyz_estimator.h`, `xy_est_params.yaml`,
+and all launch files.
 
 ---
 
@@ -100,9 +132,18 @@ and make the Gazebo-specific rejection change a parameter.
 - Single C++ executable `reef_estimator` (catkin; C++ with Eigen). Classes:
   `Estimator` (KF with partial update) → `XYEstimator` (EKF), `ZEstimator` →
   `XYZEstimator` (data flow, outlier rejection) → `SensorManager` (callbacks).
-- `sensor_manager.h` includes `../../reef_msgs/include/reef_msgs/dynamics.h`
-  by **relative path**, which assumes the bundle's directory layout. The port must use
-  a proper exported include.
+- `include/xy_estimator.h:9` includes
+  `../../reef_msgs/include/reef_msgs/dynamics.h` by **relative path**, which
+  assumes the bundle's directory layout. (`xyz_estimator.h:23` uses the normal
+  `<reef_msgs/dynamics.h>`.) The port must use a proper exported include.
+- ROSflight references (master): the core estimator path (`src/`, `include/`)
+  uses `rosflight_msgs` only for `RCRaw`, in `SensorManager::rcRawCallback`
+  (the mocap-override switch). Beyond that path, `package.xml` depends on both
+  `rosflight` and `rosflight_msgs`, `CMakeLists.txt` finds `rosflight_msgs` and
+  exports `rosflight`/`rosflight_msgs` in `CATKIN_DEPENDS`, and the recording
+  launch files `estimator_record.launch`, `record_raw.launch`, and
+  `record_stable_raw.launch` start `rosflight_io`. Pinned `reef_msgs` has no
+  ROSflight dependency.
 - Interfaces (default names; many are remapped in launch files):
 
 | Direction | Topic | Type | Condition |
@@ -146,10 +187,12 @@ vehicle and physics came from Gazebo Classic `rosflight_sim`. The
 | tf_conversions | drop; use tf2 / Eigen directly | [A] only lightly used |
 | Eigen 3 | libeigen3-dev 3.4.0 + eigen3_cmake_module | [V] installed |
 | **reef_msgs** (11 msgs + `dynamics`/`matrix_operation` lib) | port to ROS 2 (`rosidl_default_generators` + a C++ library) | [V] message list read at pin `7fb63ff9`; **must be ported first** |
-| **rosflight_msgs** (`RCRaw` only, for the mocap switch) | option (a): make it optional/compile-out; option (b): `rosflight_msgs` 2.0.0 from rosflight/rosflight_ros_pkgs `main` (`5ef20134`) | [V] not in Jazzy apt; [V] upstream ROS 2 package exists; [A] `RCRaw` still defined there |
+| **rosflight_msgs** (core estimator path uses `RCRaw` only, for the mocap switch; upstream build metadata and recording launches reference more, see §3) | option (a): make it optional/compile-out; option (b): `rosflight_msgs` 2.0.0 from rosflight/rosflight_ros_pkgs `main` (`5ef20134`) | [V] not in Jazzy apt; [V] upstream ROS 2 package exists; [A] `RCRaw` still defined there |
 
 Minimum estimation stack = **`reef_msgs` (ROS 2) + `reef_estimator` (ROS 2)**.
-Leave the `RCRaw` mocap switch behind a build option.
+Leave the `RCRaw` mocap switch behind a build option. [A] The recording launch
+files are not part of the minimum port. They would need `rosflight_io` or a
+replacement.
 
 ### 4.2 Control
 
@@ -166,7 +209,7 @@ Leave the `RCRaw` mocap switch behind a build option.
 |---|---|---|
 | Simulator | Gazebo Classic + rosflight_sim [A] | Gazebo Harmonic 8.15 [V] |
 | Clock | `/use_sim_time` + Gazebo Classic | `ros_gz_bridge` `/clock` + `use_sim_time:=true` [V] demonstrated |
-| Vehicle + flight control | rosflight SIL firmware | Harmonic `MulticopterMotorModel` + `MulticopterVelocityControl` systems [V] present in example; [A] suitable |
+| Vehicle + flight control | rosflight SIL firmware | Harmonic `MulticopterMotorModel` + `MulticopterVelocityControl` systems [V] present in example; [V] the controller's feedback is simulator ground truth (§6), so it suits open-loop estimator evaluation, not REEF-in-the-loop control |
 | Ground truth | `multirotor/truth/NED` | `OdometryPublisher` → `/model/x3/odometry` (ENU) bridged + converted to NED [V] plugin in example; [A] conversion node needed |
 | IMU | rosflight IMU | Harmonic `Imu` system + `<sensor type="imu">`. **Must be added: the X3 model has no sensors** [V] |
 | Altimeter (sonar) | sim sonar | Harmonic `Altimeter`/`AirPressure` sensor or a downward range sensor; [A] a thin adapter to `sensor_msgs/Range` |
@@ -177,27 +220,88 @@ Leave the `RCRaw` mocap switch behind a build option.
 
 ## 5. Sim-time bridge demonstration [V]
 
-Files: `sim/worlds/clock_demo.sdf`, `sim/launch/clock_demo.launch.py`,
-`scripts/run_clock_demo.sh`, `scripts/check_clock_demo.sh`, and
-`scripts/clock_check.py`.
+Files: `sim/worlds/clock_demo.sdf`, `sim/launch/clock_demo.launch.py`
+(args `world`, `headless`, `clock_topic`), `scripts/run_clock_demo.sh`,
+`scripts/check_clock_demo.sh`, `scripts/clock_check.py`, and
+`scripts/regress_clock_check.sh`.
 
-`clock_check.py` subscribes to `/clock` for a wall-clock window. It asserts that
-messages arrive, that sim time increases monotonically, and that a node with
-`use_sim_time=True` sees `get_clock().now()` advance.
+`clock_check.py` observes a clock topic for a wall-clock window. It asserts
+that messages arrive, that sim time increases monotonically, and that a node with
+`use_sim_time=True` sees `get_clock().now()` advance. The node's `/clock` is
+remapped to `--topic`, including its time source.
 
-Results on 2026-09-29 (run from an agent shell that had the leaked overlay and
-`DISPLAY=:1`):
+### False pass in the first version (fixed in `3d6e779`)
 
-| Mode | Window | /clock msgs | Sim Δt | RTF | Result |
+Review found, and this project reproduced, that the checker at `243180a` could
+report success when its own demo had failed. With an unrelated headless demo
+publishing `/clock` in the default domain, the old checker run with
+`REEF_DISPLAY=:197` (no such display) printed `PASS`, **exit 0**. Its own launch
+had already died at the display check. The checker at `3d6e779` run in the
+same situation gives `FAIL owned demo launch exited early`, **exit 2**. The old
+checker observed a shared `/clock`, used the caller's ROS domain, dropped
+`GZ_PARTITION` in the clean re-exec, and never checked that its launch was alive.
+
+### How the checker now owns what it observes
+
+1. **Gazebo layer:** a per-run `GZ_PARTITION` (default
+   `reef_clock_check_<token>`) is exported before launch, so the owned bridge
+   can hear only the owned gz server. `env.sh` now passes `GZ_PARTITION`
+   through the clean re-exec for interactive use.
+2. **ROS layer:** the bridge publishes on a per-run topic
+   `/reef_clock_check_<token>/clock` (launch arg `clock_topic`). The observer
+   requires exactly one publisher on it, named `clock_bridge`. A per-run
+   `ROS_DOMAIN_ID` (random 1–101, or `REEF_TEST_ROS_DOMAIN_ID`) only reduces
+   cross-talk. It is **not** relied on for uniqueness, and neither is `LOCALHOST`.
+3. **Liveness:** the checker polls every 0.2 s. It fails with exit 2 as soon as
+   the owned launch exits or a required process that was seen disappears.
+   Required processes are the gz server, `parameter_bridge`, and `gz sim gui`
+   unless headless. When each one first appears, the checker verifies that its
+   `/proc/<pid>/environ` carries the test's `ROS_DOMAIN_ID` and `GZ_PARTITION`.
+
+Layers 1 and 2 stop foreign clock data from reaching the observer. Layer 3
+makes an owned failure end the check within a second or two, instead of
+waiting for the observer's 60 s startup timeout. The reproduced false pass is
+stopped by layer 3 directly, and by layers 1–2 independently (cases 4c, 4e, 4f
+below).
+
+Cleanup: the observer is a tracked child that is terminated (TERM, then KILL
+after 5 s) and reaped. The demo runs in a session created by the checker, and
+teardown uses `pkill -s <sid>` only after checking that the sid is not the
+checker's own session. Traps cover normal exit, failure, timeout, SIGINT, and
+SIGTERM. Exit statuses: 0 pass, 1 clock check failed, 2 owned demo failed or
+bad input, 124 timeout, 130 SIGINT, 143 SIGTERM.
+
+### Regression results (`scripts/regress_clock_check.sh`, 2026-09-29, run at `3d6e779`)
+
+| # | Case | Expected | Actual | Time | Evidence |
 |---|---|---|---|---|---|
-| headless (`REEF_HEADLESS=1`) | 5 s | 4791 (958 Hz) | 4.889 s | 0.98 | PASS |
-| GUI on `:99` | 10 s | 9302 (930 Hz) | 9.454 s | 0.95 | PASS |
-| GUI on `:99`, job-control caller | 10 s | 8763 (876 Hz) | 8.930 s | 0.89 | PASS, no leftover processes |
-| negative: no simulator | 3 s timeout | 0 | n/a | n/a | FAIL (exit 1), as expected |
+| 1 | Headless success | 0 | 0 | 10 s | PASS |
+| 2 | GUI success on existing `:99` | 0 | 0 | 10 s | PASS; server, GUI, and bridge env verified |
+| 3 | No clock (fresh topic, nothing running) | 1 | 1 | 3 s | `FAIL no message … within 3s` |
+| 4a | Sanity: unrelated sim is publishing `/clock` in domain D | 0 | 0 | 5 s | PASS |
+| 4e | ROS layer: fresh topic in domain D while the unrelated `/clock` is live | 1 | 1 | 6 s | no message |
+| 4f | Gazebo layer: lone bridge in a *different* partition | 1 | 1 | 8 s | no message |
+| 4g | Control: lone bridge in the *same* partition | 0 | 0 | 3 s | PASS |
+| 4b | Unrelated sim + checker with `REEF_DISPLAY=:197`, same domain D | 2 | 2 | 2 s | `FAIL owned demo launch exited early` |
+| 4c | As 4b, and forced onto the unrelated sim's domain **and** partition | 2 | 2 | 1 s | `FAIL owned demo launch exited early` |
+| 4d | Unrelated sim + valid headless checker in domain D | 0 | 0 | 9 s | PASS (coexists) |
+| 5 | SIGTERM to the checker during observation | 143 | 143 | 4 s | observer gone; demo session 4 procs → 0 |
+| 6 | SIGINT to the checker's process group (Ctrl-C) during observation | 130 | 130 | 4 s | observer gone; demo session 4 procs → 0 |
+| 8 | Timeout: observer SIGSTOPped, deadline 20 s | 124 | 124 | 27 s | `FAIL timed out after 20s`; stopped observer killed |
+| 9 | Owned bridge killed mid-run | 2 | 2 | 4 s | `FAIL required process 'parameter_bridge' exited` |
+| 7 | Display services (Xvfb, x11vnc, websockify PIDs) | unchanged | unchanged | n/a | 2346 2358 2359 2534 before and after |
 
-The GUI window ("Gazebo Sim", `gz-sim-gui`, 1000×845) was confirmed mapped on
-`:99` through `xwininfo`. No screenshot tool is installed, so the image was not
-captured. View the window in the browser at http://localhost:8080/vnc.html.
+The suite checks ownership before every signal. The observer must be the
+checker's child, and the demo session leader must be the checker's child or
+grandchild. The suite's own unrelated sim is stopped the same way. After each
+suite run, no `gz sim`, `parameter_bridge`, `clock_check`, or `ros2 launch`
+processes remained. Times and clock rates are observations, not thresholds.
+
+Earlier observations with the first version (still representative of the
+demo itself): headless RTF about 0.98 at about 960 Hz; GUI RTF 0.89–0.95. The GUI
+window ("Gazebo Sim", `gz-sim-gui`) was confirmed mapped on `:99` via
+`xwininfo`. No screenshot tool is installed, so no image was captured.
+**On the Mac host**, view it at http://localhost:8080/vnc.html.
 
 ---
 
@@ -220,22 +324,38 @@ What it contains [V]:
     `commandSubTopic gazebo/command/motor_speed`, velocity motors).
   - `gz-sim-multicopter-control-system` (`MulticopterVelocityControl`):
     input `gz.msgs.Twist` on `/X3/gazebo/command/twist` (body-frame linear
-    velocity + yaw rate). The enable topic is `/X3/enable` (`gz.msgs.Boolean`); [A] it may need
-    `true` before the vehicle responds. Gains are in the SDF.
+    velocity + yaw rate). Enable topic `/X3/enable` (`gz.msgs.Boolean`). The
+    controller starts **enabled** (`controllerActive{true}` in gz-sim 8.15.0
+    `MulticopterVelocityControl.hh`), and `false` disables it. Gains are in the SDF.
+  - **The controller's feedback is simulator ground truth.** On every update it
+    reads the X3 base link's `WorldPose`, `WorldLinearVelocity`, and
+    `AngularVelocity` components straight from the physics state. See
+    `getFrameData()` in `src/systems/multicopter_control/Common.cc` and
+    its call in `MulticopterVelocityControl.cc` (tag `gz-sim8_8.15.0`). It
+    then computes rotor speeds from those values. This is separate from, and does
+    not use, the `OdometryPublisher` output. Optional velocity noise can be set in
+    the SDF. In this world only the X4 controller sets it; X3 gets noise-free truth.
 - Ground-truth dependencies:
   - `gz-sim-odometry-publisher-system` (3D) publishes `gz.msgs.Odometry` on
     `/model/x3/odometry` (ENU world frame; [A] child frame FLU body).
   - Pose on `/model/x3/pose` per the file header comment [A] (verify with `gz topic -l`).
-- Fuel model download: [V] `gz fuel download` of X3 succeeded (≈93 MB).
+- Fuel model download: [V] `gz fuel download` of X3 succeeded (≈93 MB),
+  into a throwaway `HOME` during the first session; it has not been re-run since.
   [V] The X3 `model.sdf` contains **no `<sensor>` elements**. The IMU and
   altimeter must be added (the `Imu` and `Altimeter` systems, plus sensors on
   `X3/base_link`). [A] The first run will fetch the models from Fuel into
   `~/.gz/fuel`, so vendor the model or pre-fetch it for offline repeatability.
 
 How it maps onto REEF [A]:
-- The velocity controller stands in for `reef_control` + rosflight, and REEF's
-  `desired_state` velocity requests map naturally onto `Twist` commands. Porting
-  `reef_control` against a rosflight-free actuator path is a later decision.
+- **Validation limit:** as shipped, the vehicle is flown by a controller that
+  reads ground truth. REEF can run *alongside* it and be scored against truth
+  (open-loop estimation), but this setup does **not** show REEF-in-the-loop
+  feedback control. Closing the loop on `xyz_estimate` needs a different
+  controller path, either ported `reef_control` or a custom Gazebo system or
+  bridge that takes attitude/thrust or rotor commands.
+- The velocity controller's `Twist` input is a natural stand-in for REEF's
+  `desired_state` velocity requests. Porting `reef_control` against a
+  rosflight-free actuator path is a later decision.
 - Estimator inputs: bridge the IMU (`sensor_msgs/Imu`), the altimeter (→ `Range`),
   and odometry (→ mocap-like PoseStamped/Twist after ENU→NED and body-level
   conversion). Compare `xyz_estimate` against the bridged ground truth.
@@ -245,11 +365,15 @@ How it maps onto REEF [A]:
 ## 7. Open questions / decisions pending
 
 1. Which estimator behavior is the baseline: master `e4179f48` or simulation `95987b51`?
+   The differences cover the Z model, timing, initialization, noise, flags, and
+   gating (see the table in §2), not only rejection. Not decided in this phase.
 2. Should `rosflight_msgs` be a dependency (upstream ROS 2 `rosflight_ros_pkgs`)
    or compiled out for the Gazebo path?
 3. Which frame should be used at the ROS 2 boundary: keep REEF's NED/body-level internally with
    converters at the Gazebo bridge (recommended), or switch to REP-103?
 4. Should the X3 model be vendored into `sim/models/` for offline, deterministic runs?
+5. Which controller path should close the loop on REEF estimates (ported `reef_control`,
+   or a custom Gazebo system), given that the stock velocity controller uses truth?
 
 ## 8. Proposed next steps
 
@@ -259,4 +383,5 @@ How it maps onto REEF [A]:
 3. Port `reef_estimator` to `src/reef_estimator` (rclcpp, parameters, QoS
    transient_local for the formerly latched topics), preserving the filter math
    unchanged.
-4. Add frame-conversion adapters and a closed-loop estimator-vs-truth check.
+4. Add frame-conversion adapters and an estimator-vs-truth comparison, with the
+   vehicle still flown by the truth-fed controller (see §6 validation limit).

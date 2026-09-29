@@ -40,5 +40,18 @@ holds the verified findings, pinned upstream commits, and open decisions.
 - In docs and reports, label findings **[V] verified** (observed here) or
   **[A] assumption**. Record commands and actual output for checks. State
   blocked or skipped checks explicitly.
-- Checks: `scripts/check_env.sh`, `scripts/check_display.sh`, and
-  `scripts/check_clock_demo.sh` (add `REEF_HEADLESS=1` when no display is needed).
+- Checks: `scripts/check_env.sh`, `scripts/check_display.sh`,
+  `scripts/check_clock_demo.sh` (add `REEF_HEADLESS=1` when no display is needed),
+  and `scripts/regress_clock_check.sh` after changing any demo/check script.
+- Label commands as **container** (`/root/...` paths) or **Mac host**
+  (`docker exec ros2_novnc_container ...`, browser URLs).
+
+## Test process rules
+
+- Tests must own what they observe: use a per-run `GZ_PARTITION` and unique
+  ROS topic names, and monitor the launched processes. A ROS domain ID or
+  `LOCALHOST` discovery alone is not isolation.
+- Before signalling any process, check that the test started it (parent/session
+  ownership). Never signal by broad `pgrep -f` patterns: they also match the
+  shell whose command line contains the pattern. Never touch the Xvfb, x11vnc,
+  or websockify services.
