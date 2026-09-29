@@ -56,6 +56,9 @@ holds the verified findings, pinned upstream commits, and open decisions.
   interruption test inside every startup window, not only once the test is
   running.
 - Before signalling any process, check that the test started it (parent/session
-  ownership). Never signal by broad `pgrep -f` patterns: they also match the
+  ownership). Ownership of one process does not extend to its session or
+  process group. Signal a whole session only if the test created that session
+  itself (its own `setsid`), and otherwise signal verified pids individually
+  (see `scripts/test_lib.sh`). Never signal by broad `pgrep -f` patterns: they also match the
   shell whose command line contains the pattern. Never touch the Xvfb, x11vnc,
   or websockify services.

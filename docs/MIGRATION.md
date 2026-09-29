@@ -286,11 +286,36 @@ survivors, 3/3. Survivors were identified by each attempt's unique
 `GZ_PARTITION` in `/proc/<pid>/environ`. The earlier interruption cases had
 all waited until the observer was active, so they could not hit this window.
 
-### Regression results (`scripts/regress_clock_check.sh`, 2026-09-29, run on code identical to `81ae28a`)
+### Unsafe regression fallback cleanup (found in the third review, fixed in `5b9c96e`)
+
+At `81ae28a`, the regression suite's failure-path helper `reap_tagged` found a
+process carrying the case's unique `GZ_PARTITION`, then signalled that
+process's **whole session** (INT, then KILL). The tag proves ownership of that
+one process, not of its session. A leaked observer shares a session with the
+suite and its caller (`set -m` creates process groups, not sessions), so the
+fallback could have killed unrelated processes and the suite itself. It had never
+fired in a real run, because no case leaked, but it was unsafe for unattended use.
+
+The fix moves the helpers to `scripts/test_lib.sh`. `reap_tagged` now signals
+**only tagged pids**, re-checking each pid's tag just before every signal
+(INT → TERM → KILL) and rescanning each round.
+
+Mutation check (contained in a session created only for it): the same harness
+has an untagged sentinel, the helper's shell, and two tagged processes, one in
+its own session.
+
+| Helper | Helper shell | Sentinel | Tagged left |
+|---|---|---|---|
+| old (`81ae28a`/`f37012a`) | killed (SIGKILL) | killed | 1 (the tagged process in the other session was missed) |
+| new (`5b9c96e`) | survived | survived | 0 |
+
+Regression case 13 runs this harness against the new helper.
+
+### Regression results (`scripts/regress_clock_check.sh`, 2026-09-29, run on code identical to `5b9c96e`)
 
 | # | Case | Expected | Actual | Time | Evidence |
 |---|---|---|---|---|---|
-| 1 | Headless success | 0 | 0 | 11 s | PASS |
+| 1 | Headless success | 0 | 0 | 10 s | PASS |
 | 2 | GUI success on existing `:99` | 0 | 0 | 10 s | PASS; server, GUI, and bridge env verified |
 | 3 | No clock (fresh topic, nothing running) | 1 | 1 | 3 s | `FAIL no message … within 3s` |
 | 4a | Sanity: unrelated sim is publishing `/clock` in domain D | 0 | 0 | 5 s | PASS |
@@ -302,21 +327,24 @@ all waited until the observer was active, so they could not hit this window.
 | 4d | Unrelated sim + valid headless checker in domain D | 0 | 0 | 11 s | PASS (coexists) |
 | 5 | SIGTERM to the checker during observation | 143 | 143 | 4 s | observer gone; demo session 4 procs → 0 |
 | 6 | SIGINT to the checker's process group (Ctrl-C) during observation | 130 | 130 | 5 s | observer gone; demo session 4 procs → 0 |
-| 8 | Timeout: observer SIGSTOPped, deadline 20 s | 124 | 124 | 26 s | `FAIL timed out after 20s`; stopped observer killed |
+| 8 | Timeout: observer SIGSTOPped, deadline 20 s | 124 | 124 | 27 s | `FAIL timed out after 20s`; stopped observer killed |
 | 9 | Owned bridge killed mid-run | 2 | 2 | 5 s | `FAIL required process 'parameter_bridge' exited` |
 | 10 | SIGTERM before session registration (`REEF_TEST_REGISTER_DELAY=3` holds the window open; signalled once the demo session existed) | 143 | 143 | 4 s | 0 tagged survivors |
 | 11 | SIGINT to the checker's group before registration (same hook) | 130 | 130 | 1 s | 0 tagged survivors |
-| 12 | Unhooked SIGTERM sweep at 0, 0.1, 0.2, 0.3, 0.4, 0.6, 0.8, 1.0, 1.4, 1.8 s after start (≤0.4 s landed before registration, ≥0.6 s after) | 143 ×10 | 143 ×10 | 0–12 s | 0 tagged survivors in every run |
+| 12 | Unhooked SIGTERM sweep at 0, 0.1, 0.2, 0.3, 0.4, 0.6, 0.8, 1.0, 1.4, 1.8 s after start (≤0.4 s landed before registration, ≥0.6 s after) | 143 ×10 | 143 ×10 | 0–4 s | 0 tagged survivors in every run |
+| 13 | `reap_tagged` containment: tagged processes, an untagged sentinel, and the helper's shell share a throwaway session | 0 | 0 | 10 s | tagged 2 → 0; sentinel and helper shell survived |
 | 7 | Display services (Xvfb, x11vnc, websockify PIDs) | unchanged | unchanged | n/a | 2346 2358 2359 2534 before and after |
 
-The suite checks ownership before every signal. The observer must be the
+The suite checks ownership before every signal. Session-wide signals go only
+to sessions the suite or checker created itself, with the leader verified as
+its child. Tag-based cleanup signals individual tagged pids only. The observer must be the
 checker's child, and the demo session leader must be the checker's child or
 grandchild. The suite's own unrelated sim is stopped the same way. After each
 suite run, no `gz sim`, `parameter_bridge`, `clock_check`, or `ros2 launch`
 processes remained. Times and clock rates are observations, not thresholds.
-The slowest sweep case (1.4 s, 12 s total) was `gz sim` ignoring SIGINT while
-still initializing: `ros2 launch` waited its standard 5 s before escalating to
-SIGTERM. Teardown stayed bounded and complete. The launch-pid recovery backstop
+In an earlier run (`81ae28a`), one sweep case took 12 s. `gz sim` ignored
+SIGINT while still initializing, and `ros2 launch` waited its standard 5 s
+before escalating to SIGTERM. Teardown stayed bounded and complete. The launch-pid recovery backstop
 in cleanup has not been exercised directly, because signal deferral keeps it from
 being needed on every path that was tested.
 
