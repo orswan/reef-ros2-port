@@ -4,7 +4,8 @@
 # shellcheck disable=SC2317
 # Validate the REEF dev container from inside it (container terminal):
 #   scripts/validate_devcontainer.sh          # environment, desktop, clock checks (~1 min)
-#   scripts/validate_devcontainer.sh --full   # also the clock-check regression suite (~2 min)
+#   scripts/validate_devcontainer.sh --full   # also the clock and X3 regression suites (~9 min;
+#                                             # X3 needs scripts/setup_assets.py first)
 # Writes a VNC snapshot of the Gazebo GUI to log/checks/ so rendering can be
 # inspected, not just inferred from running processes.
 # Exit status: 0 if every check passed, 1 otherwise.
@@ -78,8 +79,10 @@ rc=$?
 check "no-simulator negative case exits 1 (got $rc)" test "$rc" = 1
 
 if [[ "${1:-}" == --full ]]; then
-  echo "-- regression suite"
+  echo "-- regression suites"
   check "scripts/regress_clock_check.sh" logged "$out/regress.log" "$S/regress_clock_check.sh"
+  check "X3 assets present and verified" logged "$out/assets.log" python3 "$S/setup_assets.py" --verify
+  check "scripts/regress_x3_scenario.sh" logged "$out/regress_x3.log" "$S/regress_x3_scenario.sh"
 fi
 
 echo "== $failures failure(s). Logs and snapshot: $out"
