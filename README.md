@@ -11,7 +11,10 @@ findings, pinned upstream commits, dependencies, and next steps.
 
 Every command below is labelled with where it runs:
 
-- **Mac terminal**: macOS Terminal, in `~/ros2_ws/reef_ros2`.
+- **Mac terminal**: macOS Terminal, in `~/ros2_ws/reef_ros2`. Mac-terminal
+  blocks contain commands only, no `#` comments: zsh, the macOS default shell,
+  does not treat `#` as a comment at the prompt, so a pasted comment becomes
+  extra arguments.
 - **Container terminal**: a shell inside the dev container, either a VS Code
   terminal or `docker compose exec dev bash`. Container paths start with `/root/`.
 
@@ -49,10 +52,15 @@ reuses the original container or its port 8080.
 
 ```bash
 cd ~/ros2_ws/reef_ros2
-docker compose build        # first build: ~990 packages (~3 GB installed) on a ~280 MB base; several minutes
+docker compose build
 docker compose up -d
-docker compose ps           # wait until STATUS shows "(healthy)", about 20 s
+docker compose ps
 ```
+
+The first build installs about 990 packages (about 3 GB) on a 280 MB base and
+takes several minutes (about 13 minutes has been observed). `docker compose up -d`
+creates the container, or recreates it if the image changed. Repeat
+`docker compose ps` until STATUS shows `(healthy)`, which takes about 20 s.
 
 "Healthy" means the image's health check (`reef-desktop status`) found Xvfb,
 Fluxbox, x11vnc, and noVNC all answering.
@@ -62,13 +70,18 @@ Fluxbox, x11vnc, and noVNC all answering.
 **Mac terminal**, after `docker compose up -d`:
 
 ```bash
-docker compose exec dev scripts/validate_devcontainer.sh    # expect "== 0 failure(s)"
+docker compose exec dev scripts/validate_devcontainer.sh
 docker compose restart dev
-docker compose exec dev reef-desktop wait 60                  # all four services OK again after restart
-docker compose exec dev scripts/validate_devcontainer.sh     # expect "== 0 failure(s)" again
-docker compose logs dev | grep -E "desktop ready|stale|ERROR" # one "desktop ready" per start
-docker ps --filter name=ros2_novnc_container --format '{{.Names}} {{.Status}} {{.Ports}}'  # original: unchanged
+docker compose exec dev reef-desktop wait 60
+docker compose exec dev scripts/validate_devcontainer.sh
+docker compose logs dev | grep -E "desktop ready|stale|ERROR"
+docker ps --filter name=ros2_novnc_container --format '{{.Names}} {{.Status}} {{.Ports}}'
 ```
+
+Expected: both validations end with `== 0 failure(s)`. After the restart,
+`reef-desktop wait` lists all four services as OK. The log shows one
+`desktop ready` line per start. The original container's status and port are
+unchanged.
 
 Then open http://127.0.0.1:8081/vnc.html (see Browser access below).
 
@@ -93,8 +106,9 @@ To check that VS Code and the terminal are using the same container
 
 ```bash
 docker ps --filter name=reef_ros2_dev --format '{{.Names}}  project={{.Label "com.docker.compose.project"}}  {{.Ports}}'
-# expected: reef_ros2_dev  project=reef_ros2  127.0.0.1:8081->6080/tcp
 ```
+
+Expected output: `reef_ros2_dev  project=reef_ros2  127.0.0.1:8081->6080/tcp`.
 
 ### Browser access
 
@@ -188,10 +202,23 @@ from it (see `src/reef_sim/assets/x3_uav_v4.json`).
 
 ```bash
 cd ~/ros2_ws/reef_ros2
-docker compose up -d          # start (the desktop starts with it)
-docker compose exec dev bash  # open a container terminal (or use VS Code)
-docker compose stop           # stop at the end of the day
+docker compose up -d
+docker compose exec dev bash
 ```
+
+`docker compose up -d` starts the container, and the desktop starts with it.
+`docker compose exec dev bash` opens a container terminal (or use VS Code). At
+the end of the day:
+
+```bash
+docker compose stop
+```
+
+Before running checks, stop any simulation you started by hand (Ctrl-C in its
+terminal). A leftover Gazebo keeps publishing on the default ROS domain and
+occupies the browser desktop. If you are unsure whether one is running,
+`docker compose restart dev` stops everything in the dev container, and the
+desktop comes back by itself.
 
 `docker compose restart dev` restarts the container, and the desktop comes back
 by itself. Stale X locks from an unclean stop are cleared automatically. Desktop
@@ -225,10 +252,13 @@ next Fuel models would be downloaded again.
 The original is independent and can run at the same time. **Mac terminal:**
 
 ```bash
-docker compose stop                          # optional: stop the dev container
+docker compose stop
 docker start ros2_novnc_container
-docker exec -it ros2_novnc_container bash    # then, in that container terminal:  ~/start_vnc.sh
+docker exec -it ros2_novnc_container bash
 ```
+
+Stopping the dev container is optional. Then, in the original container's
+terminal, run `~/start_vnc.sh`.
 
 Browser: http://localhost:8080/vnc.html. The original setup is documented in
 [docs/setup/GazeboMacDockerSetup.md](docs/setup/GazeboMacDockerSetup.md).

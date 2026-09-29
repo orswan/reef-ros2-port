@@ -239,10 +239,34 @@ ros2 run <pkg> <node> --ros-args -p use_sim_time:=true
 ```
 
 Do not also pass `--clock` to `ros2 bag play`, because that would create a
-second clock source. Regression case 10 replays a bag and checks that a
-`use_sim_time` node sees sim time advance.
+second clock source. If `ros2 bag play` or `ros2 bag record` runs in the
+background of a terminal session (a script, or `&` in a `docker compose exec`
+shell), add `--disable-keyboard-controls`. Otherwise it tries to read the
+terminal, is stopped by SIGTTIN, and neither plays nor responds to SIGINT. The
+scenario's recorder always uses this flag.
+
+Stop any live simulation first, or use a domain nobody else uses. A Gazebo run
+left on the default domain also publishes `/clock`, and a consumer would mix the
+two clocks. Regression case 10 is isolated against this: it uses its own
+domain, remaps `/clock` to a per-run topic, requires `rosbag2_player` as the
+only publisher, and requires the replayed times to fall inside the bag's range.
 
 ## 9. Validation performed (2026-09-29)
+
+**Dev container (`reef_ros2_dev`, run by the user):** 11 of 13 passed. The
+two failures, and a false pass, were test-harness problems, since fixed:
+- **GUI case:** `check_display.sh` reported the desktop not ready. The run
+  script hid its output, and this could not be reproduced in the original
+  container. The output is now printed on failure, and the probe timeouts are 5 s.
+- **Seed case:** failed only because the GUI case produced no bag.
+- **Replay case (false pass):** it passed on the `/clock` of a clock demo that
+  was still running on the default domain (sim time about 14,740 s), while
+  `ros2 bag play`, backgrounded in a `docker compose exec` terminal, was
+  stopped by SIGTTIN.
+
+After the fixes, the full suite was rerun in the original container under the
+same conditions, inside a pseudo-terminal with a GUI clock demo left running
+on domain 0 and `:99`: 13/13 PASS. The clock suite under a pseudo-terminal: 28/28.
 
 This ran in `ros2_novnc_container`, whose Gazebo/ROS package versions match
 the dev image's recipe. It has **not yet run in `reef_ros2_dev`**; the README
