@@ -39,6 +39,7 @@ display_pids() { pgrep -x Xvfb; pgrep -x x11vnc; pgrep -f "websockify.*8080"; }
 
 start_unrelated_sim() {  # headless demo on plain /clock; stands in for "another simulation"
   local sid_file; sid_file="$(mktemp)"
+  # shellcheck disable=SC2016  # $$ and $@ belong to the inner bash
   ROS_DOMAIN_ID="$1" GZ_PARTITION="$2" REEF_HEADLESS=1 \
     setsid -w bash -c 'echo $$ >"$1"; shift; exec "$@"' _ "$sid_file" \
     "$REEF_ROOT/scripts/run_clock_demo.sh" >"$out_dir/unrelated_sim.log" 2>&1 &
@@ -62,6 +63,7 @@ stop_owned_session() {  # sid leader_pid: only if the session leader is (or is u
   wait "$leader" 2>/dev/null
 }
 
+# shellcheck disable=SC2317  # reached only via the EXIT/INT/TERM traps
 on_exit() {
   trap '' INT TERM
   [[ -n "$unrelated_sid" ]] && stop_owned_session "$unrelated_sid" "$unrelated_leader"
@@ -170,7 +172,9 @@ startup_case() {  # name signal(TERM|INT) expected delay_s|hook
   esac
   local rc=0; wait_exit "$chk" 30 || rc=$?
   local left; left="$(tagged_pids "$P" | wc -l)"
-  local note="signalled before registration=$([[ $launched == 0 ]] && echo yes || echo no)"
+  local note before=no
+  [[ $launched == 0 ]] && before=yes
+  note="signalled before registration=$before"
   [[ -n "$leader" ]] && note+=" (demo session $leader existed)"
   note+="; tagged survivors=$left"
   if (( left > 0 )); then rc="$rc+leak"; reap_tagged "$P"; fi
@@ -185,6 +189,7 @@ reap_containment_case() {  # name: reap_tagged must spare untagged members of th
   # helper can only hurt this throwaway session. Inside it: the helper's shell,
   # an untagged sentinel (same session and process group), a tagged process in
   # the same group, and a tagged process in its own group.
+  # shellcheck disable=SC2016  # the whole program runs in the inner bash
   setsid -w bash -c '
     source "$1"; tag="$2"; res="$3"
     sleep 300 & sentinel=$!

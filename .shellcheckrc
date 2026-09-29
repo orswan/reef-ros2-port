@@ -1,0 +1,4 @@
+# shellcheck configuration for this repository (also read by the VS Code
+# ShellCheck extension). Resolve `source "$(dirname ...)/env.sh"` relative to
+# the script itself, so sourced helpers are analyzed too.
+source-path=SCRIPTDIR

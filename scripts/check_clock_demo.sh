@@ -61,6 +61,7 @@ alive() {  # running and not a zombie
   st="$(ps -o stat= -p "$1" 2>/dev/null)" && [[ "$st" != Z* ]]
 }
 
+# shellcheck disable=SC2317  # reached only via the EXIT/INT/TERM traps
 stop_pid() {  # stop one owned child: TERM, bounded wait, KILL, reap
   local pid="$1"
   [[ -n "$pid" ]] || return 0
@@ -72,6 +73,7 @@ stop_pid() {  # stop one owned child: TERM, bounded wait, KILL, reap
   wait "$pid" 2>/dev/null || true
 }
 
+# shellcheck disable=SC2317  # reached only via the EXIT/INT/TERM traps
 recover_sid() {  # find the demo session from launch_pid if registration never finished
   [[ -z "$sid" && -n "$launch_pid" ]] || return 0
   local c
@@ -83,18 +85,22 @@ recover_sid() {  # find the demo session from launch_pid if registration never f
   done
 }
 
+# shellcheck disable=SC2317  # reached only via the EXIT/INT/TERM traps
 stop_session() {  # stop the demo session this script created, and nothing else
   recover_sid
-  [[ "$sid" =~ ^[0-9]+$ ]] && (( sid > 1 )) && [[ "$sid" != "$own_sid" ]] || return 0
+  if ! [[ "$sid" =~ ^[0-9]+$ ]] || (( sid <= 1 )) || [[ "$sid" == "$own_sid" ]]; then
+    return 0
+  fi
   local sig
   for sig in INT TERM KILL; do
     pgrep -s "$sid" >/dev/null || break
     pkill "-$sig" -s "$sid" 2>/dev/null || true
     for _ in $(seq 25); do pgrep -s "$sid" >/dev/null || break; sleep 0.2; done
   done
-  [[ -n "$launch_pid" ]] && wait "$launch_pid" 2>/dev/null || true
+  if [[ -n "$launch_pid" ]]; then wait "$launch_pid" 2>/dev/null || true; fi
 }
 
+# shellcheck disable=SC2317  # reached only via the EXIT/INT/TERM traps
 cleanup() {
   local rc=$?
   trap '' INT TERM
@@ -110,12 +116,15 @@ cleanup() {
   fi
   exit "$rc"
 }
+# shellcheck disable=SC2317  # reached only via the EXIT/INT/TERM traps
 on_int() { echo "INTERRUPTED (SIGINT)"; exit 130; }
+# shellcheck disable=SC2317  # reached only via the EXIT/INT/TERM traps
 on_term() { echo "INTERRUPTED (SIGTERM)"; exit 143; }
 normal_traps() { trap on_int INT; trap on_term TERM; }
 # During startup a signal is only recorded. Children are started and their pids
 # registered first, so cleanup always knows what to stop.
 pending=""
+exit_for_pending() { if (( pending == 130 )); then on_int; else on_term; fi; }
 defer_traps() { trap 'pending=${pending:-130}' INT; trap 'pending=${pending:-143}' TERM; }
 sid_file=""
 trap cleanup EXIT
@@ -135,6 +144,7 @@ env_matches() {  # pid: process runs with this test's ROS domain and Gazebo part
 # jobs, so the launch and gz processes respond to INT normally.
 defer_traps
 sid_file="$(mktemp)"
+# shellcheck disable=SC2016  # $$ and $@ belong to the inner bash
 setsid -w env --default-signal=INT bash -c 'echo $$ >"$1"; shift; exec "$@"' _ "$sid_file" \
   "$REEF_ROOT/scripts/run_clock_demo.sh" "clock_topic:=$clock_topic" >"$log" 2>&1 &
 launch_pid=$!
@@ -142,7 +152,7 @@ launch_pid=$!
 for _ in $(seq 50); do [[ -s "$sid_file" ]] && break; sleep 0.1; done
 sid="$(cat "$sid_file")"
 rm -f "$sid_file"; sid_file=""
-if [[ -n "$pending" ]]; then normal_traps; (( pending == 130 )) && on_int || on_term; fi
+if [[ -n "$pending" ]]; then normal_traps; exit_for_pending; fi
 if [[ -z "$sid" ]]; then normal_traps; fail 2 "demo session did not start"; fi
 
 echo "Launched clock demo: session=$sid ROS_DOMAIN_ID=$ROS_DOMAIN_ID GZ_PARTITION=$GZ_PARTITION"
@@ -152,7 +162,7 @@ env --default-signal=INT python3 "$REEF_ROOT/scripts/clock_check.py" "$window" "
   --topic "$clock_topic" --publisher-node clock_bridge &
 obs_pid=$!
 normal_traps
-if [[ -n "$pending" ]]; then (( pending == 130 )) && on_int || on_term; fi
+if [[ -n "$pending" ]]; then exit_for_pending; fi
 
 # --- Monitor until the observer finishes; fail fast if the owned demo dies.
 limit=$(( ${startup%.*} + ${window%.*} + 15 ))
