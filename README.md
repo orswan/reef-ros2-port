@@ -4,10 +4,34 @@ Port of the [REEF Estimator](https://github.com/uf-reef-avl/reef_estimator)
 stack (UF REEF AVL, ROS 1 / catkin) to **ROS 2 Jazzy** with **Gazebo Harmonic**
 simulation.
 
-Status: starter phase. Upstream sources have been inspected, the sim-time
-bridge is demonstrated, and a reproducible dev container is defined. No
-packages have been ported yet. See [docs/MIGRATION.md](docs/MIGRATION.md) for
-findings, pinned upstream commits, dependencies, and next steps.
+**Current status, evidence, and next milestone: [docs/STATUS.md](docs/STATUS.md).**
+Acceptance criteria: [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md). Interfaces:
+[docs/INTERFACES.md](docs/INTERFACES.md). Source audit and plan:
+[docs/MIGRATION.md](docs/MIGRATION.md). No REEF package has been ported yet.
+
+## Checks and demos
+
+Two entry points (**container terminal**, from `/root/ros2_ws/reef_ros2`),
+both simulation only:
+
+```bash
+scripts/reef_check.sh help
+scripts/reef_check.sh env
+scripts/reef_check.sh clock --gui --regress
+scripts/reef_check.sh sim-data
+scripts/reef_demo.sh help
+scripts/reef_demo.sh stock --gui
+scripts/reef_demo.sh replay recordings/<run>
+```
+
+Exit status: 0 PASS, 1 FAIL (the check ran and failed), 2 BLOCKED / NOT
+IMPLEMENTED / invalid invocation, 130/143 interrupted. Targets for later
+milestones (`baseline`, `estimator`, `faults`, `control`, `vision`, `release`;
+demos `estimator`, `closed-loop`, `vision`) print NOT IMPLEMENTED and exit 2.
+Each check prints the source revision, configuration hashes, assertions, wall
+and sim time, and artifact paths. See
+[docs/INTERFACES.md §1](docs/INTERFACES.md#1-command-interface). The
+individual scripts listed below remain available.
 
 Every command below is labelled with where it runs:
 
@@ -307,6 +331,7 @@ diff <(grep -v '^#' docker/original-packages.txt) /tmp/reef-new-packages.txt | l
 | `REEF_X3_OUT` | `recordings/x3_<time>_<id>` | `run_x3_scenario.sh` run directory |
 | `REEF_ASSETS_DIR` | `assets/models` | asset location (`setup_assets.py`, `run_x3_scenario.sh`) |
 | `REEF_X3_ENABLE_RANGE` | `1` | test-only: `0` omits the range stream |
+| `REEF_REPLAY_DOMAIN` | random 1–101 | `reef_demo.sh replay` ROS domain |
 
 `check_clock_demo.sh` isolates itself with a per-run Gazebo partition and ROS
 topic, and fails if its own launch dies. Exit codes are 0 pass, 1 clock check
@@ -316,17 +341,42 @@ failed, 2 demo failed, 124 timeout, 130/143 interrupted. See
 To recreate the reference clones, see the commit table in
 [docs/MIGRATION.md](docs/MIGRATION.md#2-reference-sources-inspection-only-never-built).
 
-## Building
+## Building and testing
 
-`scripts/run_x3_scenario.sh` builds `reef_sim` itself. To build by hand,
-**container terminal**, from this directory (in the original container, not
-from `/root/ros2_ws`, whose colcon run would also discover `reef_ros2/src`):
+`scripts/run_x3_scenario.sh` builds `reef_sim` itself. To build and test by
+hand (**container terminal**), always from the project root, with discovery
+limited to `src/`. A colcon run from `/root/ros2_ws` would also discover
+`reef_ros2/src`, and in the original container it would pick up the
+unrelated overlay. Use a fresh shell that loads only Jazzy:
 
 ```bash
 cd /root/ros2_ws/reef_ros2
-env -i HOME=$HOME PATH=/usr/bin:/bin bash --norc -c \
-  'source /opt/ros/jazzy/setup.bash && colcon build --base-paths src'
+env -i HOME=$HOME PATH=/usr/bin:/bin TERM=$TERM bash --norc
+source /opt/ros/jazzy/setup.bash
+colcon list --base-paths src
+CMAKE_BUILD_PARALLEL_LEVEL=1 colcon build --symlink-install --executor sequential --base-paths src
+source install/setup.bash
+colcon test --base-paths src --executor sequential --return-code-on-test-failure
+colcon test-result --verbose
 ```
+
+Run each line only after the previous one succeeds (`echo $?` shows the exit
+status). The `CMAKE_BUILD_PARALLEL_LEVEL=1` / `--executor sequential` form
+limits memory use in Docker Desktop; drop both for speed.
+
+Inspecting failures:
+
+| Where | What |
+|---|---|
+| `log/latest_build/<pkg>/stdout_stderr.log` | full build output of one package |
+| `colcon build --base-paths src --packages-select <pkg> --event-handlers console_direct+` | rebuild one package with output streamed to the terminal |
+| `colcon test-result --verbose` (or `--all`) | failing test names and assertion messages; nonzero exit if any failed |
+| `log/latest_test/<pkg>/stdout_stderr.log`, `build/<pkg>/pytest.xml` | full test output and JUnit results |
+
+A summary of "0 tests" is **not** a pass: it means nothing ran. `colcon test`
+without `--return-code-on-test-failure` exits 0 even when tests fail. As of
+P00, `reef_sim` has 7 unit tests (geometry); the ROS nodes are exercised by
+`reef_check.sh sim-data`.
 
 ## Using the original container
 

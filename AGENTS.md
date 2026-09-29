@@ -1,8 +1,24 @@
 # Agent instructions: REEF ROS 2 migration
 
 Goal: port the REEF Estimator stack from ROS 1 (catkin) to ROS 2 Jazzy, with
-Gazebo Harmonic simulation. Read `docs/MIGRATION.md` before starting work. It
-holds the verified findings, pinned upstream commits, and open decisions.
+Gazebo Harmonic simulation. Read `docs/STATUS.md` first: it holds the current
+revision, evidence, open items, and next milestone. Then read
+`docs/MIGRATION.md` (source audit, pinned upstream commits, open decisions),
+`docs/ACCEPTANCE.md`, and `docs/INTERFACES.md`. `docs/handoff/` is
+conversation history, not proof of the repository state. Where it conflicts
+with this file, this file wins.
+
+## Milestone workflow
+
+- Fix acceptance criteria in `docs/ACCEPTANCE.md` before scoring an
+  implementation; change thresholds only in a separate, explained commit.
+- Expose checks through `scripts/reef_check.sh TARGET` and demos through
+  `scripts/reef_demo.sh MODE`. Wrap existing scripts rather than duplicating
+  them. Exit 0 PASS, 1 executed FAIL, 2 BLOCKED / NOT IMPLEMENTED / invalid;
+  unavailable targets must say NOT IMPLEMENTED.
+- At the end of a milestone, update `docs/STATUS.md` (revision, checks and exit
+  codes, skipped checks, human checks still needed, next milestone) and add
+  brief evidence in `docs/reviews/<milestone>.md`.
 
 ## Environment rules
 
