@@ -15,8 +15,9 @@ export REEF_ROOT
 
 # Variables allowed through the clean re-exec. Everything else is dropped.
 REEF_PASSTHROUGH_VARS=(HOME USER LOGNAME TERM LANG LC_ALL TZ
-  ROS_DOMAIN_ID RMW_IMPLEMENTATION
-  REEF_DISCOVERY_RANGE REEF_DISPLAY REEF_HEADLESS REEF_CHECK_SECONDS)
+  ROS_DOMAIN_ID RMW_IMPLEMENTATION GZ_PARTITION
+  REEF_DISCOVERY_RANGE REEF_DISPLAY REEF_HEADLESS REEF_CHECK_SECONDS
+  REEF_STARTUP_TIMEOUT REEF_TEST_ROS_DOMAIN_ID REEF_TEST_GZ_PARTITION)
 
 reef_reexec_clean() {
   if [[ "${REEF_CLEAN_ENV:-}" == "1" ]]; then
@@ -52,8 +53,12 @@ reef_setup_env() {
   fi
   (( had_u )) && set -u
 
-  # Keep DDS discovery on this host. Jazzy's ros_environment hook always sets
-  # SUBNET, so the override is REEF_DISCOVERY_RANGE (SUBNET|LOCALHOST|OFF|...).
+  # Keep DDS discovery on this host by default. Jazzy's ros_environment hook
+  # only sets SUBNET if the variable is unset, which is always the case after
+  # the clean re-exec. The caller's own value is not passed through because a
+  # sourced caller shell has SUBNET from that same default, so it would not show
+  # intent. Override with REEF_DISCOVERY_RANGE (SUBNET|LOCALHOST|OFF|...).
+  # This limits reach; it is not test isolation (see check_clock_demo.sh).
   export ROS_AUTOMATIC_DISCOVERY_RANGE="${REEF_DISCOVERY_RANGE:-LOCALHOST}"
 
   # Guard: the unrelated /root/ros2_ws/install overlay must not be active.

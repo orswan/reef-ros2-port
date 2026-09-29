@@ -5,6 +5,11 @@ Run through scripts/run_clock_demo.sh so the environment is explicit.
 Arguments:
   world:=<path to .sdf>   default: sim/worlds/clock_demo.sdf
   headless:=true|false    true runs the server only (no GUI window)
+  clock_topic:=<name>     ROS topic for the bridged clock (default /clock).
+                          check_clock_demo.sh uses a unique per-run topic.
+
+Gazebo transport isolation comes from GZ_PARTITION in the environment, which
+the gz processes and the bridge inherit from this launch.
 """
 from pathlib import Path
 
@@ -22,6 +27,7 @@ DEFAULT_WORLD = str(Path(__file__).resolve().parents[1] / 'worlds' / 'clock_demo
 def generate_launch_description():
     world = LaunchConfiguration('world')
     headless = LaunchConfiguration('headless')
+    clock_topic = LaunchConfiguration('clock_topic')
     gz_sim_launch = PathJoinSubstitution(
         [FindPackageShare('ros_gz_sim'), 'launch', 'gz_sim.launch.py'])
 
@@ -36,6 +42,7 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument('world', default_value=DEFAULT_WORLD),
         DeclareLaunchArgument('headless', default_value='false'),
+        DeclareLaunchArgument('clock_topic', default_value='/clock'),
         gz_sim('', UnlessCondition(headless)),
         gz_sim('-s ', IfCondition(headless)),
         # Gazebo -> ROS only ('[' direction). /clock is a gz.msgs.Clock topic.
@@ -44,5 +51,6 @@ def generate_launch_description():
             executable='parameter_bridge',
             name='clock_bridge',
             arguments=['/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock'],
+            ros_arguments=['-r', ['/clock:=', clock_topic]],
             output='screen'),
     ])
