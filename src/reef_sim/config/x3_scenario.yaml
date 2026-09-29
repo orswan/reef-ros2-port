@@ -1,0 +1,45 @@
+# X3 scenario parameters (ROS 2 parameters file; also read by the run script
+# and the analyzer). The run script copies this file into each recording
+# directory, so every bag carries the exact parameters it was produced with.
+#
+# Units: SI (m, s, m/s, rad/s). Velocity commands are the MulticopterVelocityControl
+# input: body frame (FLU). With yaw held (yaw_rate 0) and small tilt, that is
+# approximately world ENU (x east/forward, y north/left, z up).
+
+simulation:                 # read by scripts/run_x3_scenario.sh (not a ROS node)
+  ros__parameters:
+    startup_timeout_s: 90.0 # wall seconds allowed until the scenario starts
+
+scenario_runner:
+  ros__parameters:
+    cmd_rate_hz: 20.0       # sim-time rate of /x3/cmd_vel
+    startup_timeout_s: 90.0 # wall seconds to wait for clock, truth, publishers
+    stall_timeout_s: 20.0   # wall seconds without sim-time progress -> abort
+    # Phases (parallel arrays). The vehicle starts on the ground (z = 0.055 m).
+    phase_names:     [settle, ascend, hover_high, forward, hover_fwd, left,  hover_left, back,  hover_back, descend, hover_low]
+    phase_durations: [5.0,    5.0,    4.0,        5.0,     3.0,       5.0,   3.0,        5.0,   3.0,        4.0,     4.0]
+    phase_vx:        [0.0,    0.0,    0.0,        0.4,     0.0,       0.0,   0.0,        -0.4,  0.0,        0.0,     0.0]
+    phase_vy:        [0.0,    0.0,    0.0,        0.0,     0.0,       0.4,   0.0,        -0.4,  0.0,        0.0,     0.0]
+    phase_vz:        [0.0,    0.4,    0.0,        0.0,     0.0,       0.0,   0.0,        0.0,   0.0,        -0.3,    0.0]
+    phase_yaw_rate:  [0.0,    0.0,    0.0,        0.0,     0.0,       0.0,   0.0,        0.0,   0.0,        0.0,     0.0]
+
+imu_noise:
+  ros__parameters:
+    # Gaussian white noise added to Gazebo's noise-free IMU (no bias). The
+    # random stream is keyed by (seed, sample timestamp), so each sample's noise
+    # is reproducible run to run.
+    accel_noise_std: 0.02   # m/s^2 per axis
+    gyro_noise_std: 0.002   # rad/s per axis
+    seed: 7
+
+range_sensor:
+  ros__parameters:
+    # IDEALIZED downward range, computed from simulation truth (not a Gazebo
+    # sensor). Exact ray/plane intersection: flat ground at world z = 0.
+    rate_hz: 20.0
+    sensor_offset: [0.0, 0.0, -0.055]  # sensor origin in x3/base_link (FLU), m: bottom of the body
+    min_range: 0.20                    # m; MaxBotix MB1242-like limits (REEF's sonar)
+    max_range: 7.65                    # m
+    noise_std: 0.01                    # m, Gaussian, added to in-range readings
+    seed: 42                           # noise keyed by (seed, sample timestamp)
+    frame_id: x3/range_link

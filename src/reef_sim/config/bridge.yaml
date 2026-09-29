@@ -1,0 +1,32 @@
+# ros_gz_bridge configuration for the X3 scenario.
+# Gazebo topics are namespaced /reef/x3/... (set in the world and model);
+# ROS topics are /x3/... . Truth and measurements stay on separate topics.
+- ros_topic_name: /clock
+  gz_topic_name: /clock
+  ros_type_name: rosgraph_msgs/msg/Clock
+  gz_type_name: gz.msgs.Clock
+  direction: GZ_TO_ROS
+
+# SIMULATION TRUTH (OdometryPublisher on the model): exact world pose; twist is
+# a finite difference of pose, 10-sample moving average, in the body frame.
+- ros_topic_name: /x3/truth/odom
+  gz_topic_name: /reef/x3/truth/odom
+  ros_type_name: nav_msgs/msg/Odometry
+  gz_type_name: gz.msgs.Odometry
+  direction: GZ_TO_ROS
+
+# SIMULATOR-INTERNAL: noise-free IMU (specific force + angular rate, FLU).
+# Input to the imu_noise node, which publishes the /x3/imu MEASUREMENT.
+# Not recorded.
+- ros_topic_name: /x3/sim/imu_noise_free
+  gz_topic_name: /reef/x3/imu_noise_free
+  ros_type_name: sensor_msgs/msg/Imu
+  gz_type_name: gz.msgs.IMU
+  direction: GZ_TO_ROS
+
+# COMMAND to the truth-fed MulticopterVelocityControl system.
+- ros_topic_name: /x3/cmd_vel
+  gz_topic_name: /X3/gazebo/command/twist
+  ros_type_name: geometry_msgs/msg/Twist
+  gz_type_name: gz.msgs.Twist
+  direction: ROS_TO_GZ
