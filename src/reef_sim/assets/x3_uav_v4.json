@@ -1,0 +1,52 @@
+{
+  "_comment": "Pinned third-party Gazebo model used by reef_sim. Downloaded and verified by scripts/setup_assets.sh into assets/models/<install_dir>/ (ignored by Git).",
+  "name": "X3 UAV",
+  "owner": "OpenRobotics",
+  "fuel_version": 4,
+  "fuel_tip_version_at_capture": 6,
+  "source_url": "https://fuel.gazebosim.org/1.0/OpenRobotics/models/X3%20UAV/4/X3%20UAV.zip",
+  "referenced_by": "gz-sim 8.15.0 examples/worlds/multicopter_velocity_control.sdf (https://fuel.gazebosim.org/1.0/OpenRobotics/models/X3 UAV/4)",
+  "archive_sha256": "c995a307936ce7df5a544e6c89b0396d054befa6ff5fbdbf262949b59cc12247",
+  "archive_bytes": 22158656,
+  "install_dir": "x3",
+  "install_dir_reason": "model.sdf references its meshes as model://x3/meshes/...",
+  "license": {
+    "name": "Creative Commons Attribution 4.0 International",
+    "url": "http://creativecommons.org/licenses/by/4.0/",
+    "source": "Fuel model metadata (GET https://fuel.gazebosim.org/1.0/OpenRobotics/models/X3%20UAV, license_id 2), captured 2026-09-29"
+  },
+  "authors": [
+    "Carlos Aguero <caguero@openrobotics.org>",
+    "Cole Biesemeyer <cole@openrobotics.org>"
+  ],
+  "attribution": "X3 UAV model by Open Robotics (Carlos Aguero, Cole Biesemeyer), Gazebo Fuel, CC BY 4.0. reef_sim/models/reef_x3/model.sdf is derived from its model.sdf.",
+  "captured": "2026-09-29",
+  "files": {
+    "model.config": "d6f74789441630bf189167adcea2125447efaddd3469117f3e7577a20878455a",
+    "model.sdf": "b76c085236760a42d888a7208bd1b7c6c4c5ea7bd25c344672cce54965defcf0",
+    "meshes/ardrone.dae": "ba314959bf13b0ac65cadcd2444cea954d6ac23d7a0009c0ac70c6313db38e29",
+    "meshes/firefly.dae": "b8a57f2114c35d786a00efc59d85db9b1541e4504ed280cd3b2e8b021efa43e4",
+    "meshes/hummingbird.dae": "e23bde33c870992b330648ca40670e50aa561ea59317b6694ab877d12759ea67",
+    "meshes/iris.dae": "697956cfc0fe608afc52a0f688de50354b89e5201056451cf6bb767de8f46323",
+    "meshes/neo11.dae": "ec9c6f3a54f76d3ae0d2b47b6bd05ca99327683c78eb9683f34522907e99d1bb",
+    "meshes/neo11_propeller_ccw.dae": "f1f48d099241516636ecc166f03358b8bb66187bc300607106dd37e90349c7cd",
+    "meshes/neo11_propeller_cw.dae": "f52ab685a6677eaf9b4730ba6813cf9cc1293932ae76814d6096e6e400e1f197",
+    "meshes/neo9.dae": "edb1d461797763e0669f73e699023bf63ef440f657444d30759100023dc54bdb",
+    "meshes/neo9_propeller_ccw.dae": "14a92bf5a09b073ea37212e928eaf1ca80c3f3078c5437ffb91f754df4c2719c",
+    "meshes/neo9_propeller_cw.dae": "2bb4c4a205b058ec1db5d9c0638fba98a516c7f59f25c6717ed8408aa83ffb36",
+    "meshes/pelican.dae": "a7d5842482065494ddc4e4b07364e0d9aeb355deeb1c9294203178ff56e74a22",
+    "meshes/propeller_ccw.dae": "3d8d39737cf6df9dfaa1cf7b05be4bac396001f53dcdb1c6af1a72cc925bf52c",
+    "meshes/propeller_cw.dae": "09994038cb7fe9e8f719e9944bddd084979ddb84cb8dfc7e1dbfef2e88355e0a",
+    "meshes/vi_camera.dae": "31f2148c338f560186dabeed84f8e1ff884323d183abd311c11a2dc229b873bc",
+    "meshes/vi_camera.png": "18580ed36a483f13952f09ad182785e1723e3bf03a8d576c9267a8881a7f63cd",
+    "meshes/vi_sensor.dae": "16cfa7f6ea1f618c43bbd4663b4bb136c82efc5a7c0d4a563c7f2cb986c2a097",
+    "meshes/vi_sensor.png": "01085f016c39f6fccaf91067b7df5034b3800d75981c7e8a326f7a08379a1ff0",
+    "meshes/x3.dae": "5d1d280e10e15a0e9c09dbc0da5f6b8fd94477e81fe085733921c99ea4486c95",
+    "meshes/x3.png": "82e2e08831618e3299c35b7a80a23a39742c0aa71c737116063be6b0f0143faf",
+    "thumbnails/1.png": "25ccf7638d84d9351b3036dc364567f393983256c7d08cb1b3c45d708440b6be",
+    "thumbnails/2.png": "6c4d4af44349a1c92ad0141890e07a5c4c4a3f3045645ab096ce3f97c0cb5f23",
+    "thumbnails/3.png": "c03e0c73251faebb752516c20ce2a930f5b8e89a9c9067c4b8c31b962566f9ab",
+    "thumbnails/4.png": "42430a1f489e514ae6bb44a0c92e3bab4d2b42b1f551b3b837212b12451af0ae",
+    "thumbnails/5.png": "bfb9053524f3c01b6ca2d5bfc660de0fa22f9936e4feeb2c33794febdf988e09"
+  }
+}

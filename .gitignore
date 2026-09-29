@@ -26,3 +26,6 @@ __pycache__/
 .DS_Store
 .vscode/
 *.swp
+
+# Downloaded third-party assets (see src/reef_sim/assets/*.json, scripts/setup_assets.py)
+/assets/
