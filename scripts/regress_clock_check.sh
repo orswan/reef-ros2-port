@@ -35,7 +35,6 @@ wait_exit() {  # pid timeout_s -> exit status of our child (or 255 if still aliv
   return $rc
 }
 
-display_pids() { pgrep -x Xvfb; pgrep -x x11vnc; pgrep -f "websockify.*8080"; }
 
 start_unrelated_sim() {  # headless demo on plain /clock; stands in for "another simulation"
   local sid_file; sid_file="$(mktemp)"
@@ -214,7 +213,7 @@ reap_containment_case() {  # name: reap_tagged must spare untagged members of th
 }
 
 echo "Regression output: $out_dir"
-disp_before="$(display_pids | sort | tr '\n' ' ')"
+disp_before="$(display_service_pids)"
 echo "Display service pids before: $disp_before"
 
 # 1. Headless success.
@@ -269,7 +268,7 @@ done
 # 13. Failure-path cleanup must signal only tagged processes, not their session.
 reap_containment_case "13 reap_tagged spares untagged session peers"
 
-disp_after="$(display_pids | sort | tr '\n' ' ')"
+disp_after="$(display_service_pids)"
 if [[ "$disp_before" == "$disp_after" ]]; then note="unchanged: $disp_after"; rc=0; else note="before=[$disp_before] after=[$disp_after]"; rc=1; fi
 record "7 display services untouched" 0 "$rc" 0 "$note"
 

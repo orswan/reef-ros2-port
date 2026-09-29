@@ -36,7 +36,6 @@ wait_exit() {  # pid seconds -> child's exit status, or 255 if still running
   return $rc
 }
 new_tag() { tag="reef_rx3_$$_${RANDOM}${RANDOM}"; tags+=("$tag"); }   # sets $tag; no subshell, so cleanup sees it
-display_pids() { pgrep -x Xvfb; pgrep -x x11vnc; pgrep -f "^/usr/bin/python3 /usr/bin/websockify"; }
 
 # shellcheck disable=SC2317  # reached only via the EXIT trap
 on_exit() {
@@ -103,7 +102,7 @@ disrupt_case() {  # name action expected: interrupt a running flight
 }
 
 echo "X3 scenario regression output: $out"
-disp_before="$(display_pids | sort | tr '\n' ' ')"
+disp_before="$(display_service_pids)"
 
 # 1. Pinned assets verify without network access.
 t0=$SECONDS; rc=0
@@ -215,8 +214,13 @@ kill -INT -- "-$play" 2>/dev/null; wait_exit "$play" 20 >/dev/null || kill -KILL
 record "10 replay drives sim time from the bag" 0 "$rc" "$(( SECONDS - t0 ))" \
   "$(echo "$replay" | tr '\n' ' ') (bag ends at ${bag_end} s)"
 
-disp_after="$(display_pids | sort | tr '\n' ' ')"
-record "11 display services untouched" 0 "$([[ "$disp_before" == "$disp_after" ]] && echo 0 || echo 1)" 0 "$disp_after"
+disp_after="$(display_service_pids)"
+# Long-lived services only (Xvfb, x11vnc, websockify listener); a browser
+# connecting or reconnecting adds per-connection websockify children, which
+# are not a change to the services.
+if [[ "$disp_before" == "$disp_after" ]]; then note="unchanged: $disp_after"; rc=0
+else note="before=[$disp_before] after=[$disp_after]"; rc=1; fi
+record "11 display services untouched" 0 "$rc" 0 "$note"
 
 echo
 echo "===== Summary ($out) ====="

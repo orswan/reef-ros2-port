@@ -29,3 +29,17 @@ reap_tagged() {  # tag: stop every process carrying the tag, and nothing else
   done
   [[ -z "$(tagged_pids "$tag")" ]]
 }
+
+display_service_pids() {  # long-lived display services, sorted: Xvfb, x11vnc, websockify listener(s)
+  # websockify forks a child per browser connection; those come and go with
+  # the viewer, so only listeners (a parent that is not websockify) count.
+  local p pp
+  {
+    pgrep -x Xvfb
+    pgrep -x x11vnc
+    for p in $(pgrep -f "^/usr/bin/python3 /usr/bin/websockify"); do
+      pp="$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' ')"
+      tr '\0' ' ' 2>/dev/null <"/proc/$pp/cmdline" | grep -q websockify || echo "$p"
+    done
+  } | sort -n | tr '\n' ' '
+}
