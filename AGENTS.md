@@ -30,6 +30,9 @@ holds the verified findings, pinned upstream commits, and open decisions.
   desktop: `scripts/check_display.sh --start` waits for the dev container's
   desktop, or runs `start_vnc.sh` in the original. Test desktop changes with
   `scripts/test_desktop.sh` (spare display `:150`).
+- When experimenting with X clients or window managers, set `HOME` to a scratch
+  directory. Fluxbox writes state to `~/.fluxbox`, and an earlier experiment
+  modified the original container's copy (since restored).
 - Do not install packages into the original container. Fetch tools such as
   shellcheck into a scratch directory, or add them to the `Dockerfile`.
 - Run `shellcheck -x` on changed shell scripts (`.shellcheckrc` is in the repo

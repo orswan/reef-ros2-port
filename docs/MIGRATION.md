@@ -493,6 +493,13 @@ here. This used its packages, not the new image:
 | hadolint 2.12.0 (sha256-verified) on the Dockerfile | 0 findings after review (`pipefail` added; 4 intentional rules ignored, with reasons) |
 | `compose.yaml` and `devcontainer.json` parse with the intended values | PASS |
 
+**Side effect in the original container (reverted):** the race experiment
+ran `fluxbox` on `:150` without a scratch `HOME`. It appended a `:150.0` line
+to `/root/.fluxbox/lastwallpaper` and created an empty `slitlist` (Fluxbox
+runtime state, not configuration). Both were restored: the original 67-byte
+content, `slitlist` removed, and modification times reset to 01:03:41 (sub-second
+values not recoverable). Later tests use a scratch `HOME`.
+
 **Not run (needs the Mac host):** `docker compose build`, starting
 `reef_ros2_dev`, `validate_devcontainer.sh` in the new image, `docker compose
 restart`, browser view on 8081, and the VS Code Dev Containers flow. [A] VS Code

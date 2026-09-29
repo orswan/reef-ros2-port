@@ -52,7 +52,7 @@ cleanup() {
     pid="$(tr -d ' ' <"$lock")"
     kill -0 "$pid" 2>/dev/null || rm -f "$lock" "/tmp/.X11-unix/X$REEF_DESKTOP_DISPLAY"
   fi
-  echo "logs: $work"
+  if (( failures == 0 )); then rm -rf "$work"; else echo "logs kept: $work"; fi
 }
 trap cleanup EXIT
 
