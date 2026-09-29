@@ -264,6 +264,10 @@ gives the Mac-terminal commands.
 - The truth twist is a smoothed finite difference (about 10 ms lag), not the
   physics engine's velocity.
 - `/clock` is recorded at 500 Hz, which makes up most of the bag's messages.
+- Gazebo writes its console logs to `$HOME/.gz` (`sim/log/<time>/`,
+  `auto_default.log`) in whichever container runs it. In the dev container that
+  is the `reef_ros2_gz` volume. `GZ_HOMEDIR` is not honoured by this Gazebo
+  version (tested), so these logs are not in the run directory.
 - The vehicle starts on the ground, and the rotors engage when the first
   command arrives (timing depends on ROS delivery), so the noise-free signal
   differs slightly between runs.
