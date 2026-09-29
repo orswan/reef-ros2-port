@@ -1,0 +1,28 @@
+# colcon / ament outputs
+/build/
+/install/
+/log/
+
+# Upstream reference clones (inspection only; commits recorded in docs/MIGRATION.md)
+/reference/*
+!/reference/COLCON_IGNORE
+
+# Recordings and large data
+*.bag
+*.bag.active
+*.db3
+*.db3-shm
+*.db3-wal
+*.mcap
+/bags/
+/recordings/
+/data/
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Editors / host OS (repo is bind-mounted from macOS)
+.DS_Store
+.vscode/
+*.swp

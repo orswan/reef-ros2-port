@@ -1,0 +1,44 @@
+# Agent instructions: REEF ROS 2 migration
+
+Goal: port the REEF Estimator stack from ROS 1 (catkin) to ROS 2 Jazzy, with
+Gazebo Harmonic simulation. Read `docs/MIGRATION.md` before starting work. It
+holds the verified findings, pinned upstream commits, and open decisions.
+
+## Environment rules
+
+- Container: Ubuntu 24.04, x86_64, ROS 2 Jazzy at `/opt/ros/jazzy`, Gazebo
+  Harmonic (gz sim 8.x), display Xvfb `:99` viewed through noVNC at
+  http://localhost:8080/vnc.html.
+- **Never rely on the calling shell's environment.** Agent shells do not read
+  `~/.bashrc` reliably, and when they do, they inherit the unrelated overlay
+  `/root/ros2_ws/install` and may have the wrong `DISPLAY`. Run everything
+  through `scripts/` (which re-exec under `env -i` via `scripts/env.sh`). For
+  ad-hoc commands use:
+  `env -i HOME=$HOME PATH=/usr/bin:/bin bash --norc -c 'source scripts/env.sh && reef_setup_env && <cmd>'`
+- Build only from `/root/ros2_ws/reef_ros2` (`colcon build --base-paths src`).
+  Never run `colcon build` in `/root/ros2_ws` for this project.
+- Do not modify `/root/start_vnc.sh`, the container, or anything outside this
+  directory. Reuse the existing display; `scripts/check_display.sh --start`
+  is the only sanctioned way to start it.
+
+## Source rules
+
+- `reference/` holds upstream ROS 1 clones **for reading only**. Do not edit
+  them, do not build them, and do not remove `reference/COLCON_IGNORE`. They are
+  ignored by Git.
+- Do not build the original ROS 1 packages as ROS 2 packages. Port them into `src/` as
+  new ament packages.
+- `reef_estimator_2` is not a ROS 2 port; do not use it as a base.
+- Preserve the estimator's filter math and parameter semantics when porting.
+  Change the ROS plumbing, not the algorithm, unless a change is explicitly
+  requested.
+- No physical flight recordings exist. Validate against Gazebo ground truth.
+- Do not commit build outputs, reference clones, or recordings (see `.gitignore`).
+
+## Reporting
+
+- In docs and reports, label findings **[V] verified** (observed here) or
+  **[A] assumption**. Record commands and actual output for checks. State
+  blocked or skipped checks explicitly.
+- Checks: `scripts/check_env.sh`, `scripts/check_display.sh`, and
+  `scripts/check_clock_demo.sh` (add `REEF_HEADLESS=1` when no display is needed).
