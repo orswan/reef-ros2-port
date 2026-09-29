@@ -21,7 +21,7 @@ Evidence labels used throughout:
 | ROS | ROS 2 Jazzy, `/opt/ros/jazzy` | [V] |
 | Gazebo | Harmonic, `gz sim` 8.15.0 (via `gz_*_vendor` packages in `/opt/ros/jazzy/opt`) | [V] |
 | ROS–Gazebo | `ros_gz_bridge`, `ros_gz_sim`, `ros_gz_interfaces`, `actuator_msgs` installed | [V] |
-| Display | Xvfb `:99` → x11vnc → websockify `:8080` → http://localhost:8080/vnc.html, started by `/root/start_vnc.sh` | [V] processes running; fluxbox not running at inspection time (not required) |
+| Display | Xvfb `:99` → x11vnc → websockify `:8080` → http://localhost:8080/vnc.html, started by `/root/start_vnc.sh` | [V] processes running. Fluxbox is installed but **not running**: `start_vnc.sh` starts it without waiting for Xvfb (see §9). The earlier "not required" was wrong |
 | Rendering | `LIBGL_ALWAYS_SOFTWARE=1`, `MESA_GL_VERSION_OVERRIDE=3.3` (software GL) | [V] Gazebo GUI window mapped on `:99` |
 | Workspace | `/root/ros2_ws` bind-mounted from macOS (virtiofs) | [V] mount type; not itself a Git repo |
 | Git identity | `user.name=orswan`, `user.email=orswan@stanford.edu` (global) | [V] |
@@ -395,7 +395,9 @@ What it contains [V]:
   [V] The X3 `model.sdf` contains **no `<sensor>` elements**. The IMU and
   altimeter must be added (the `Imu` and `Altimeter` systems, plus sensors on
   `X3/base_link`). [A] The first run will fetch the models from Fuel into
-  `~/.gz/fuel`, so vendor the model or pre-fetch it for offline repeatability.
+  `~/.gz/fuel`. In the dev container, `/root/.gz` is the Docker volume
+  `reef_ros2_gz`, so the download survives container replacement (§9). Vendor
+  the model under `sim/models/` if runs must work fully offline.
 
 How it maps onto REEF [A]:
 - **Validation limit:** as shipped, the vehicle is flown by a controller that
@@ -436,3 +438,64 @@ How it maps onto REEF [A]:
    unchanged.
 4. Add frame-conversion adapters and an estimator-vs-truth comparison, with the
    vehicle still flown by the truth-fed controller (see §6 validation limit).
+
+## 9. Reproducible dev container
+
+Files: `Dockerfile`, `compose.yaml`, `.devcontainer/devcontainer.json`,
+`.dockerignore`, `docker/reef-desktop`, `docker/bash.bashrc.d/ros.sh`,
+`docker/original-packages.txt`, `scripts/test_desktop.sh`,
+`scripts/vnc_snapshot.py`, `scripts/validate_devcontainer.sh`. User
+instructions are in the README.
+
+### Recipe sources [V]
+
+| Finding | Source |
+|---|---|
+| The only packages installed by hand: `apt install -y ros-jazzy-ros-gz xvfb x11vnc novnc fluxbox` (2026-09-29 00:54, with recommends; 988 packages, about 3 GB installed) | `/var/log/apt/history.log` in the original container |
+| Everything before that is the `ros:jazzy` image build (`ros-core`, then `ros-base` 0.11.0, on 2026-09-09) | same log |
+| No global apt `Install-Recommends` setting, so apt's default (install recommends) applied | `/etc/apt/apt.conf.d/` |
+| Display commands and flags | `/root/start_vnc.sh`, `docs/setup/GazeboMacDockerSetup.md` |
+| Environment: `DISPLAY=:99`, `LIBGL_ALWAYS_SOFTWARE=1`, `MESA_GL_VERSION_OVERRIDE=3.3`, ROS sourcing, and the `/root/ros2_ws/install` overlay | `~/.bashrc` lines 100–104 |
+| Key versions: ros-jazzy-ros-gz 1.0.24 (20260905), gz-sim-vendor 0.0.13, xvfb 21.1.12-1ubuntu1.8, x11vnc 0.9.16-10, novnc 1.3.0-2, websockify 0.10.0, fluxbox 1.3.7, Mesa 25.2.8 | `dpkg-query`; full list in `docker/original-packages.txt` |
+| `ros:jazzy` today: index `sha256:c3706ef0…`, amd64 manifest `sha256:efbc8cb2…`, created 2026-09-16, `ENTRYPOINT /ros_entrypoint.sh` | registry-1.docker.io manifest and config queries |
+| The original container predates that image (its base packages were installed 2026-09-09), so the rebuilt image differs from it | same |
+| All packages named in the Dockerfile resolve in noble plus the ROS repo (shellcheck candidate 0.9.0-1) | `apt-cache policy` |
+
+### Fluxbox startup race [V]
+
+`start_vnc.sh` runs `Xvfb :99 … &` and immediately `fluxbox &`. On a spare
+display (`:150`), that ordering made fluxbox exit with `Couldn't connect to
+XServer` in 3 of 5 attempts. With a readiness wait (`xdpyinfo` until it
+answers), fluxbox ran. `~/.fluxbox` in the original was created at 01:03, but
+the current display services (started 01:35) have no fluxbox process, which
+is consistent with this race. The dev container waits for readiness and
+verifies Fluxbox through `_NET_SUPPORTING_WM_CHECK`. The original container
+is left as is. `check_display.sh` reports its missing window manager as a WARN
+that names the cause.
+
+A second defect was found while testing `reef-desktop`. An `xdpyinfo`
+readiness probe that connected while Xvfb was starting blocked indefinitely,
+and it also held off the supervisor's TERM trap. Every X probe now runs
+under `timeout`.
+
+### Validation status
+
+Ran in the **original container**, since there is no Docker daemon or socket
+here. This used its packages, not the new image:
+
+| Check | Result |
+|---|---|
+| `scripts/test_desktop.sh` (the `reef-desktop` supervisor on `:150`, ports 5950/6150): startup, Fluxbox as the window manager, noVNC page, duplicate `run` refused, recovery after fluxbox or Xvfb is killed, no zombies, SIGTERM stops everything, stale X lock after an unclean stop | 12/12 PASS |
+| GUI clock check on the `reef-desktop` stack (`:150`), plus a VNC snapshot | PASS; the snapshot shows the Fluxbox toolbar and Gazebo rendering the `clock_demo` scene (RTF about 92 %) |
+| Regression suite after the shellcheck edits | 28/28 PASS |
+| `scripts/validate_devcontainer.sh` run in the original container (a negative control for the image checks) | 12 image-specific checks FAIL as expected (no reef-desktop, no image ENV, `.bashrc` overlay, no volume, no shellcheck). Clock, GUI, snapshot, and negative-case checks PASS |
+| shellcheck 0.9.0 (static release binary in a scratch directory, not installed) on 11 shell files | 0 findings after review. It caught one real bug introduced during the edits (a directive inside a backslash-continued command) |
+| hadolint 2.12.0 (sha256-verified) on the Dockerfile | 0 findings after review (`pipefail` added; 4 intentional rules ignored, with reasons) |
+| `compose.yaml` and `devcontainer.json` parse with the intended values | PASS |
+
+**Not run (needs the Mac host):** `docker compose build`, starting
+`reef_ros2_dev`, `validate_devcontainer.sh` in the new image, `docker compose
+restart`, browser view on 8081, and the VS Code Dev Containers flow. [A] VS Code
+honours the top-level `name: reef_ros2` in `compose.yaml` (devcontainers CLI
+behaviour), so VS Code and terminal share one compose project. The README has
+a `docker ps` check for this.
