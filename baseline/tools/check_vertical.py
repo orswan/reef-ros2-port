@@ -11,7 +11,10 @@ per event (ACCEPTANCE.md section 4c):
 - continuous Z fields within 1e-9 x max_run|ref field| (NaN/inf class equal),
 - discrete fields exactly, and the gate value where the port evaluated a gate,
 - the port against the committed P02 golden (decimated rows),
-- negative: the port against the simulation revision on s09 must fail.
+- negative: the port against the simulation revision on s09 must fail,
+- wrapper equivalence: the same events as ROS 2 messages through the
+  SensorManager node's callbacks (--mode node) give the core's state, and the
+  published messages carry exactly that state (horizontal fields NaN).
 Horizontal coverage is reported as NOT IMPLEMENTED and never counted.
 
 Exit: 0 PASS, 1 FAIL, 2 BLOCKED (sources or port binary unavailable).
@@ -111,10 +114,42 @@ def fixtures_step(update_reason):
     return results
 
 
-def run_port(port, params, events, out):
+def run_port(port, params, events, out, mode='core'):
     out.parent.mkdir(parents=True, exist_ok=True)
-    subprocess.run([str(port), str(params), str(events), str(out)], check=True)
+    subprocess.run([str(port), str(params), str(events), str(out), '--mode', mode], check=True,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return read(out)
+
+
+def same(a, b):
+    x, y = float(a), float(b)
+    return (math.isnan(x) and math.isnan(y)) or x == y
+
+
+def wrapper_equivalence(core, node):
+    """Node-mode rows must equal core-mode rows; messages must carry the core state."""
+    problems, published = [], 0
+    if len(core) != len(node):
+        return [f'row count {len(node)} != {len(core)}'], 0
+    cols = [c for c in core[0] if c != 'type']
+    msg = [('msg_z', 'z'), ('msg_zdot', 'zdot'), ('dbg_bias', 'zbias'), ('dbg_u', 'u')] + \
+          [(f'dbg_p{k}', f'zP{k // 3}{k % 3}') for k in range(9)]
+    for c, n in zip(core, node):
+        bad = [k for k in cols if not same(c[k], n[k])]
+        if bad:
+            problems.append(f"idx {c['idx']} core/node differ in {bad[:4]}")
+        if n['msg_published'] == '1':
+            published += 1
+            if int(n['msg_stamp_ns']) != int(c['t_ns']):
+                problems.append(f"idx {c['idx']} stamp {n['msg_stamp_ns']} != {c['t_ns']}")
+            if n['msg_x_dot_isnan'] != '1':
+                problems.append(f"idx {c['idx']} horizontal field not NaN")
+            bad = [m for m, k in msg if not same(n[m], c[k])]
+            if bad:
+                problems.append(f"idx {c['idx']} message differs in {bad[:4]}")
+        if len(problems) > 5:
+            break
+    return problems, published
 
 
 def run_ref(variant, params, events, out):
@@ -176,7 +211,11 @@ def main():
         port = run_port(args.port, params, events, OUT / 'port' / f'{safe}.csv')
         ref = run_ref('master', params, events, OUT / 'ref' / f'{safe}.csv')
         res = compare(port, ref)
-        per_stream[label] = dict(short=short, **{k: v for k, v in res.items() if k not in ('discrete', 'gate')},
+        node = run_port(args.port, params, events, OUT / 'node' / f'{safe}.csv', mode='node')
+        wprob, wpub = wrapper_equivalence(port, node)
+        add('wrapper', label, not wprob and wpub == int(port[-1]['n_published']),
+            f'{wpub} published messages equal the core state' + (f'; {wprob[:2]}' if wprob else ''))
+        per_stream[label] = dict(wrapper_ok=not wprob, short=short, **{k: v for k, v in res.items() if k not in ('discrete', 'gate')},
                                  discrete=res['discrete'][:3], gate=res['gate'][:3])
         add('fidelity', label,
             res['ok'], f"{res['rows']} events, worst {res['worst']:.3g} x tol, "
