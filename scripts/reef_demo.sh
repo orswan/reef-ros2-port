@@ -27,7 +27,18 @@ Modes (simulation only):
                       without /x3/cmd_vel, driven by the bag's recorded /clock.
                       Attach consumers in that domain with use_sim_time:=true.
                       REEF_REPLAY_DOMAIN=<n> selects the domain.
-  estimator           NOT IMPLEMENTED (milestones P04-P05)
+  estimator [--gui]   X3 flown by the stock truth-fed controller with the ported
+                      REEF estimator (VERTICAL filter only) running beside it on
+                      idealized inputs (truth attitude, idealized range, IMU
+                      vibration assumption). REEF is not in the control loop.
+                      Records, scores against truth, plots (analysis_reef/).
+  estimator --offline RUN_DIR
+                      Deterministic replay of a recording: adapter + ported core,
+                      no ROS graph and no /clock (RUN_DIR/reef_offline/).
+  estimator --replay RUN_DIR [--rate R]
+                      Replay on a ROS graph in its own domain; the bag is the only
+                      /clock source (checked) (RUN_DIR/reef_replay_*/).
+                      Horizontal estimation: NOT IMPLEMENTED (milestone P05).
   closed-loop         NOT IMPLEMENTED (milestone P07)
   vision              NOT IMPLEMENTED (milestone P08)
 
@@ -43,7 +54,6 @@ shift || true
 if [[ -z "$mode" ]]; then usage; echo; echo "missing mode (see above)"; exit 2; fi
 case "$mode" in
   help|-h|--help) usage; exit 0 ;;
-  estimator) not_implemented estimator P04-P05 ;;
   closed-loop) not_implemented closed-loop P07 ;;
   vision) not_implemented vision P08 ;;
 
@@ -66,6 +76,52 @@ case "$mode" in
     case "$rc" in
       0|130|143) exit "$rc" ;;
       *) exit 1 ;;   # run_x3_scenario.sh codes 1/2/3/124: the demo ran and failed
+    esac
+    ;;
+
+  estimator)
+    rc=0
+    case "${1:-}" in
+      --offline)
+        run="${2:-}"
+        [[ -n "$run" && -f "$run/bag/metadata.yaml" && $# -eq 2 ]] || { echo "usage: estimator --offline RUN_DIR"; exit 2; }
+        tree="$(python3 "$S/colcon_tree.py")"
+        [[ -f "$tree/install/setup.bash" ]] || { echo "BLOCKED: build first (scripts/reef_check.sh estimator or run_x3_scenario.sh --estimator)"; exit 2; }
+        set +u
+        # shellcheck disable=SC1091
+        source "$tree/install/setup.bash"
+        set -u
+        echo "SIMULATION REPLAY (offline, deterministic) of $run: IDEALIZED INPUTS; vertical filter only."
+        ros2 run reef_sim x3_reef_offline "$run" || rc=1
+        (( rc == 0 )) && { ros2 run reef_sim analyze_reef_vertical "$run" --offline "$run/reef_offline" || rc=1; }
+        ;;
+      --replay)
+        shift
+        "$S/replay_reef_estimator.sh" "$@" || rc=$?
+        ;;
+      ""|--gui)
+        args=()
+        for a in "$@"; do
+          case "$a" in
+            --gui) args+=(--gui) ;;
+            *) echo "invalid option '$a' for 'estimator'"; usage; exit 2 ;;
+          esac
+        done
+        python3 "$S/setup_assets.py" --verify >/dev/null 2>&1 \
+          || { echo "BLOCKED: X3 assets missing or modified; run scripts/setup_assets.py"; exit 2; }
+        if [[ " ${args[*]:-} " == *" --gui "* ]] && ! "$S/check_display.sh" >/dev/null 2>&1; then
+          echo "BLOCKED: browser desktop not ready (scripts/check_display.sh)"; exit 2
+        fi
+        echo "SIMULATION: X3 flown by the stock truth-fed controller; REEF vertical estimator runs beside it"
+        echo "on IDEALIZED INPUTS (truth attitude, idealized range, IMU vibration assumption); not in the loop."
+        echo "Horizontal estimation: NOT IMPLEMENTED (milestone P05)."
+        "$S/run_x3_scenario.sh" --estimator "${args[@]}" || rc=$?
+        ;;
+      *) echo "invalid option '$1' for 'estimator'"; usage; exit 2 ;;
+    esac
+    case "$rc" in
+      0|2|130|143) exit "$rc" ;;
+      *) exit 1 ;;
     esac
     ;;
 

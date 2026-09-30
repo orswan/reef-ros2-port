@@ -34,9 +34,9 @@ import colcon_tree  # noqa: E402
 EXPECTED = {'reef_msgs', 'reef_estimator', 'reef_sim', 'rosflight_msgs'}
 # package -> (minimum test cases, required result-file kinds)
 MINIMUM = {
-    'reef_msgs': (20, {'gtest', 'xunit'}),
-    'reef_estimator': (20, {'gtest', 'xunit'}),
-    'reef_sim': (7, {'pytest'}),
+    'reef_msgs': (49, {'gtest', 'xunit'}),
+    'reef_estimator': (60, {'gtest', 'xunit'}),
+    'reef_sim': (12, {'pytest'}),
 }
 BASE = ['--base-paths', 'src']
 
