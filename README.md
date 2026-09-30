@@ -9,7 +9,9 @@ Estimator baseline (master `e4179f48`) and its reference harness:
 [docs/BASELINE_DECISION.md](docs/BASELINE_DECISION.md), [baseline/](baseline/README.md).
 Acceptance criteria: [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md). Interfaces:
 [docs/INTERFACES.md](docs/INTERFACES.md). Source audit and plan:
-[docs/MIGRATION.md](docs/MIGRATION.md). No REEF package has been ported yet.
+[docs/MIGRATION.md](docs/MIGRATION.md). Ported so far (P03): `reef_msgs` (messages
+and helpers) and the `reef_estimator` parameter contract; the estimator node
+follows in P04.
 
 ## Checks and demos
 
@@ -22,6 +24,7 @@ scripts/reef_check.sh env
 scripts/reef_check.sh clock --gui --regress
 scripts/reef_check.sh sim-data
 scripts/reef_check.sh baseline
+scripts/reef_check.sh interfaces
 scripts/reef_demo.sh help
 scripts/reef_demo.sh stock --gui
 scripts/reef_demo.sh replay recordings/<run>
@@ -49,7 +52,7 @@ Every command below is labelled with where it runs:
 
 | Path | Purpose |
 |---|---|
-| `src/` | ROS 2 packages (colcon source space): `reef_sim` (X3 scenario) |
+| `src/` | ROS 2 packages (colcon source space): `reef_sim` (X3 scenario), `reef_msgs` (messages, helpers), `reef_estimator` (P03: parameters and configuration), `third_party/rosflight_ros_pkgs/rosflight_msgs` (unmodified upstream, for `RCRaw`) |
 | `sim/` | Gazebo worlds and launch files for demos/tests |
 | `scripts/` | Launch and check scripts; they set up their own environment |
 | `docs/` | Migration notes; `docs/setup/` has the original container recipe |
@@ -374,12 +377,14 @@ Inspecting failures:
 | `log/latest_build/<pkg>/stdout_stderr.log` | full build output of one package |
 | `colcon build --base-paths src --packages-select <pkg> --event-handlers console_direct+` | rebuild one package with output streamed to the terminal |
 | `colcon test-result --verbose` (or `--all`) | failing test names and assertion messages; nonzero exit if any failed |
-| `log/latest_test/<pkg>/stdout_stderr.log`, `build/<pkg>/pytest.xml` | full test output and JUnit results |
+| `log/latest_test/<pkg>/stdout_stderr.log`, `build/<pkg>/pytest.xml`, `build/<pkg>/test_results/<pkg>/*.xml` | full test output and JUnit results (ament_python / ament_cmake) |
 
 A summary of "0 tests" is **not** a pass: it means nothing ran. `colcon test`
 without `--return-code-on-test-failure` exits 0 even when tests fail. As of
-P00, `reef_sim` has 7 unit tests (geometry); the ROS nodes are exercised by
-`reef_check.sh sim-data`.
+P03: `reef_sim` 7 unit tests (geometry; the nodes are exercised by
+`reef_check.sh sim-data`), `reef_msgs` 49 and `reef_estimator` 33 test cases.
+`scripts/reef_check.sh interfaces` runs the whole sequence and fails on any
+failure, skip, or missing results (`scripts/check_colcon.py`).
 
 ## Using the original container
 

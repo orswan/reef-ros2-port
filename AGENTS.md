@@ -78,9 +78,21 @@ with this file, this file wins.
   source or algorithm decision (the reason is stored in `golden/index.json`).
 - Legacy defects (D1–D10) stay in the reference. Corrections (C1–C5) need
   explicit approval and are separate, documented deviations with their own
-  tests.
+  tests. USER decision (2026-09-30): C1–C5 are deferred to the independent
+  review R1; until then the port must reproduce master exactly.
 - Port tolerances are fixed in ACCEPTANCE.md §4; do not loosen them to make a
   port pass.
+
+## Message, helper, and parameter rules (P03, docs/INTERFACES.md §3)
+
+- `src/third_party/` holds unmodified upstream copies (pin in `UPSTREAM.json`,
+  checked by `scripts/check_vendor.py`). Never edit them; re-vendor instead.
+- `src/reef_msgs/test/data/legacy_helper_vectors.txt` comes from the pinned
+  legacy code only (`baseline/helper_vectors.sh`); update it only with
+  `--update "<reason>"`.
+- Keep numerical code free of ROS (`reef_msgs_helpers`, `reef_estimator_core`);
+  ROS types belong in the node and adapter layers.
+- Invalid parameters are errors at startup, never silently replaced.
 
 ## Simulation data rules (`src/reef_sim`, docs/X3_SCENARIO.md)
 

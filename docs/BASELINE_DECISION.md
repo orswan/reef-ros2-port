@@ -208,18 +208,23 @@ Unchanged between them: `estimator.cpp`, `xy_estimator.*`, `sensor_manager.*`,
 | D7 | float32 truncations: range and the gating arguments (`float` parameters), the Z bias passed into XY | `:258-263, 300, 353`; `xy_estimator.cpp:52` | reproduced exactly by the independent check |
 | D8 | Only the acceleration is NaN-checked; a NaN attitude is not | `:150` | none |
 | D9 | A skipped NaN sample makes the next dt twice as long | `:156-164` | `s11` |
-| D10 | Wrong-length matrix parameters leave the matrix uninitialized (logged, not fatal) | `matrix_operation.h:60-63` | none (validation is a P03 task) |
+| D10 | Wrong-length matrix parameters leave the matrix uninitialized (logged, not fatal) | `matrix_operation.h:60-63` | not preserved: the port rejects invalid parameters at startup (P03, `test_helpers_legacy`, `test_ros_parameters`) |
 
 ## 7. Approved deviations and correction candidates
 
 **Approved for the port (middleware only, no effect on the numbers):** ROS 2
 parameters, subscriptions, publishers, and logging; `sensor_msgs`/`reef_msgs`
 ROS 2 types; transient-local QoS for the formerly latched outputs; an explicit
-RC switch parameter disabled in simulation; delivering inputs in stamp order
-from a single-threaded executor.
+RC switch parameter disabled in simulation; a single-threaded executor with
+one mutually exclusive callback group. P03 refined the last point
+([INTERFACES.md §3.8](INTERFACES.md#38-execution-model)): the live node
+processes messages in executor order without a reorder buffer, as ROS 1 did,
+and fidelity tests feed the ROS-free core in fixture order (stamp order).
+P03 also made invalid parameters fatal instead of zero-filled or
+uninitialized (D10); for valid parameters nothing changes.
 
-**Must be preserved for fidelity:** everything in section 4, including D1–D10
-and the float32 conversions (they affect gating decisions exactly).
+**Must be preserved for fidelity:** everything in section 4, including D1–D9
+(D10 concerns invalid input only; see above) and the float32 conversions (they affect gating decisions exactly).
 
 **Correction candidates (NOT approved).** USER decision, 2026-09-30: "We will
 defer all algorithm corrections (C1-C5) to the independent review (R1) to

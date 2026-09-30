@@ -1,6 +1,6 @@
 # REEF ROS 2: project status
 
-Updated 2026-09-30 (start of P03). `main` = `04c9b19`, which includes P01
+Updated 2026-09-30 (P03 complete on its branch). `main` = `04c9b19`, which includes P01
 (X3 data), P00 (status/wrappers) and P02 (estimator baseline), all merged by
 fast-forward at the user's request. P03 is on branch `p03-msgs-interfaces`. Section 3 reconciles
 [docs/handoff/](handoff/) (conversation-derived history) with the repository
@@ -18,7 +18,7 @@ project by the implementer, with logs or manifests in the repository tree.
 | `main` | `04c9b19` | starter, checker fixes, dev container, P01, P00, P02 | — |
 | `feature/x3-sim-dataset`, `p00-status-and-wrappers` | merged | P01, P00 | yes (fast-forward, 2026-09-30) |
 | `p02-baseline` | `04c9b19` | P02: reference harness, fixtures, independent check, baseline decision, `reef_check.sh baseline` | yes (fast-forward, 2026-09-30) |
-| `p03-msgs-interfaces` | this work | P03: `reef_msgs`, `rosflight_msgs` pin, interface contract | no |
+| `p03-msgs-interfaces` | this work | P03: `reef_msgs` (with upstream history), vendored `rosflight_msgs` v2.0.1, `reef_estimator` parameter contract, interface contract, `reef_check.sh interfaces` | no |
 
 No Git remote, pull request, or tag exists; the repository is local. Upstream
 references are pinned in [MIGRATION.md §2](MIGRATION.md): `reef_estimator`
@@ -72,8 +72,8 @@ wrapper boundary ([INTERFACES.md §1](INTERFACES.md#1-command-interface)).
 | P00 reconcile and wrappers | done, merged | |
 | P01 quadrotor, sensors, recordings | done, merged | human check H3 (plots) still recommended |
 | P02 baseline decision and reference tests | done, merged. USER: `reef_check.sh baseline` passed in the dev container. Corrections C1–C5 **deferred to R1** (USER, 2026-09-30); the initial port must match master exactly | `reef_check.sh baseline`; [BASELINE_DECISION.md](BASELINE_DECISION.md), [reviews/P02.md](reviews/P02.md) |
-| P03 messages, helpers, ROS 2 interfaces | **in progress** on `p03-msgs-interfaces` | criteria: [ACCEPTANCE.md §4b](ACCEPTANCE.md) |
-| P04–P05 estimator, replay/faults | not started | |
+| P03 messages, helpers, ROS 2 interfaces | **done on `p03-msgs-interfaces`** | `reef_check.sh interfaces`; [ACCEPTANCE.md §4b](ACCEPTANCE.md), [INTERFACES.md §3](INTERFACES.md), [reviews/P03.md](reviews/P03.md) |
+| P04–P05 estimator, replay/faults | not started (**next**: P04) | |
 | P06–P07 controller, REEF closed loop | not started | |
 | P08 RGB-D | not started | |
 | P09 simulation release | not started | |
@@ -118,6 +118,20 @@ P00 was run inside `reef_ros2_dev` by the implementer.
 | `reef_check.sh baseline --gui`, `env --floor`, `clock --floor` | 2 | invalid option |
 | shellcheck (scripts, baseline), hadolint (Dockerfile) | 0 | no findings |
 
+## 5c. Checks run for P03 (original container, 2026-09-30)
+
+| Command | Exit | Result |
+|---|---|---|
+| `scripts/reef_check.sh interfaces` | 0 | PASS 5/5: vendored pin, tampered-copy negative (exit 1 as required), legacy helper vectors reproduce, colcon build + test (89 test cases: `reef_msgs` 49, `reef_estimator` 33, `reef_sim` 7; 0 failures/errors/skips), P02 golden unchanged |
+| `reef_check.sh interfaces --gui` | 2 | invalid option |
+| mutation checks (reverted) | 1 | Eigen `toRotationMatrix().transpose()` and column-major import in `reef_msgs`; off-by-one channel range and a changed config value in `reef_estimator`; an injected failing test made `check_colcon.py` exit 1 |
+| `rosdep check --from-paths src --ignore-src` | 0 | all system dependencies satisfied |
+| shellcheck -x (scripts, baseline), hadolint (Dockerfile) | 0 | no findings |
+
+Not rerun: `reef_check.sh baseline`, because no file it uses changed since
+`04c9b19` (only the new `baseline/helper_vectors.*` were added). Nothing in
+P03 was run inside `reef_ros2_dev` by the implementer.
+
 ## 6. Open items and known limits
 
 1. `sim/launch/clock_demo.launch.py` still uses Gazebo's combined GUI mode,
@@ -130,8 +144,16 @@ P00 was run inside `reef_ros2_dev` by the implementer.
 5. (resolved) `p02-baseline` was merged on 2026-09-30.
 6. `check_clock_demo.sh` and `scripts/sim_lib.sh` duplicate session logic
    (reviewed code left unchanged).
-7. The only unit tests are for reef_sim geometry; the ROS nodes are covered
-   by the scenario checks, not unit tests.
+7. The reef_sim ROS nodes are covered by the scenario checks, not unit tests.
+8. **License of `reef_msgs`** (USER): upstream declares `TODO` and has no
+   license file; the bundle that pins it is MIT. Confirm before publishing.
+9. The P04 history import of `reef_estimator` would carry a third-party PDF
+   (`docs/Partial_Update.pdf`); decide how to handle it in P04.
+10. The Dockerfile now declares the P03 build dependencies. They are expected
+    in the current image, so a rebuild is not needed unless
+    `reef_check.sh interfaces` reports a missing package there.
+11. Hardware note for P10+: a MAVLink unused-channel value (`UINT16_MAX`)
+    reads as "RC switch on" (INTERFACES.md §3.5).
 
 ## 7. Human checks still needed
 
@@ -140,18 +162,21 @@ P00 was run inside `reef_ros2_dev` by the implementer.
   environment line showing the dev image hash.
 - **H2 (dev container):** `scripts/reef_check.sh clock --gui --regress`. Expect
   PASS with 28/28, and your browser desktop still working afterwards.
-- **H4 (P02):** read BASELINE_DECISION.md §1–3 and §6–7, and run
-  `scripts/reef_check.sh baseline` in the dev container (expect PASS, about
-  9 min). Decide on corrections C1–C5, or defer them to R1.
+- **H4 (P02):** done. USER: `reef_check.sh baseline` passed in the dev
+  container; C1–C5 deferred to R1.
+- **H5 (P03, dev container):** `scripts/reef_check.sh interfaces` (expect
+  PASS 5/5, about 5 min on a first build). Read INTERFACES.md §3 (the node
+  contract) and decide whether to merge `p03-msgs-interfaces`.
 - **H3:** open the three plots and `manifest.yaml` of a recent
   `recordings/x3_*` run, and check them against
-  [X3_SCENARIO.md](X3_SCENARIO.md). Then decide whether to merge
-  `feature/x3-sim-dataset` (and this branch) into `main`.
+  [X3_SCENARIO.md](X3_SCENARIO.md). (`feature/x3-sim-dataset` is already
+  merged.)
 
 ## 8. Next milestone
 
-**P03**: port `reef_msgs` and the helpers the selected baseline needs, and
-define the estimator's ROS 2 interface contract (INTERFACES.md §3). Before
-P04 scores any port output, decide on corrections C1–C5
-(BASELINE_DECISION.md §7). A review (R1) is planned at the end of P05; the
-P02 packet (reviews/P02.md) can be reviewed on its own earlier if wanted.
+**P04**: port the estimator core (`Estimator`, `XYEstimator`, `ZEstimator`,
+`XYZEstimator`, sensor manager logic) into `src/reef_estimator` as a ROS-free
+library with the execution model of INTERFACES.md §3.8, score it against the
+P02 golden with the fixed port tolerance (ACCEPTANCE.md §4, bit-exact intent,
+no corrections: C1–C5 are deferred to R1), then add the thin node and the
+simulation adapter defined in INTERFACES.md §3.

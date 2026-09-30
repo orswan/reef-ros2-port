@@ -447,6 +447,13 @@ How it maps onto REEF [A]:
 
 ## 8. Next task: choose and port the REEF estimator baseline
 
+> **Superseded (kept for history).** P02 selected master `e4179f48` as the only
+> port target; the simulation revision stays runnable in the reference harness
+> only ([BASELINE_DECISION.md](BASELINE_DECISION.md)). P03 ported 7 of the 11
+> messages and only the helpers the estimator uses (§11). The current plan is
+> [STATUS.md §8](STATUS.md#8-next-milestone).
+
+
 Inputs now available: recordings from `scripts/run_x3_scenario.sh` (truth,
 IMU, idealized range, phase labels, manifest) and the conversions in
 [X3_SCENARIO.md §5](X3_SCENARIO.md#5-conversions-reef-integration-will-need).
@@ -578,3 +585,52 @@ Follow-up: switch `sim/launch/clock_demo.launch.py` to the `-s` + `-g` split
 as well. Migrating `check_clock_demo.sh` onto `scripts/sim_lib.sh` would
 remove duplicated session logic; it was left unchanged here because it is
 reviewed code with its own regression suite.
+
+## 11. P03: messages, helpers, and interface contract (branch `p03-msgs-interfaces`)
+
+**reef_msgs.** `git subtree add` imported the full upstream history
+(12 commits, Prashant Ganesh, 2019) at `7fb63ff` into `src/reef_msgs`; the
+next commit converted it to ament_cmake/rosidl. Ported: the 7 messages the
+estimator uses (`Header` → `std_msgs/Header`; `S_upper_bound`,
+`S_lower_bound`, `P` lower-cased because rosidl requires
+`^[a-z][a-z0-9_]*$` field names) and `quaternion_to_rotation`,
+`roll_pitch_yaw_from_rotation321`, `skew`, the row-major matrix conversions,
+and the matrix-parameter rules. The unused messages and functions remain in
+the history. `matrixToVector` (no return statement) and `dynamics.h`'s unused
+`<tf/tf.h>` include are dropped. The helpers are bit-identical to the
+original on 2930 recorded cases (`baseline/helper_vectors.sh`).
+[V] The upstream package declares `<license>TODO</license>` and has no
+license file; the bundle that pins it is MIT. **Open (USER):** confirm the
+license with the owners before any publication.
+
+**rosflight_msgs.** [V] No Jazzy binary is available from the configured
+apt sources. `RCRaw` is identical in ROS 1 rosflight `44e5f37e` and upstream
+ROS 2 `rosflight_ros_pkgs` `v2.0.1` (`cefdb425`, 2026-03-17): `Header header`,
+`uint16[8] values`, PWM µs, index = channel − 1 (ROS 1 fills it from MAVLink
+`RC_CHANNELS_RAW`, ROS 2 from `RC_CHANNELS`). The package (BSD-3) is vendored
+unmodified in `src/third_party/rosflight_ros_pkgs/rosflight_msgs`; its Git tree
+ID equals upstream's (`0f469ec1`). `v2.0.1`'s `package.xml` still says 2.0.0.
+`main` (`5ef20134`) differs only in `rosflight_msgs/CMakeLists.txt` (it drops the
+C/C++ standard and default build-type settings), not in any message. Nothing
+else from the repository (firmware, `rosflight_io`, simulator) is built.
+
+**reef_estimator.** A new package holds the parameter contract
+(`parameters.hpp`, ROS-free; `ros_parameters.hpp`, rclcpp) and
+`config/estimator_master.yaml` / `simulation.yaml`. Whether P04 imports the
+upstream estimator history the same way is open: that history (67 commits,
+2.3 MiB) includes a third-party paper PDF (`docs/Partial_Update.pdf`), which
+should not be copied without checking its license.
+
+**Findings.**
+- [V] ROS 2 cannot load the original YAML files: no `ros__parameters`
+  structure, and after wrapping, "Sequence should be of same type" because
+  lists mix integers and floats (`[0.01, 0, …]`). The gates are integers
+  (`20`), which roscpp accepted for doubles; the port accepts them too.
+- [V] The shipped hardware file sets `enable_measurements: false` (RGB-D
+  ignored), `enable_mocap_switch: true` (channel 6), and `debug_mode: true`.
+- [V] The original `xy_est_params.yaml` comment lists the state as
+  `roll_bias, pitch_bias`; the code order is `pitch_bias, roll_bias`
+  (corrected in the converted file's comment only).
+- [V] With the switch enabled, a MAVLink "unused channel" value
+  (`UINT16_MAX`) reads as "mocap on". Relevant for P10+ hardware work.
+

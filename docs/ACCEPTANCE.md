@@ -86,25 +86,26 @@ shipped = each revision's own), for master `e4179f48` and sim `95987b51`.
 
 ## 4b. `interfaces` (P03): messages, helpers, parameter validation
 
-Fixed on 2026-09-30 before any P03 code was written. Scope: the ROS 2
+Fixed on 2026-09-30 before any P03 code was written (measured column added
+afterwards; limits unchanged). Check: `scripts/reef_check.sh interfaces`. Scope: the ROS 2
 `reef_msgs` package (the messages and helpers that master `e4179f48` uses) and
 the pinned upstream `rosflight_msgs`. There is no estimator node yet, so
 nothing here scores estimates. Wall-clock time is not a criterion.
 
-| Criterion | Limit |
-|---|---|
-| Real packages selected | `colcon list --base-paths src` contains `reef_msgs`, `rosflight_msgs`, `reef_sim`, and no other `rosflight_*` package (no firmware, `rosflight_io`, or simulator) |
-| Build | `colcon build --base-paths src` exits 0 for all selected packages |
-| Tests executed | `colcon test` and `colcon test-result` exit 0; 0 failures, 0 errors, 0 skipped; `reef_msgs` reports ≥ 1 gtest and ≥ 1 pytest result file, with ≥ 20 test cases in total. An empty test run is a FAIL |
-| Upstream RCRaw pin | the vendored `rosflight_msgs` directory's Git tree ID equals upstream `rosflight_ros_pkgs` `v2.0.1` (`cefdb425`) `:rosflight_msgs`, i.e. byte-identical files and modes. A tampered copy must be detected (negative check) |
-| RCRaw fields | generated type has exactly `header: std_msgs/Header` and `values: uint16[8]` |
-| Message fields | each ported message has the legacy field names, types, and fixed array sizes, except the three renames forced by ROS 2 naming rules (`DeltaToVel.S_upper_bound` → `s_upper_bound`, `S_lower_bound` → `s_lower_bound`, `ZDebugEstimate.P` → `p`) and `Header` → `std_msgs/Header` (no `seq`) |
-| Helper fidelity | the ported helpers give **bit-identical** results (NaN where legacy gives NaN) to the pinned legacy `reef_msgs` sources compiled with the P02 shim, on ≥ 1000 recorded cases each for `quaternion_to_rotation` and `roll_pitch_yaw_from_rotation321`, and on every legal full/diagonal matrix-import and `matrixToArray` case. The recorded vectors come from the legacy code only and are reproducible from the pinned sources |
-| ROS independence | the numerical helper library builds and its tests pass with neither rclcpp nor any message package on the include or link path |
-| Parameter acceptance | legal forms load with the legacy meaning: n·m values fill row-major; n values on a square n×n matrix fill the diagonal; integer arrays convert exactly |
-| Parameter rejection (negative) | each of these is rejected with an error naming the parameter and the accepted sizes, and never yields a matrix: missing, empty, wrong length, wrong type (string, bool, string array), non-finite value, `mocap_override_channel` outside 0–7, negative covariance diagonal, asymmetric full covariance |
-| Legacy YAML | the verbatim master `params/*.yaml` files are characterized under ROS 2's parser (accepted or rejected, with the reason recorded), and the converted ROS 2 file loads to matrices identical to the legacy interpretation of the verbatim file |
-| Baseline untouched | `baseline/golden/` and `baseline/fixtures.lock.json` unchanged |
+| Criterion | Limit | Measured (P03, 2026-09-30) |
+|---|---|---|
+| Real packages selected | `colcon list --base-paths src` contains `reef_msgs`, `rosflight_msgs`, `reef_sim`, and no other `rosflight_*` package (no firmware, `rosflight_io`, or simulator) | `reef_estimator`, `reef_msgs`, `reef_sim`, `rosflight_msgs`; no other rosflight package |
+| Build | `colcon build --base-paths src` exits 0 for all selected packages | exit 0; no compiler warnings in `reef_msgs` or `reef_estimator` (`-Wall -Wextra -Wpedantic`) |
+| Tests executed | `colcon test` and `colcon test-result` exit 0; 0 failures, 0 errors, 0 skipped; `reef_msgs` reports ≥ 1 gtest and ≥ 1 pytest result file, with ≥ 20 test cases in total. An empty test run is a FAIL | `reef_msgs` 49 cases (4 gtest + 2 pytest files), `reef_estimator` 33 (3 gtest + 1 pytest), `reef_sim` 7; 0 failures, errors, skips. An injected failing assertion made `check_colcon.py` exit 1 |
+| Upstream RCRaw pin | the vendored `rosflight_msgs` directory's Git tree ID equals upstream `rosflight_ros_pkgs` `v2.0.1` (`cefdb425`) `:rosflight_msgs`, i.e. byte-identical files and modes. A tampered copy must be detected (negative check) | tree `0f469ec1` = upstream `cefdb425:rosflight_msgs` (also the committed tree); one-byte change detected (exit 1, in the wrapper); execute-bit change detected (manual run) |
+| RCRaw fields | generated type has exactly `header: std_msgs/Header` and `values: uint16[8]` | yes (`test_rc_raw` static checks, `test_legacy_params`) |
+| Message fields | each ported message has the legacy field names, types, and fixed array sizes, except the three renames forced by ROS 2 naming rules (`DeltaToVel.S_upper_bound` → `s_upper_bound`, `S_lower_bound` → `s_lower_bound`, `ZDebugEstimate.P` → `p`) and `Header` → `std_msgs/Header` (no `seq`) | 7 messages match; exactly the 3 renames (`test_messages`) |
+| Helper fidelity | the ported helpers give **bit-identical** results (NaN where legacy gives NaN) to the pinned legacy `reef_msgs` sources compiled with the P02 shim, on ≥ 1000 recorded cases each for `quaternion_to_rotation` and `roll_pitch_yaw_from_rotation321`, and on every legal full/diagonal matrix-import and `matrixToArray` case. The recorded vectors come from the legacy code only and are reproducible from the pinned sources | bit-identical: 1520 `quaternion_to_rotation` (Eigen and `geometry_msgs` overloads), 1312 `roll_pitch_yaw_from_rotation321` (signed zeros, NaN, inf), 54 legal matrix imports, 20 `matrixToArray`. Mutations detected: Eigen's algebraically equal `toRotationMatrix().transpose()` (a signed-zero difference) and column-major import |
+| ROS independence | the numerical helper library builds and its tests pass with neither rclcpp nor any message package on the include or link path | clean-environment compile and run with only `include/` and Eigen; negative control (`rclcpp.hpp` unreachable) confirmed |
+| Parameter acceptance | legal forms load with the legacy meaning: n·m values fill row-major; n values on a square n×n matrix fill the diagonal; integer arrays convert exactly | yes (`test_matrix_operation`, `test_parameters`, `test_ros_parameters`) |
+| Parameter rejection (negative) | each of these is rejected with an error naming the parameter and the accepted sizes, and never yields a matrix: missing, empty, wrong length, wrong type (string, bool, string array), non-finite value, `mocap_override_channel` outside 0–7, negative covariance diagonal, asymmetric full covariance | all listed cases rejected with the parameter name and sizes; matrix unchanged (legacy's 12 zero-filled and 12 uninitialized cases now rejected) |
+| Legacy YAML | the verbatim master `params/*.yaml` files are characterized under ROS 2's parser (accepted or rejected, with the reason recorded), and the converted ROS 2 file loads to matrices identical to the legacy interpretation of the verbatim file | verbatim files rejected (no `ros__parameters`); wrapped matrix files rejected for mixed int/float lists; wrapped `basic_params` loads with integer gates. Converted file: same keys and values, loads as double arrays |
+| Baseline untouched | `baseline/golden/` and `baseline/fixtures.lock.json` unchanged | `git diff 04c9b19 -- baseline/golden baseline/fixtures.lock.json` empty |
 
 ## 5. Future targets: criteria to be fixed before implementation
 
