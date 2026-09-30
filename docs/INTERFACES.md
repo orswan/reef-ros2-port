@@ -14,13 +14,14 @@ scripts/reef_check.sh help
 scripts/reef_check.sh env
 scripts/reef_check.sh clock [--gui] [--regress]
 scripts/reef_check.sh sim-data [--gui] [--regress]
+scripts/reef_check.sh baseline [--floor]
 scripts/reef_demo.sh help
 scripts/reef_demo.sh stock [--gui]
 scripts/reef_demo.sh replay recordings/<run> [--rate R]
 ```
 
 Not yet implemented (each says NOT IMPLEMENTED and exits 2):
-`reef_check.sh baseline|estimator|faults|control|vision|release` and
+`reef_check.sh estimator|faults|control|vision|release` and
 `reef_demo.sh estimator|closed-loop|vision`. All demo modes are **simulation
 only**; no mode can reach hardware.
 
@@ -41,6 +42,7 @@ The wrapped scripts keep their existing codes, which are mapped here:
 | `run_x3_scenario.sh` | 0 pass, 1 analysis failed, 2 setup or owned simulation failed, 3 scenario runner failed, 124 timeout | 0 → PASS; others → FAIL (assets and display are prechecked; a missing one → BLOCKED 2) |
 | `clock_check.py` (negative case) | 1 = no clock, as required | PASS only if it exits exactly 1 |
 | `regress_*.sh` | 0 all cases matched, 1 otherwise | 0 → PASS, 1 → FAIL |
+| `baseline/tools/check_baseline.py` | 0 all assertions passed, 1 a check failed, 2 sources unavailable | 0 → PASS, 1 → FAIL (sources are prechecked → BLOCKED 2) |
 
 ### Report
 

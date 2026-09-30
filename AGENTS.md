@@ -68,6 +68,20 @@ with this file, this file wins.
 - No physical flight recordings exist. Validate against Gazebo ground truth.
 - Do not commit build outputs, reference clones, or recordings (see `.gitignore`).
 
+## Estimator reference rules (`baseline/`, docs/BASELINE_DECISION.md)
+
+- The reference harness compiles the pinned original sources unmodified.
+  Never patch them. Any new adaptation goes in `baseline/README.md` and the
+  decision document.
+- Never use port output as its own reference. Golden files change only via
+  `check_baseline.py --update-golden "<reason>"`, and only with an explained
+  source or algorithm decision (the reason is stored in `golden/index.json`).
+- Legacy defects (D1–D10) stay in the reference. Corrections (C1–C5) need
+  explicit approval and are separate, documented deviations with their own
+  tests.
+- Port tolerances are fixed in ACCEPTANCE.md §4; do not loosen them to make a
+  port pass.
+
 ## Simulation data rules (`src/reef_sim`, docs/X3_SCENARIO.md)
 
 - Keep **truth** (`/x3/truth/...`) separate from **measurements** (`/x3/imu`,

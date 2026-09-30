@@ -100,6 +100,15 @@ fetched at the pinned commits.
 
 ### Estimator differences: master `e4179f48` vs sim pin `95987b51` [V]
 
+> **P02 correction of attribution:** the table below lists the differences
+> correctly, but the direction "moving from master to the simulation pin"
+> suggests the simulation branch made them. It did not. The two share the
+> ancestor `ff29edc` (2019-08-02). The simulation commit `95987b5` **only
+> disabled the four χ² gates**. Every other difference was introduced later on
+> master, by `e4179f4` "changes for dt error" (2021-03-08). See
+> [BASELINE_DECISION.md §2 and §5](BASELINE_DECISION.md). Baseline selected
+> in P02: **master `e4179f48`**.
+
 The sim bundle's estimator is the `simulation` branch. From
 `git diff e4179f48 95987b51` (9 files, +24/−80), plus reading the
 surrounding code in both commits, the differences go well beyond measurement

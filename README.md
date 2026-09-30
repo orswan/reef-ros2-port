@@ -5,6 +5,8 @@ stack (UF REEF AVL, ROS 1 / catkin) to **ROS 2 Jazzy** with **Gazebo Harmonic**
 simulation.
 
 **Current status, evidence, and next milestone: [docs/STATUS.md](docs/STATUS.md).**
+Estimator baseline (master `e4179f48`) and its reference harness:
+[docs/BASELINE_DECISION.md](docs/BASELINE_DECISION.md), [baseline/](baseline/README.md).
 Acceptance criteria: [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md). Interfaces:
 [docs/INTERFACES.md](docs/INTERFACES.md). Source audit and plan:
 [docs/MIGRATION.md](docs/MIGRATION.md). No REEF package has been ported yet.
@@ -19,6 +21,7 @@ scripts/reef_check.sh help
 scripts/reef_check.sh env
 scripts/reef_check.sh clock --gui --regress
 scripts/reef_check.sh sim-data
+scripts/reef_check.sh baseline
 scripts/reef_demo.sh help
 scripts/reef_demo.sh stock --gui
 scripts/reef_demo.sh replay recordings/<run>
@@ -26,7 +29,7 @@ scripts/reef_demo.sh replay recordings/<run>
 
 Exit status: 0 PASS, 1 FAIL (the check ran and failed), 2 BLOCKED / NOT
 IMPLEMENTED / invalid invocation, 130/143 interrupted. Targets for later
-milestones (`baseline`, `estimator`, `faults`, `control`, `vision`, `release`;
+milestones (`estimator`, `faults`, `control`, `vision`, `release`;
 demos `estimator`, `closed-loop`, `vision`) print NOT IMPLEMENTED and exit 2.
 Each check prints the source revision, configuration hashes, assertions, wall
 and sim time, and artifact paths. See

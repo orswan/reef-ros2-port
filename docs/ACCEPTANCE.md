@@ -65,35 +65,30 @@ Scenario: [X3_SCENARIO.md](X3_SCENARIO.md), `src/reef_sim/config/x3_scenario.yam
 What this proves: the data pipeline behaves as documented. It says nothing
 about REEF, which is not in the loop.
 
-## 4. Future targets: criteria to be fixed before implementation
+## 4. `baseline` (implemented, P02): migration fidelity
+
+Fixed on 2026-09-30, before any port output exists. Details and
+justification are in [BASELINE_DECISION.md §8](BASELINE_DECISION.md#8-numerical-tolerances-fixed-before-any-port-exists).
+Scenarios: 15 deterministic fixtures (`baseline/tools/fixtures.py`, locked by
+`baseline/fixtures.lock.json`) × 2 parameter sets (common = master's values;
+shipped = each revision's own), for master `e4179f48` and sim `95987b51`.
+
+| Criterion | Limit | Measured (P02) |
+|---|---|---|
+| Reference builds from pinned, checksummed, unmodified sources | all SHA-256 match `baseline/provenance.json` | yes |
+| Independent step-wise re-derivation vs reference | \|pred − ref\| ≤ 1e−14 + 1e−12·\|ref\| at every step; every gate decision identical | 0 (bit-identical), 266,796 steps, 41,200 gates |
+| Covariance | finite (except the characterized sim `-inf` case); ‖P − Pᵀ‖ ≤ 1e−12‖P‖; min eig ≥ −1e−12‖P‖ | 5.9e−16; 0 |
+| Analytic cases (both variants) | hover \|z + h\| ≤ 1 mm and \|ż\| ≤ 1 mm/s; constant-accel climb \|ż_NED + v_up\| ≤ 0.02 m/s; tilt z → −h/cos θ ± 1 mm; mocap velocity ± 0.01 m/s; NaN IMU skipped with next dt = 4 ms; takeoff within 0.1 s of range 0.25 m; RC switch | all pass |
+| Characterization (legacy behaviour asserted, not "correct") | bias sign conventions, gravity 9.81 vs measured, 250 Hz velocity ratio (master 1, sim ≈ 2), stale re-fusion (D1), outlier/−inf handling, airborne start (D4) | all as documented |
+| Golden stability | decimated outputs within the port tolerance, discrete fields exact | 0; 60/60 bit-identical |
+| Negative check | a mutated build (bias coupling −dt → +dt) must fail both the independent check and the golden comparison | detected |
+| **Port vs reference (applies from P03/P04)** | continuous: \|port − ref\| ≤ **1e−9 · max_run\|ref_field\|**; discrete (gates, flags, takeoff/landing, reset counter): **exact**; NaN/inf classification identical | floor 2.05e−12 (FMA, `-O3 -march=native`), 0 (`-O0`); master vs sim ≥ 1.08e9× the tolerance |
+
+## 5. Future targets: criteria to be fixed before implementation
 
 These are drafts. Items marked **PROPOSED** must be confirmed (or replaced,
 with reasons) at the start of their milestone and before any port output is
 scored.
-
-### `baseline` (P02): migration fidelity
-
-- **Inputs:** deterministic, timestamped event fixtures (IMU, sonar or range,
-  mocap/velocity) fed in identical order to a reference built from the pinned
-  original mathematics (with only mechanical adaptations, which are recorded)
-  and to the port. Also analytic cases with independently derived expectations:
-  stationary, constant known acceleration, bias step, range geometry. Outputs
-  from the port are never used as their own reference.
-- **State and covariance equality (PROPOSED):** after every propagate and
-  update, per element |port − ref| ≤ 1e-9 · max(1, |ref|). Justification: both
-  compute the same 3×3/6×6 double-precision equations, and reordering (Eigen
-  expression evaluation, fused multiply-add) causes differences of order
-  n·ε·κ ≈ 1e-13 to 1e-11 over about 10⁴ steps. A real algorithmic change (a
-  different dt, Q, or F term) changes values at ≥ 1e-6. P02 must **measure**
-  the reference-vs-reordered-reference floor. If it exceeds 1e-10, the
-  tolerance must be re-justified.
-- **Discrete decisions:** gating accept/reject, partial versus full update,
-  and measurement-flag clearing must match exactly on every event.
-- **Covariance sanity (PROPOSED):** ‖P − Pᵀ‖ ≤ 1e-12 · ‖P‖; smallest
-  eigenvalue ≥ −1e-12 · ‖P‖; all values finite.
-- **Both candidate baselines** (master `e4179f48`, simulation `95987b51`)
-  are characterized. The selection and its reasons are recorded in
-  `docs/BASELINE_DECISION.md`.
 
 ### `estimator` (P04–P05): estimator quality
 
