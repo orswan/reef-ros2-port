@@ -108,7 +108,14 @@ namespace reef_estimator
         bool subscribesRc() const { return enableMocapSwitch; }
 
         // Latest estimate (valid after sensorUpdate(imu) returned true).
+        // The published*() states are those at the original's publishEstimates()
+        // call, before checkTakeoffState(), which can reset the filters on a
+        // takeoff/landing step (BASELINE_DECISION.md 4.5 step 8; R1 finding 1).
+        // Messages must be built from these. plusState()/xyPlusState() are the
+        // filter states after the whole IMU step.
         Stamp stamp() const { return stamp_; }
+        const ZState& publishedZ() const { return zPublished; }
+        const XYState& publishedXY() const { return xyPublished; }
         ZState plusState() const;
         const ZState& minusState() const { return zMinus; }   // only with debug_mode
         XYState xyPlusState() const;
@@ -137,7 +144,7 @@ namespace reef_estimator
         // Observation accounting (D1): accepted XY observations and XY
         // filter updates. With the original partial-update path an accepted
         // observation is fused again at every IMU step until the next one
-        // arrives (D1); correction C1 (opt-in, NOT APPROVED) fuses it once.
+        // arrives (D1); correction C1 (approved at R1, default) fuses it once.
         long xyObservationsAccepted() const { return numXYAccepted; }
         long xyFusions() const { return numXYFusions; }
         bool correctionC1() const { return correction_c1; }
@@ -202,6 +209,8 @@ namespace reef_estimator
         Stamp stamp_;
         ZState zMinus;
         XYState xyMinus;
+        ZState zPublished;
+        XYState xyPublished;
         long numZGates = 0;
         long numXYGates = 0;
         long numEstimates = 0;

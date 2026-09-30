@@ -153,7 +153,9 @@ void fly(XYZEstimator & e, int steps, double vx_obs, bool observe = true)
 
 TEST(Observations, D1ReFusesTheLastObservationAtEveryStep)
 {
-  XYZEstimator e(params());
+  EstimatorParameters p = params();
+  p.correction_c1 = false;   // legacy master (C1 is the default since R1)
+  XYZEstimator e(p);
   fly(e, 200, 0.0);
   const long accepted = e.xyObservationsAccepted();
   EXPECT_GT(accepted, 0);
@@ -163,7 +165,7 @@ TEST(Observations, D1ReFusesTheLastObservationAtEveryStep)
 TEST(Observations, C1FusesEachObservationAtMostOnce)
 {
   EstimatorParameters p = params();
-  p.correction_c1 = true;
+  EXPECT_TRUE(p.correction_c1);   // default since R1
   XYZEstimator e(p);
   fly(e, 200, 0.0);
   EXPECT_TRUE(e.correctionC1());

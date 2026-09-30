@@ -152,7 +152,7 @@ TEST_F(Node, DiagnosticsReportTimingAndObservationAccounting)
   std::map<std::string, std::string> v;
   for (const auto & kvp : got.back().status.at(0).values) {v[kvp.key] = kvp.value;}
   EXPECT_EQ(v["callbacks_total"], "249");   // published inside the 250th IMU callback
-  EXPECT_EQ(v["correction_c1"], "false");
+  EXPECT_EQ(v["correction_c1"], "true");   // approved at R1, default
   EXPECT_TRUE(v.count("window_callback_us_p99"));
   EXPECT_TRUE(v.count("xy_fusions"));
 }

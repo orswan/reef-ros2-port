@@ -51,8 +51,10 @@ def fixture(label):
 
 
 def parity(c, case, port_bin, label, out):
+    """Port with C1 off (master semantics) vs the original; returns the port rows."""
     params, events = fixture(label)
     safe = label.replace('/', '__')
+    params = cp.master_params(params, out / 'params' / f'{safe}.params')
     port = cp.run_port(port_bin, params, events, out / 'port' / f'{safe}.csv')
     ref = cp.run_ref('master', params, events, out / 'ref' / f'{safe}.csv')
     node = cp.run_port(port_bin, params, events, out / 'node' / f'{safe}.csv', mode='node')
@@ -63,16 +65,16 @@ def parity(c, case, port_bin, label, out):
     return port
 
 
-def with_c1(label, out):
+def default_config(label, out):
+    """The port's default configuration (correction C1 on, approved at R1)."""
     params, events = fixture(label)
-    return cp.run_port(PORT, cp.with_c1(params, out / 'c1' / (label.replace('/', '__') + '.params')), events,
-                       out / 'c1' / (label.replace('/', '__') + '.csv'))
+    return cp.run_port(PORT, params, events, out / 'default' / (label.replace('/', '__') + '.csv'))
 
 
 def f1(c, out):
     lo, hi = ns(H + 1.5), ns(H + 4.5)
     for c1, rows in ((False, parity(c, 'F1', PORT, 'horizontal/h05_mocap_dropout', out)),
-                     (True, with_c1('horizontal/h05_mocap_dropout', out))):
+                     (True, default_config('horizontal/h05_mocap_dropout', out))):
         imu = [r for r in rows if r['type'] == 'imu' and lo <= int(r['t_ns']) < hi]
         p00 = [float(r['xyP00']) for r in imu]
         fus = int(imu[-1]['xy_fusions']) - int(imu[0]['xy_fusions'])
@@ -81,13 +83,13 @@ def f1(c, out):
         before = rows[int(after['idx']) - 1]
         accepted_after = int(after['xy_accepted']) == int(before['xy_accepted']) + 1
         if not c1:
-            c.add('F1', 'baseline: stale observation re-fused during the dropout (D1), variance does not grow',
+            c.add('F1', 'legacy master (C1 off, characterization): stale observation re-fused (D1), variance does not grow',
                   fus > 0 and acc == 0 and p00[-1] <= p00[0] and accepted_after,
                   f'{fus} re-fusions, 0 new observations, P_vx {p00[0]:.3g} -> {p00[-1]:.3g}; '
                   f'first observation after the dropout accepted: {accepted_after}')
         else:
             mono = all(b >= a for a, b in zip(p00, p00[1:]))
-            c.add('F1', 'C1: no fusion during the dropout, variance grows monotonically',
+            c.add('F1', 'default (C1 on): no fusion during the dropout, variance grows monotonically',
                   fus == 0 and mono and p00[-1] > p00[0] and accepted_after,
                   f'{fus} fusions, P_vx {p00[0]:.3g} -> {p00[-1]:.3g}, monotonic {mono}; '
                   f'first observation after the dropout accepted: {accepted_after}')
@@ -224,14 +226,15 @@ def f11_f12(c, run, out):
     t1 = t0 + 5.0
     cfg = Path(subprocess.run(['ros2', 'pkg', 'prefix', 'reef_estimator'], capture_output=True, text=True).stdout.strip()) \
         / 'share' / 'reef_estimator' / 'config'
-    c1_yaml = out / 'c1.yaml'
-    c1_yaml.write_text("/**:\n  ros__parameters:\n    correction_c1_clear_xy_flag: true\n")
     params_x3 = __import__('yaml').safe_load((run / 'x3_scenario.yaml').read_text())
     _, data = read_bag(run / 'bag')
     a = arrays(data)
+    c0_yaml = out / 'c1_off.yaml'
+    c0_yaml.write_text("/**:\n  ros__parameters:\n    correction_c1_clear_xy_flag: false\n")
     for c1 in (False, True):
-        d = out / ('f11_c1' if c1 else 'f11')
-        p = [str(cfg / 'estimator_master.yaml'), str(cfg / 'simulation.yaml')] + ([str(c1_yaml)] if c1 else [])
+        d = out / ('f11_default' if c1 else 'f11_legacy')
+        # default: the configuration the node runs (C1 on); legacy: C1 off
+        p = [str(cfg / 'estimator_master.yaml'), str(cfg / 'simulation.yaml')] + ([] if c1 else [str(c0_yaml)])
         rc = offline(run, d, ['--drop', 'velocity', f'{t0}', f'{t1}'], p)
         est, _, _, extra = ar.offline_estimates(d)
         t = est[:, 0]
@@ -248,15 +251,18 @@ def f11_f12(c, run, out):
         nfus = fus_during[-1] - fus_during[0] if fus_during else 0
         if c1:
             grows = pvx[-1] > pvx[0] and all(b >= a_ for a_, b in zip(pvx, pvx[1:]))
-            c.add('F11', 'C1: velocity dropout 5 s: variance grows, finite, error <= 0.10 m/s RMS from 1 s after',
+            c.add('F11', 'default (C1 on): velocity dropout 5 s: variance grows, finite, error <= 0.10 m/s RMS from 1 s after',
                   rc == 0 and fin and grows and nfus == 0 and rms_post <= 0.10,
                   f'P_vx {pvx[0]:.2e} -> {pvx[-1]:.2e}, {nfus} fusions during, error RMS during {rms_during:.3f}, '
                   f'after {rms_post:.4f} m/s')
         else:
-            c.add('F11', 'baseline: velocity dropout 5 s: finite, error <= 0.10 m/s RMS from 1 s after (D1 re-fusion reported)',
-                  rc == 0 and fin and rms_post <= 0.10,
-                  f'{nfus} re-fusions of the last observation during the dropout (D1); P_vx {pvx[0]:.2e} -> {pvx[-1]:.2e}; '
-                  f'error RMS during {rms_during:.3f}, after {rms_post:.4f} m/s')
+            # Legacy behaviour, kept as a characterization since C1 is the default
+            # (R1): the lock-out after a dropout is reproduced and reported.
+            locked = rc == 0 and fin and nfus > 0 and rms_post > 0.10
+            c.add('F11', 'legacy master (C1 off, characterization): D1 re-fusion during the dropout and lock-out after it',
+                  locked,
+                  f'{nfus} re-fusions during the dropout; P_vx {pvx[0]:.2e} -> {pvx[-1]:.2e}; '
+                  f'error RMS during {rms_during:.3f}, after {rms_post:.4f} m/s (> 0.10: locked out, as master)')
     d = out / 'f12'
     offline(run, d, ['--drop', 'imu', '0', '1e9'])
     r = subprocess.run(['ros2', 'run', 'reef_sim', 'analyze_reef_vertical', str(run), '--offline', str(d)],

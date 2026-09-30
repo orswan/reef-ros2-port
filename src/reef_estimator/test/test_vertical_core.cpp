@@ -175,6 +175,27 @@ TEST(VerticalCore, TakeoffNeedsAccelVarianceAndAltitude)
   EXPECT_EQ(e.zFilter().R(0, 0), 0.00016);
 }
 
+TEST(VerticalCore, EstimateIsTakenBeforeTheTakeoffCheck)
+{
+  // R1 finding 1: master published in publishEstimates() before
+  // checkTakeoffState(), which switches P to z_P0_flying at takeoff.
+  XYZEstimator e(master());
+  int k = feed(e, 0, 20);
+  bool seen = false;
+  for (int n = 0; n < 60 && !seen; n++, k++) {
+    if (n % 10 == 0) {e.sensorUpdate(range(T0 + k * DT, 0.3f));}
+    const bool before = e.isFlying();
+    e.sensorUpdate(level(T0 + k * DT, -9.81 + ((k % 2) ? 1.5 : -1.5)));
+    if (!before && e.isFlying()) {
+      seen = true;
+      EXPECT_EQ(e.zFilter().P(0, 0), 0.25);                // after the step: z_P0_flying
+      EXPECT_NE(e.publishedZ().P(0, 0), 0.25);             // published: the value before the check
+      EXPECT_EQ(e.publishedZ().z, e.zFilter().xHat(0, 0)); // takeoff does not change the state
+    }
+  }
+  EXPECT_TRUE(seen);
+}
+
 TEST(VerticalCore, RcSwitchSelectsMocapZOnlyWhenEnabled)
 {
   EstimatorParameters p = master();

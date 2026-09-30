@@ -18,10 +18,18 @@ port's event driver. Compared per event (ACCEPTANCE.md 4c/4d):
   carries exactly that state; fusion counts through the node = core;
 - negatives: the port against the simulation revision on s09, and the port
   with correction C1 against the reference on s07, must exceed the tolerance;
+- published messages: what the node publishes (xyz_estimate and the
+  xyz_debug_estimate sent with it) against what the original published,
+  recorded by the harness (A6), on every stream (R1 finding 1: the original
+  published before checkTakeoffState);
+- correction C1 (approved at R1, the port's default): the port's default
+  output against the independent step-wise model with C1 (independent.py),
+  every stream;
 - observation accounting: D1 re-fusion counted with C1 off; with C1 on no
   observation is fused twice: an IMU step fuses exactly when a new observation
   arrived since the previous step (s06, s07, h01, h03-h05, h08); observations
   superseded before the next IMU step (last one wins, as in master) are counted.
+All parity runs pin correction_c1_clear_xy_flag to false (master semantics).
 --stream compares one recorded stream (for example a simulation run
 converted by x3_reef_offline) the same way, without golden or negatives.
 
@@ -32,12 +40,14 @@ import csv
 import gzip
 import json
 import math
+import os
 import subprocess
 import sys
 import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import independent as ind  # noqa: E402
 import runs  # noqa: E402
 
 ROOT, BUILD = runs.ROOT, runs.BUILD
@@ -120,15 +130,11 @@ def compare(port, ref, cont=CONT, disc=DISC, gate=True):
 
 
 def wrapper_equivalence(core, node):
-    """Node-mode rows must equal core-mode rows; messages must carry the core state."""
+    """Node-mode rows must equal core-mode rows (state, counters, fusions)."""
     problems, published = [], 0
     if len(core) != len(node):
         return [f'row count {len(node)} != {len(core)}'], 0
     cols = [c for c in core[0] if c != 'type']
-    msg = [('msg_z', 'z'), ('msg_zdot', 'zdot'), ('msg_x_dot', 'vx'), ('msg_y_dot', 'vy'),
-           ('dbg_bias', 'zbias'), ('dbg_u', 'u'), ('dbg_pitch_bias', 'pitch_bias'),
-           ('dbg_roll_bias', 'roll_bias'), ('dbg_xa_bias', 'ax_bias'), ('dbg_ya_bias', 'ay_bias')] + \
-          [(f'dbg_p{k}', f'zP{k // 3}{k % 3}') for k in range(9)]
     for c, n in zip(core, node):
         bad = [k for k in cols if not same(c[k], n[k])]
         if bad:
@@ -137,15 +143,21 @@ def wrapper_equivalence(core, node):
             published += 1
             if int(n['msg_stamp_ns']) != int(c['t_ns']):
                 problems.append(f"idx {c['idx']} stamp {n['msg_stamp_ns']} != {c['t_ns']}")
-            bad = [m for m, k in msg if not same(n[m], c[k])]
-            sigma = num(c['vx']) + 3 * math.sqrt(num(c['xyP00']))   # legacy: field + 3 sqrt(P00)
-            if not same(n['dbg_xy_sigma_plus0'], sigma):
-                bad.append('dbg_xy_sigma_plus0')
-            if bad:
-                problems.append(f"idx {c['idx']} message differs in {bad[:4]}")
         if len(problems) > 5:
             break
     return problems, published
+
+
+def compare_published(port, ref):
+    """Published messages: same events, every field bit-identical (NaN = NaN)."""
+    if [r['idx'] for r in port] != [r['idx'] for r in ref]:
+        return [f'published at different events ({len(port)} vs {len(ref)} messages)'], 0
+    bad = []
+    for p, r in zip(port, ref):
+        diff = [k for k in r if not same(p[k], r[k])]
+        if diff:
+            bad.append(f"idx {r['idx']}: {diff[:4]}")
+    return bad, len(ref)
 
 
 def fixtures_step(update_reason):
@@ -165,16 +177,18 @@ def fixtures_step(update_reason):
     return results
 
 
-def run_port(port, params, events, out, mode='core'):
+def run_port(port, params, events, out, mode='core', published=None):
     out.parent.mkdir(parents=True, exist_ok=True)
+    env = dict(os.environ, PORT_PUBLISHED=str(published)) if published else None
     subprocess.run([str(port), str(params), str(events), str(out), '--mode', mode], check=True,
-                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env)
     return read(out)
 
 
-def run_ref(variant, params, events, out):
+def run_ref(variant, params, events, out, published=None):
     out.parent.mkdir(parents=True, exist_ok=True)
-    subprocess.run([str(BUILD / variant / 'reef_ref'), str(params), str(events), str(out)], check=True)
+    env = dict(os.environ, REF_PUBLISHED=str(published)) if published else None
+    subprocess.run([str(BUILD / variant / 'reef_ref'), str(params), str(events), str(out)], check=True, env=env)
     return read(out)
 
 
@@ -197,10 +211,16 @@ def golden_rows(s):
         return list(csv.DictReader(fh))
 
 
-def with_c1(params, out):
+def with_c1(params, out, value=True):
+    """Copy of a harness parameter file with correction C1 set explicitly."""
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(Path(params).read_text() + 'correction_c1_clear_xy_flag bool true\n')
+    out.write_text(Path(params).read_text() + f"correction_c1_clear_xy_flag bool {'true' if value else 'false'}\n")
     return out
+
+
+def master_params(params, out):
+    """Parity runs: C1 off, so the port has master's semantics."""
+    return with_c1(params, out, value=False)
 
 
 def main():
@@ -236,11 +256,25 @@ def main():
     per_stream = {}
     for label, short, params, events in todo:
         safe = label.replace('/', '__')
-        port = run_port(args.port, params, events, out_dir / 'port' / f'{safe}.csv')
-        ref = run_ref('master', params, events, out_dir / 'ref' / f'{safe}.csv')
+        mparams = master_params(params, out_dir / 'params' / f'{safe}.params')
+        port = run_port(args.port, mparams, events, out_dir / 'port' / f'{safe}.csv',
+                        published=out_dir / 'port' / f'{safe}.published.csv')
+        ref = run_ref('master', params, events, out_dir / 'ref' / f'{safe}.csv',
+                      published=out_dir / 'ref' / f'{safe}.published.csv')
         res = compare(port, ref)
-        node = run_port(args.port, params, events, out_dir / 'node' / f'{safe}.csv', mode='node')
+        node = run_port(args.port, mparams, events, out_dir / 'node' / f'{safe}.csv', mode='node',
+                        published=out_dir / 'node' / f'{safe}.published.csv')
         wprob, wpub = wrapper_equivalence(port, node)
+        ref_pub = read(out_dir / 'ref' / f'{safe}.published.csv')
+        pprob, npub = compare_published(read(out_dir / 'node' / f'{safe}.published.csv'), ref_pub)
+        cprob, _ = compare_published(read(out_dir / 'port' / f'{safe}.published.csv'),
+                                     read(out_dir / 'node' / f'{safe}.published.csv'))
+        # C1 (default): the port's default output against the independent model with C1.
+        dflt = run_port(args.port, params, events, out_dir / 'default' / f'{safe}.csv')
+        pp, ee = runs.parse_params(params), runs.parse_events(events)
+        # the model is first checked against the original (C1 off), then used for C1
+        st0 = ind.verify_run('master', pp, ee, runs.read_rows(out_dir / 'ref' / f'{safe}.csv'), c1=False)
+        st = ind.verify_run('master', pp, ee, runs.read_rows(out_dir / 'default' / f'{safe}.csv'), c1=True)
         last = port[-1]
         per_stream[label] = dict(short=short, wrapper_ok=not wprob,
                                  xy_accepted=int(last['xy_accepted']), xy_fusions=int(last['xy_fusions']),
@@ -250,9 +284,18 @@ def main():
             f"{res['rows']} events, worst {res['worst']:.3g} x tol, {res['bitwise']}/{res['values']} values bit-identical"
             + (f"; discrete {res['discrete'][:2]}" if res['discrete'] else '')
             + (f"; gate {res['gate'][:2]}" if res['gate'] else ''))
-        add('wrapper', label, not wprob and wpub == int(last['n_published']),
-            f'{wpub} published messages equal the core state; fusions node = core'
-            + (f'; {wprob[:2]}' if wprob else ''))
+        add('wrapper', label, not wprob and wpub == int(last['n_published']) and not cprob,
+            f'node state = core state at every event; {wpub} messages, built in core and node mode identical'
+            + (f'; {wprob[:2]}' if wprob else '') + (f'; {cprob[:2]}' if cprob else ''))
+        add('published', label, not pprob and npub == int(last['n_published']),
+            f'{npub} published messages (estimate + debug) bit-identical to what the original published'
+            + (f'; {pprob[:2]}' if pprob else ''))
+        add('c1', label, st.worst <= 1 and not st.mismatches and st0.worst <= 1 and not st0.mismatches,
+            f'independent model vs original (C1 off): worst {st0.worst:.3g} x tol; '
+            f'default (C1) vs model with C1: {st.steps} steps, {st.gate_checks} gates, '
+            f'worst {st.worst:.3g} x tol' + (f'; {st.worst_where}' if st.worst > 1 else '')
+            + (f'; {st.mismatches[:1]}' if st.mismatches else '')
+            + (f'; model vs original: {st0.worst_where} {st0.mismatches[:1]}' if st0.worst > 1 or st0.mismatches else ''))
         if label.startswith('common/'):
             s = label.split('/')[1]
             gold = golden_rows(s)
@@ -274,7 +317,7 @@ def main():
         # Observation accounting and correction C1 (opt-in, NOT APPROVED).
         s07 = runs.fixtures_dir() / 's07_single_mocap.events'
         c1_params = with_c1(runs.param_file('common', 's07_single_mocap', 'master'), out_dir / 'c1' / 's07.params')
-        c1 = run_port(args.port, c1_params, s07, out_dir / 'c1' / 's07.csv')
+        c1 = run_port(args.port, c1_params, s07, out_dir / 'c1' / 's07.csv')   # C1 on (the default)
         ref07 = read(out_dir / 'ref' / 'common__s07_single_mocap.csv')
         neg = compare(c1, ref07, gate=False)
         add('negative', 'port with C1 differs from the reference on s07', not neg['ok'],

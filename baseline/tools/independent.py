@@ -150,8 +150,13 @@ class Stats:
             self.worst, self.worst_where = m, f'{where}: {name}'
 
 
-def verify_run(variant, params, events, rows):
-    """Return Stats for one reference run (events and rows aligned 1:1)."""
+def verify_run(variant, params, events, rows, c1=False):
+    """Return Stats for one run (events and rows aligned 1:1).
+
+    c1=True: master with correction C1 (approved at R1): the XY flag is also
+    cleared after a partial update. Used to check the port's default
+    configuration, which no unmodified original can produce.
+    """
     mdl = Model(variant, params)
     st = Stats()
     acc_n, acc_sum, g = 0, np.zeros(3), None
@@ -159,6 +164,9 @@ def verify_run(variant, params, events, rows):
     switch_on = False
     ch = int(params.get('mocap_override_channel', 4))
     enable = {k: params.get(k, True) for k in ('enable_mocap_xy', 'enable_mocap_z', 'enable_rgbd', 'enable_sonar')}
+    # enable_xy / enable_z gate the landing reset and the update of each filter
+    # (xyz_estimator.cpp e4179f48 lines 196-230); propagation always runs.
+    enable_xy, enable_z = params.get('enable_xy', True), params.get('enable_z', True)
     # Event 0 has no predecessor row; it can only be an IMU sample (initialization).
     if events and events[0][0] == 'imu' and rows[0]['delivered']:
         acc_n, acc_sum, last_t = 1, np.array(events[0][2:5]), events[0][1]
@@ -192,19 +200,21 @@ def verify_run(variant, params, events, rows):
                 Pz = F @ Pz @ F.T + G @ Q @ G.T
                 n_prop = int(p['n_prop']) + 1
                 if not p['takeoff'] and n_prop >= 10:         # landing reset
-                    xxy, Pxy = mdl.xy_x0.copy(), mdl.xy_P0.copy()
-                    Pz = mdl.z_P0.copy(); xz[1] = mdl.z_x0[1]
+                    if enable_xy:
+                        xxy, Pxy = mdl.xy_x0.copy(), mdl.xy_P0.copy()
+                    if enable_z:
+                        Pz = mdl.z_P0.copy(); xz[1] = mdl.z_x0[1]
                     n_prop = 0
-                if xy_flag:
+                if xy_flag and enable_xy:
                     if mdl.partial:
                         xxy, Pxy = partial_update(xxy, Pxy, mdl.H_xy, xy_meas, xyR, mdl.xy_beta)
                         # master clears the flag only after a FULL update (xyz_estimator.cpp
                         # e4179f48 lines 214-222); the simulation branch always clears it.
-                        xy_flag = variant == 'master'
+                        xy_flag = variant == 'master' and not c1
                     else:
                         xxy, Pxy = full_update(xxy, Pxy, mdl.H_xy, xy_meas, xyR)
                         xy_flag = False
-                if z_flag:
+                if z_flag and enable_z:
                     zRm = np.array([[zR]])
                     if mdl.partial:
                         xz, Pz = partial_update(xz, Pz, mdl.H_z, np.array([z_meas]), zRm, mdl.z_beta)

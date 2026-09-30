@@ -139,8 +139,8 @@ EstimatorParameters loadParameters(NodeParametersInterface & params)
     describe("nominal IMU period [s]: initial dt and xy_Q scaling (xy_Q * dt^2)"));
 
   l.typed("correction_c1_clear_xy_flag", p.correction_c1,
-    describe("correction candidate C1, NOT APPROVED (R1): fuse each XY observation once after a "
-    "partial update; false reproduces master (legacy re-fusion D1)"));
+    describe("correction C1, approved at R1 (default true): fuse each XY observation once after a "
+    "partial update; false reproduces master exactly (legacy re-fusion D1)"));
 
   l.typed("mocap_twist_topic", p.mocap_twist_topic, describe("mocap velocity topic"));
   l.typed("mocap_pose_topic", p.mocap_pose_topic, describe("mocap pose topic"));

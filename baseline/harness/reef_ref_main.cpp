@@ -19,6 +19,7 @@
 //
 // Access to private members relies on compiling every translation unit with
 // -Dprivate=public -Dprotected=public (see baseline/README.md, adaptation A1).
+#include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <iomanip>
@@ -93,6 +94,45 @@ void header(std::ostream& o) {
 
 }  // namespace
 
+// A6 (P05/R1): what the original published. With REF_PUBLISHED=<path> the
+// harness writes one row per event that published xyz_estimate, with the
+// fields of that message and of the xyz_debug_estimate published with it.
+// The column order is shared with the port's driver (tools/event_replay.cpp).
+namespace {
+reef_msgs::XYZEstimate g_estimate;
+reef_msgs::XYZDebugEstimate g_debug;
+long g_debug_count = 0;
+}
+namespace reef_msgs {
+void record_published(const std::string&, const XYZEstimate& m) { g_estimate = m; }
+void record_published(const std::string&, const XYZDebugEstimate& m) { g_debug = m; ++g_debug_count; }
+}
+namespace {
+template <class A> void put_array(std::ostream& o, const A& a) { for (double v : a) put(o, v); }
+void put_z(std::ostream& o, const reef_msgs::ZDebugEstimate& z) {
+  put(o, z.z); put(o, z.z_dot); put(o, z.bias); put(o, z.u);
+  put_array(o, z.P); put_array(o, z.sigma_plus); put_array(o, z.sigma_minus);
+}
+void put_xy(std::ostream& o, const reef_msgs::XYDebugEstimate& x) {
+  put(o, x.x_dot); put(o, x.y_dot); put(o, x.pitch_bias); put(o, x.roll_bias); put(o, x.xa_bias); put(o, x.ya_bias);
+  put_array(o, x.sigma_plus); put_array(o, x.sigma_minus);
+}
+void published_header(std::ostream& o) {
+  o << "idx,t_ns,pub_z,pub_zdot,pub_x_dot,pub_y_dot,debug";
+  for (const char* g : {"dz", "mz"}) {
+    for (const char* n : {"z", "zdot", "bias", "u"}) o << ',' << g << '_' << n;
+    for (int k = 0; k < 9; ++k) o << ',' << g << "_p" << k;
+    for (int k = 0; k < 3; ++k) o << ',' << g << "_sp" << k;
+    for (int k = 0; k < 3; ++k) o << ',' << g << "_sm" << k;
+    const char* xy = g[0] == 'd' ? "dxy" : "mxy";
+    for (const char* n : {"x_dot", "y_dot", "pitch_bias", "roll_bias", "xa_bias", "ya_bias"}) o << ',' << xy << '_' << n;
+    for (int k = 0; k < 6; ++k) o << ',' << xy << "_sp" << k;
+    for (int k = 0; k < 6; ++k) o << ',' << xy << "_sm" << k;
+  }
+  o << '\n';
+}
+}  // namespace
+
 int main(int argc, char** argv) {
   if (argc < 4) { std::fprintf(stderr, "usage: %s PARAMS EVENTS OUT.csv [--log]\n", argv[0]); return 2; }
   ros::log_enabled() = (argc > 4 && std::strcmp(argv[4], "--log") == 0);
@@ -123,6 +163,12 @@ int main(int argc, char** argv) {
   std::ifstream in(argv[2]);
   if (!in) { std::fprintf(stderr, "cannot open %s\n", argv[2]); return 2; }
   std::ofstream out(argv[3]);
+  std::ofstream published;
+  if (const char* path = std::getenv("REF_PUBLISHED")) {
+    published.open(path);
+    published << std::setprecision(std::numeric_limits<double>::max_digits10);
+    published_header(published);
+  }
   out << std::setprecision(std::numeric_limits<double>::max_digits10);
   header(out);
 
@@ -135,6 +181,7 @@ int main(int argc, char** argv) {
     ss >> type;
     t_ns = static_cast<long long>(std::stoll([&] { std::string t; ss >> t; return t; }()));
     const bool z_before = e.newSonarMeasurement, xy_before = e.newRgbdMeasurement;
+    const long pub_before = ros::publish_counts()["xyz_estimate"], dbg_before = g_debug_count;
 
     if (!subscribed(type)) {
       // not delivered: the row records the unchanged state
@@ -182,6 +229,17 @@ int main(int argc, char** argv) {
       return 2;
     }
 
+    if (published.is_open() && ros::publish_counts()["xyz_estimate"] != pub_before) {
+      const bool dbg = g_debug_count != dbg_before;
+      published << idx << ',' << t_ns;
+      put(published, g_estimate.z_plus.z); put(published, g_estimate.z_plus.z_dot);
+      put(published, g_estimate.xy_plus.x_dot); put(published, g_estimate.xy_plus.y_dot);
+      published << ',' << dbg;
+      const reef_msgs::XYZDebugEstimate d = dbg ? g_debug : reef_msgs::XYZDebugEstimate{};
+      put_z(published, d.z_plus); put_xy(published, d.xy_plus);
+      put_z(published, d.z_minus); put_xy(published, d.xy_minus);
+      published << '\n';
+    }
     out << idx++ << ',' << type << ',' << t_ns << ',' << z_before << ',' << xy_before;
     put_matrix(out, e.zEst.xHat); put_matrix(out, e.zEst.P);
     put_matrix(out, e.xyEst.xHat); put_matrix(out, e.xyEst.P);

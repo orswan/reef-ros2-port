@@ -54,10 +54,11 @@ struct EstimatorParameters
   // Nominal IMU period [s]: initial dt and the xy_Q scaling (xy_Q * dt^2).
   double estimator_dt = 0.002;
 
-  // Correction candidate C1 (BASELINE_DECISION.md section 7): clear the XY
-  // measurement flag after a partial update, so each observation is fused
-  // once. NOT APPROVED (deferred to R1); false reproduces master (D1).
-  bool correction_c1 = false;
+  // Correction C1 (BASELINE_DECISION.md section 7), APPROVED at R1 (USER,
+  // 2026-09-30): clear the XY measurement flag after a partial update, so
+  // each observation is fused once. false reproduces master exactly (legacy
+  // defect D1: stale re-fusion, lock-out after a velocity dropout).
+  bool correction_c1 = true;
 
   std::string mocap_twist_topic = "mocap_velocity/body_level_frame";
   std::string mocap_pose_topic = "mocap_ned";

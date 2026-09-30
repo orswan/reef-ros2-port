@@ -4,7 +4,8 @@
 // float32 in ROS 2 as in ROS 1, and stamps are converted with ROS 1's
 // ros::Time::toSec() formula inside the core (INTERFACES.md section 3.4).
 //
-// Outputs are filled as XYZEstimator::saveMinusState/publishEstimates did.
+// Outputs are filled as XYZEstimator::saveMinusState/publishEstimates did,
+// from the states at the publish point (XYZEstimator::publishedZ/XY).
 #ifndef REEF_ESTIMATOR__ROS_CONVERSIONS_HPP_
 #define REEF_ESTIMATOR__ROS_CONVERSIONS_HPP_
 
@@ -154,10 +155,11 @@ inline reef_msgs::msg::XYZEstimate toEstimateMsg(const XYZEstimator & e)
 {
   reef_msgs::msg::XYZEstimate m;
   m.header.stamp = toTime(e.stamp());
-  const XYState xy = e.xyPlusState();
+  // values at the original's publishEstimates() call (before the takeoff check)
+  const XYState & xy = e.publishedXY();
   m.xy_plus.x_dot = xy.x(0);
   m.xy_plus.y_dot = xy.x(1);
-  const ZState z = e.plusState();
+  const ZState & z = e.publishedZ();
   m.z_plus.z = z.z;
   m.z_plus.z_dot = z.z_dot;
   return m;
@@ -168,9 +170,9 @@ inline reef_msgs::msg::XYZDebugEstimate toDebugMsg(const XYZEstimator & e)
   reef_msgs::msg::XYZDebugEstimate m;
   m.header.stamp = toTime(e.stamp());
   fillXY(m.xy_minus, e.xyMinusState());
-  fillXY(m.xy_plus, e.xyPlusState());
+  fillXY(m.xy_plus, e.publishedXY());
   fillZ(m.z_minus, e.minusState());
-  fillZ(m.z_plus, e.plusState());
+  fillZ(m.z_plus, e.publishedZ());
   return m;
 }
 

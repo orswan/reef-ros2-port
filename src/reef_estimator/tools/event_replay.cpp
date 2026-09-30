@@ -4,14 +4,19 @@
 // node: each event becomes a ROS 2 message (builtin_interfaces stamp,
 //   float32 range, ...) delivered to an in-process SensorManager node through
 //   its callbacks; the node gets the parameters as ROS parameters. The CSV
-//   then also has the fields of the published messages (msg_*), so the check
-//   can require them to equal the core state (wrapper equivalence).
+//   then also has the fields of the published messages (msg_*).
+// PORT_PUBLISHED=<path>: one row per event that published an estimate, with
+//   the message fields in the column order of the reference harness
+//   (REF_PUBLISHED, baseline/harness/reef_ref_main.cpp). In core mode the
+//   messages are built with ros_conversions.hpp from the core; in node mode
+//   they are the messages the node published.
 // Reads the P02 harness formats and feeds each event to the ported vertical
 // estimator in file order, with the ROS 1 node's subscription rules, then
 // writes the vertical state after every event using the harness column names.
 // rgbd events are applied only if enable_measurements is true (SensorManager
 // read that parameter at every RGB-D message).
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -20,6 +25,7 @@
 #include <rclcpp/rclcpp.hpp>
 
 #include "event_file.hpp"
+#include "reef_estimator/ros_conversions.hpp"
 #include "reef_estimator/sensor_manager.h"
 
 namespace
@@ -59,6 +65,51 @@ std::vector<rclcpp::Parameter> as_ros_parameters(const reef_estimator::Estimator
     {"z_R0", flat(p.z_R0)}, {"z_R_flying", flat(p.z_R_flying)}, {"z_beta", flat(p.z_beta)}};
 }
 
+template<class A> void put_array(std::ostream & o, const A & a) {for (double v : a) {put(o, v);}}
+
+void put_z(std::ostream & o, const reef_msgs::msg::ZDebugEstimate & z)
+{
+  put(o, z.z); put(o, z.z_dot); put(o, z.bias); put(o, z.u);
+  put_array(o, z.p); put_array(o, z.sigma_plus); put_array(o, z.sigma_minus);
+}
+
+void put_xy(std::ostream & o, const reef_msgs::msg::XYDebugEstimate & x)
+{
+  put(o, x.x_dot); put(o, x.y_dot); put(o, x.pitch_bias); put(o, x.roll_bias); put(o, x.xa_bias); put(o, x.ya_bias);
+  put_array(o, x.sigma_plus); put_array(o, x.sigma_minus);
+}
+
+void published_header(std::ostream & o)
+{
+  o << "idx,t_ns,pub_z,pub_zdot,pub_x_dot,pub_y_dot,debug";
+  for (const char * g : {"dz", "mz"}) {
+    for (const char * n : {"z", "zdot", "bias", "u"}) {o << ',' << g << '_' << n;}
+    for (int k = 0; k < 9; ++k) {o << ',' << g << "_p" << k;}
+    for (int k = 0; k < 3; ++k) {o << ',' << g << "_sp" << k;}
+    for (int k = 0; k < 3; ++k) {o << ',' << g << "_sm" << k;}
+    const char * xy = g[0] == 'd' ? "dxy" : "mxy";
+    for (const char * n : {"x_dot", "y_dot", "pitch_bias", "roll_bias", "xa_bias", "ya_bias"}) {
+      o << ',' << xy << '_' << n;
+    }
+    for (int k = 0; k < 6; ++k) {o << ',' << xy << "_sp" << k;}
+    for (int k = 0; k < 6; ++k) {o << ',' << xy << "_sm" << k;}
+  }
+  o << '\n';
+}
+
+void published_row(std::ostream & o, long idx, long long t_ns, const reef_msgs::msg::XYZEstimate & m,
+  const reef_msgs::msg::XYZDebugEstimate * d)
+{
+  o << idx << ',' << t_ns;
+  put(o, m.z_plus.z); put(o, m.z_plus.z_dot); put(o, m.xy_plus.x_dot); put(o, m.xy_plus.y_dot);
+  o << ',' << (d != nullptr);
+  // the harness writes a zero-initialized debug message when none was published
+  const reef_msgs::msg::XYZDebugEstimate zero;
+  const reef_msgs::msg::XYZDebugEstimate & dd = d ? *d : zero;
+  put_z(o, dd.z_plus); put_xy(o, dd.xy_plus); put_z(o, dd.z_minus); put_xy(o, dd.xy_minus);
+  o << '\n';
+}
+
 builtin_interfaces::msg::Time ros_time(long long t_ns)
 {
   const reef_estimator::Stamp s = reef_estimator::tools::stamp_of(t_ns);
@@ -96,6 +147,12 @@ int main(int argc, char ** argv)
     const auto events = tools::load_events(argv[2]);
 
     std::ofstream out(argv[3]);
+    std::ofstream published;
+    if (const char * path = std::getenv("PORT_PUBLISHED")) {
+      published.open(path);
+      published << std::setprecision(std::numeric_limits<double>::max_digits10);
+      published_header(published);
+    }
     out << std::setprecision(std::numeric_limits<double>::max_digits10);
     out << "idx,type,t_ns,z_flag_before,xy_flag_before,z,zdot,zbias";
     for (int i = 0; i < 3; ++i) {for (int j = 0; j < 3; ++j) {out << ",zP" << i << j;}}
@@ -118,6 +175,7 @@ int main(int argc, char ** argv)
       const long gates_before = e0.zGateCount();
       const long xy_gates_before = e0.xyGateCount();
       const long published_before = node ? node->publishedCount() : 0;
+      const long estimates_before = e0.estimateCount();
       bool delivered = true;
       if (ev.type == "imu" || ev.type == "imu_nan") {
         if (node) {
@@ -190,6 +248,16 @@ int main(int argc, char ** argv)
         throw std::runtime_error("unknown event type '" + ev.type + "'");
       }
       const XYZEstimator & e = est();
+      if (published.is_open() && e.estimateCount() != estimates_before) {
+        if (node) {
+          published_row(published, idx, ev.t_ns, *node->lastEstimate(),
+            params.debug_mode ? &*node->lastDebugEstimate() : nullptr);
+        } else {
+          const auto m = toEstimateMsg(e);
+          const auto d = toDebugMsg(e);
+          published_row(published, idx, ev.t_ns, m, params.debug_mode ? &d : nullptr);
+        }
+      }
       const ZEstimator & z = e.zFilter();
       const XYEstimator & xy = e.xyFilter();
       out << idx++ << ',' << ev.type << ',' << ev.t_ns << ',' << z_before << ',' << xy_before;

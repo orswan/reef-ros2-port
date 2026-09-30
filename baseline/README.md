@@ -47,6 +47,14 @@ resolves.
   subscribed to its topic (`enable_*` parameters, `enable_mocap_switch`).
 - **A5:** events are delivered in fixture order, one at a time. ROS 1 queue
   depths and threading are not modelled.
+- **A6 (R1, 2026-09-30):** the stand-in `Publisher::publish` also passes
+  `reef_msgs::XYZEstimate` and `XYZDebugEstimate` messages to
+  `record_published` (argument-dependent lookup; other types are ignored).
+  With `REF_PUBLISHED=<path>`, the harness writes the fields of what the
+  original published, one row per estimate. The main output CSV and the
+  golden files are unchanged. Needed because the original publishes before
+  its takeoff check, so the published values can differ from the state
+  recorded after the callback (R1 finding 1).
 
 Numbers in event files are parsed with `strtod`, so `inf`, `-inf`, and `nan`
 are delivered as such. (`istream >> float` would silently give 0; the

@@ -48,9 +48,9 @@ namespace reef_estimator
         for (const auto& w : warnings(params_))
             RCLCPP_WARN(get_logger(), "%s", w.c_str());
         makeEstimator();
-        if (params_.correction_c1)
-            RCLCPP_WARN(get_logger(), "Correction C1 ENABLED (NOT APPROVED): each XY observation is fused once; "
-                        "results differ from master");
+        if (!params_.correction_c1)
+            RCLCPP_WARN(get_logger(), "Correction C1 DISABLED: legacy master behaviour (D1: an XY observation is "
+                        "re-fused at every IMU step after a partial update)");
 
         //Mocap override RC channel parameter
         if (params_.enable_mocap_switch) {

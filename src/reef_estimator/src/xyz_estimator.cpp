@@ -7,7 +7,7 @@
 // expressions are kept from the original so that results are identical.
 // Removed: ROS parameters (see parameters.hpp) and publishers (see
 // sensor_manager.cpp). Added: observation counters, and correction C1
-// (opt-in, NOT APPROVED, default off; BASELINE_DECISION.md section 7).
+// (approved at R1, default on; off reproduces master; BASELINE_DECISION.md 7).
 
 #include "reef_estimator/xyz_estimator.h"
 
@@ -37,9 +37,6 @@ namespace reef_estimator
     {
         debug_mode_ = params.debug_mode;
         correction_c1 = params.correction_c1;
-        if (correction_c1) {
-            report(LogLevel::Warn, "Correction C1 enabled (NOT APPROVED): XY flag cleared after a partial update");
-        }
         enableXY = params.enable_xy;
         enableZ = params.enable_z;
 
@@ -200,7 +197,7 @@ namespace reef_estimator
                 xyEst.partialUpdate();
                 numXYFusions++;
                 if (correction_c1)
-                    newRgbdMeasurement = false;   // C1 (NOT APPROVED): fuse each observation once
+                    newRgbdMeasurement = false;   // C1 (approved at R1): fuse each observation once
             }
                 else{
                     xyEst.update();
@@ -218,7 +215,11 @@ namespace reef_estimator
             newSonarMeasurement = false;
         }
 
-        numEstimates++;   // publishEstimates()
+        // publishEstimates(): the published values are taken here, before the
+        // takeoff check below can change the filters (R1 finding 1).
+        zPublished = plusState();
+        xyPublished = xyPlusState();
+        numEstimates++;
 
         checkTakeoffState(accelxyz_in_body_frame.norm());
         return true;

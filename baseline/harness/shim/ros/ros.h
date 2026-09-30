@@ -37,12 +37,20 @@ struct ParamValue {
 };
 std::map<std::string, ParamValue>& param_store();
 
+// A6 (P05/R1): published messages can be recorded. The generic overload
+// ignores them; reef_msgs declares overloads for XYZEstimate/XYZDebugEstimate
+// (found by argument-dependent lookup), defined by the harness.
+template <class M> inline void record_published(const std::string&, const M&) {}
+
 struct Publisher {
   std::string topic;
   template <class M> void publish(const M&) const;
 };
 std::map<std::string, long>& publish_counts();
-template <class M> void Publisher::publish(const M&) const { ++publish_counts()[topic]; }
+template <class M> void Publisher::publish(const M& m) const {
+  ++publish_counts()[topic];
+  record_published(topic, m);
+}
 
 struct Subscriber {};
 
