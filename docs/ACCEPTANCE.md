@@ -176,6 +176,31 @@ Scoring window: from its end to the end of `hover_low`.
 | Labels | plots and reports state "idealized attitude (truth) and idealized range" and the vibration assumption |
 | Characterization (not scored) | the same estimator on a vibration-free recording: takeoff declared or not, ż behaviour |
 
+### Measured (P04, 2026-09-30; limits above unchanged)
+
+Check: `scripts/reef_check.sh estimator` (original container). Details and
+commands: [reviews/P04.md](reviews/P04.md).
+
+| Criterion | Measured |
+|---|---|
+| Fidelity, continuous and discrete Z fields, gate values | 40 streams (15 P02 fixtures × 2 parameter kinds + v01–v10), 209,587 events: **bit-identical** in every compared value; discrete fields and every gate value identical |
+| Port vs committed P02 golden | 15/15 match, worst 0 × tolerance |
+| Negative (port vs simulation revision, `s09`) | 2.08e9 × tolerance: detected |
+| Named vertical cases | all pass (16 case groups; horizontal cases listed as NOT IMPLEMENTED) |
+| Wrapper equivalence | 40/40 streams: node state = core state at every event; every published message carries exactly that state, horizontal fields NaN |
+| Live transport | launch test: 180 estimates over DDS equal to the core's (exact); `xyz_estimate` and `is_flying_reef` reliable + transient local |
+| Clock policy | unit tests (ROS 1 `toSec` formula, output stamp = IMU stamp); v05–v07 bit-identical |
+| Parameter errors | process exits 1, message names `z_Q`, no publisher (launch test) |
+| Reset | after `reset()` 150 IMU steps give messages equal to a fresh node's; reset service and backward sim-time jump tested |
+| Shutdown | SIGINT exit 0 (launch test) |
+| Takeoff | declared at 7.77 s, during `ascend` (6.66–11.66 s); no landing |
+| Outputs | finite; 9471 estimates for 9472 IMU inputs after initialization |
+| Altitude error | RMSE **6.8 mm**, peak 26 mm (per phase 5.4–8.5 mm) |
+| Vertical velocity error | RMSE **0.037 m/s**, peak 0.135 m/s (per phase 0.031–0.044 m/s) |
+| Consistency (reported) | 100 % of samples within ±3σ in every phase for z and ż: the covariance is conservative (σ_ż ≈ 0.075 m/s vs 0.037 m/s RMSE) |
+| Labels | plots and reports carry the idealized-input and vibration labels |
+| Characterization, vibration-free (P01 recording, offline replay) | takeoff **never declared**; ż stays within ±0.040 m/s all flight; from ascend + 2 s: altitude RMSE 16 mm, vertical velocity RMSE 0.145 m/s (would fail the limit) |
+
 ## 5. Future targets: criteria to be fixed before implementation
 
 These are drafts. Items marked **PROPOSED** must be confirmed (or replaced,

@@ -223,6 +223,14 @@ and fidelity tests feed the ROS-free core in fixture order (stamp order).
 P03 also made invalid parameters fatal instead of zero-filled or
 uninitialized (D10); for valid parameters nothing changes.
 
+P04 (vertical filter) adds, without changing any estimate for the same
+ordered inputs: horizontal output fields are NaN until the horizontal
+filter is ported; a `~/reset` service and a reset on a backward ROS time
+jump (both only when triggered); throttled rejection logs; logged (not
+altered) IMU stamp anomalies. Evidence that the vertical port reproduces
+master: `check_vertical.py`, 40 event streams bit-identical per event
+(docs/reviews/P04.md).
+
 **Must be preserved for fidelity:** everything in section 4, including D1–D9
 (D10 concerns invalid input only; see above) and the float32 conversions (they affect gating decisions exactly).
 

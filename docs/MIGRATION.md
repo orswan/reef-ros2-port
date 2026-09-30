@@ -634,3 +634,39 @@ should not be copied without checking its license.
 - [V] With the switch enabled, a MAVLink "unused channel" value
   (`UINT16_MAX`) reads as "mocap on". Relevant for P10+ hardware work.
 
+## 12. P04: vertical estimator (branch `p04-vertical-estimator`)
+
+**History.** The `reef_estimator` master history (67 commits) was imported
+with `git subtree` after `git filter-branch` removed `docs/Partial_Update.pdf`
+(a third-party journal paper) from every commit; everything else is
+unchanged, and the imported tip `dd21f7a6` equals `e4179f48` without that
+file [V]. A pure-rename commit moved `estimator`, `z_estimator`,
+`sensor_manager`, `reef_estimator_node`, `LICENSE`, and `xyz_estimator` (as
+`vertical_estimator`) into the package, so `git log --follow` and blame
+reach the original commits. The horizontal filter stays unbuilt in
+`src/reef_estimator/upstream/`.
+
+**Port.** `Estimator`/`ZEstimator` unchanged except includes;
+`VerticalEstimator` is `XYZEstimator` without the horizontal filter and
+ROS, with the same statement order and types. Result [V]: bit-identical to
+the reference on 40 event streams, including the new vertical fixtures
+v01–v10 (descent/landing, dropouts, invalid and repeated measurements,
+timestamp anomalies, tilted descent, `enable_z` false).
+
+**Findings.**
+- [V] The original takeoff detector never fires on the vibration-free
+  simulated IMU, so the landing reset pins ż at 0 for the whole flight
+  (offline replay of a P01 recording). The simulation runs add an IMU
+  vibration assumption (1.0 m/s², chosen to exceed the threshold). Decision
+  pending (STATUS open item 12).
+- [V] Master's χ² gate rejects −inf ranges, so the adapter passes REP 117
+  values through (X3_SCENARIO.md §5 corrected).
+- [V] Jazzy's time source calls clock-jump handlers from its own thread; the
+  node therefore only flags a jump reset and applies it on the executor
+  thread.
+- [V] Legacy `enable_mocap_z` defaults to true, and the shipped master file
+  does not set it, so a node with only that file subscribes to `mocap_ned`.
+  `simulation.yaml` now sets every input selection explicitly.
+- [V] With vibration, the simulated vertical estimate is good and
+  conservative: altitude RMSE 6.8 mm, ż RMSE 0.037 m/s, 100 % within ±3σ.
+

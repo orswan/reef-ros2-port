@@ -1,8 +1,8 @@
 # REEF ROS 2: project status
 
-Updated 2026-09-30 (P03 complete on its branch). `main` = `04c9b19`, which includes P01
-(X3 data), P00 (status/wrappers) and P02 (estimator baseline), all merged by
-fast-forward at the user's request. P03 is on branch `p03-msgs-interfaces`. Section 3 reconciles
+Updated 2026-09-30 (P04 complete on its branch). `main` = `65bd779`, which
+includes P00–P03, all merged by fast-forward at the user's request. P04 (vertical
+estimator and ROS 2 wrapper) is on branch `p04-vertical-estimator`. Section 3 reconciles
 [docs/handoff/](handoff/) (conversation-derived history) with the repository
 and the recorded evidence.
 
@@ -15,10 +15,11 @@ project by the implementer, with logs or manifests in the repository tree.
 
 | Branch | Head | Contents | Merged to `main`? |
 |---|---|---|---|
-| `main` | `04c9b19` | starter, checker fixes, dev container, P01, P00, P02 | — |
+| `main` | `65bd779` | starter, checker fixes, dev container, P00–P03 | — |
 | `feature/x3-sim-dataset`, `p00-status-and-wrappers` | merged | P01, P00 | yes (fast-forward, 2026-09-30) |
 | `p02-baseline` | `04c9b19` | P02: reference harness, fixtures, independent check, baseline decision, `reef_check.sh baseline` | yes (fast-forward, 2026-09-30) |
-| `p03-msgs-interfaces` | this work | P03: `reef_msgs` (with upstream history), vendored `rosflight_msgs` v2.0.1, `reef_estimator` parameter contract, interface contract, `reef_check.sh interfaces` | no |
+| `p03-msgs-interfaces` | `65bd779` | P03: `reef_msgs`, vendored `rosflight_msgs`, parameter contract, interface contract | yes (fast-forward, 2026-09-30; USER: `interfaces` passed in the dev container) |
+| `p04-vertical-estimator` | this work | P04: vertical estimator core and node, fidelity check, X3 + REEF runs, replays, `reef_check.sh estimator`, `reef_demo.sh estimator` | no |
 
 No Git remote, pull request, or tag exists; the repository is local. Upstream
 references are pinned in [MIGRATION.md §2](MIGRATION.md): `reef_estimator`
@@ -72,8 +73,9 @@ wrapper boundary ([INTERFACES.md §1](INTERFACES.md#1-command-interface)).
 | P00 reconcile and wrappers | done, merged | |
 | P01 quadrotor, sensors, recordings | done, merged | human check H3 (plots) still recommended |
 | P02 baseline decision and reference tests | done, merged. USER: `reef_check.sh baseline` passed in the dev container. Corrections C1–C5 **deferred to R1** (USER, 2026-09-30); the initial port must match master exactly | `reef_check.sh baseline`; [BASELINE_DECISION.md](BASELINE_DECISION.md), [reviews/P02.md](reviews/P02.md) |
-| P03 messages, helpers, ROS 2 interfaces | **done on `p03-msgs-interfaces`** | `reef_check.sh interfaces`; [ACCEPTANCE.md §4b](ACCEPTANCE.md), [INTERFACES.md §3](INTERFACES.md), [reviews/P03.md](reviews/P03.md) |
-| P04–P05 estimator, replay/faults | not started (**next**: P04) | |
+| P03 messages, helpers, ROS 2 interfaces | done, merged (USER: dev-container `interfaces` PASS) | [reviews/P03.md](reviews/P03.md) |
+| P04 vertical estimator and ROS 2 wrapper | **done on `p04-vertical-estimator`**; horizontal filter NOT IMPLEMENTED | `reef_check.sh estimator`; [ACCEPTANCE.md §4c](ACCEPTANCE.md), [reviews/P04.md](reviews/P04.md) |
+| P05 horizontal filter, replay/faults | not started (**next**) | |
 | P06–P07 controller, REEF closed loop | not started | |
 | P08 RGB-D | not started | |
 | P09 simulation release | not started | |
@@ -143,6 +145,21 @@ Not rerun: `reef_check.sh baseline`, because no file it uses changed since
 `04c9b19` (only the new `baseline/helper_vectors.*` were added). Nothing in
 P03 was run inside `reef_ros2_dev` by the implementer.
 
+## 5d. Checks run for P04 (original container, 2026-09-30)
+
+| Command | Exit | Result |
+|---|---|---|
+| `scripts/reef_check.sh estimator` | see §5d note | colcon build + tests (reef_msgs 49, reef_estimator 58, reef_sim 12 cases), vertical fidelity 40/40 streams bit-identical with wrapper equivalence and 16 named case groups, X3 + REEF vs truth (altitude RMSE 6.8 mm, ż RMSE 0.037 m/s), offline and ROS replays, foreign-`/clock` negative; horizontal N/A (NOT IMPLEMENTED) |
+| `reef_check.sh estimator --gui` | 2 | invalid option |
+| `reef_demo.sh estimator --offline <run>` | 0 | deterministic replay and plots |
+| `scripts/regress_x3_scenario.sh` | see §5d note | the P01 suite after the `reef_sim` and script changes |
+| mutation / discrimination checks | — | port vs simulation revision 2.08e9 × tolerance; the jump-reset test found a real threading defect (fixed: reset now applied on the executor thread) |
+| shellcheck -x, hadolint | 0 | no findings |
+
+Note: the final `reef_check.sh estimator` and regression results are
+recorded in [reviews/P04.md](reviews/P04.md) with their exit codes. Nothing in
+P04 was run inside `reef_ros2_dev` by the implementer.
+
 ## 6. Open items and known limits
 
 1. `sim/launch/clock_demo.launch.py` still uses Gazebo's combined GUI mode,
@@ -165,6 +182,18 @@ P03 was run inside `reef_ros2_dev` by the implementer.
     `reef_check.sh interfaces` reports a missing package there.
 11. Hardware note for P10+: a MAVLink unused-channel value (`UINT16_MAX`)
     reads as "RC switch on" (INTERFACES.md §3.5).
+12. **IMU vibration assumption** (USER/R1): the simulation runs need 1.0 m/s²
+    of per-axis "rotor vibration" on the IMU, or the original takeoff
+    detector never fires and ż stays pinned at 0 (characterized). The value
+    was chosen to exceed the detector's threshold, not measured. Decide
+    whether to keep it, measure a realistic level, or treat takeoff detection
+    as a correction candidate for R1.
+13. Horizontal filter not ported (P05): horizontal output fields are NaN.
+14. The `reef_estimator` history was imported with `docs/Partial_Update.pdf`
+    removed (rewritten commits; the imported tip `dd21f7a6` equals
+    `e4179f48` minus that file).
+15. The attitude input in simulation is truth (idealized); no attitude
+    estimator exists.
 
 ## 7. Human checks still needed
 
@@ -175,9 +204,13 @@ P03 was run inside `reef_ros2_dev` by the implementer.
   PASS with 28/28, and your browser desktop still working afterwards.
 - **H4 (P02):** done. USER: `reef_check.sh baseline` passed in the dev
   container; C1–C5 deferred to R1.
-- **H5 (P03, dev container):** rerun `scripts/reef_check.sh interfaces` after
-  the build-tree fix (expect PASS 5/5, about 5 min on the first build in the
-  new tree; the first attempt failed on a stale shared build tree, §5c). Read INTERFACES.md §3 (the node
+- **H5 (P03):** done. USER: `reef_check.sh interfaces` passed in the dev
+  container after the build-tree fix.
+- **H6 (P04, dev container):** `scripts/reef_check.sh estimator` (expect PASS
+  6/6 plus one N/A line for horizontal, about 15 min with a first build).
+  Then look at the three plots in the printed `x3_reef/analysis_reef/`
+  directory, and decide on open item 12 (vibration assumption) and whether to
+  merge `p04-vertical-estimator`. Read INTERFACES.md §3 (the node
   contract) and decide whether to merge `p03-msgs-interfaces`.
 - **H3:** open the three plots and `manifest.yaml` of a recent
   `recordings/x3_*` run, and check them against
@@ -186,9 +219,7 @@ P03 was run inside `reef_ros2_dev` by the implementer.
 
 ## 8. Next milestone
 
-**P04**: port the estimator core (`Estimator`, `XYEstimator`, `ZEstimator`,
-`XYZEstimator`, sensor manager logic) into `src/reef_estimator` as a ROS-free
-library with the execution model of INTERFACES.md §3.8, score it against the
-P02 golden with the fixed port tolerance (ACCEPTANCE.md §4, bit-exact intent,
-no corrections: C1–C5 are deferred to R1), then add the thin node and the
-simulation adapter defined in INTERFACES.md §3.
+**P05**: port the horizontal filter (XY EKF, mocap/RGB-D velocity updates,
+D1 preserved), extend the fidelity check to the XY fields of the same 40
+streams, and add replay/fault cases. R1 (independent review, including
+C1–C5 and the vibration assumption) follows P05.

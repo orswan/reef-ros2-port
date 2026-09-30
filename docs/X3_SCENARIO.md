@@ -144,7 +144,7 @@ by yaw only). These are data transformations, not frame renames:
 | Position | ENU `(x, y, z)` | NED `(y, x, −z)` |
 | Attitude | R_ENU←FLU (truth quaternion) | R_NED←FRD = T · R_ENU←FLU · B, with T = [[0,1,0],[1,0,0],[0,0,−1]] and B = diag(1, −1, −1) |
 | Velocity | odom twist: body FLU | world NED: v_NED = T · R_ENU←FLU · v_FLU. Body-level: v_level = R_z(ψ)ᵀ · v_NED |
-| Range | positive slant range, ±inf out of limits | REEF's sonar path uses `z = −range` as NED altitude **without tilt compensation**, and accepts `range <= max_range`. It would accept **−inf** (below `min_range`), so the adapter must drop non-finite readings. Whether to tilt-compensate (height = range · cos θ) is an adapter decision to make and document |
+| Range | positive slant range, ±inf out of limits | REEF's sonar path uses `z = −range` as NED altitude **without tilt compensation**, and passes `range <= max_range` (+inf and NaN fail it). **−inf** passes that test but master's χ² gate rejects it (infinite distance; P02 `s10`, P04 `v03`). The P04 adapter therefore passes ranges through unchanged, and applies no tilt compensation (as in master; C5 deferred). Corrected in P04: an earlier version of this row said −inf would be accepted |
 | Mocap-like inputs | derived from truth | REEF's mocap mode uses `PoseStamped` (NED) and `TwistWithCovarianceStamped` (body-level). Any such stream derived from truth must be labelled idealized |
 
 ## 6. Scenario
@@ -309,3 +309,34 @@ gives the Mac-terminal commands.
 - The older clock demo (`sim/launch/clock_demo.launch.py`) still uses combined
   GUI mode, which has the same `wait_gui` handshake race. It has passed its
   suite every time so far, but should be switched to the `-s` + `-g` split.
+
+## 11. REEF estimator runs (P04)
+
+`scripts/run_x3_scenario.sh --estimator` (or `scripts/reef_demo.sh
+estimator`) flies the same scenario with the stock truth-fed controller and
+runs the ported REEF estimator (vertical filter) beside it. **REEF is not in
+the control loop.**
+
+| Addition | Details |
+|---|---|
+| Parameters | `x3_scenario.yaml` merged with `config/x3_reef_overlay.yaml` into the run's `x3_scenario.yaml` |
+| IMU vibration (**scenario assumption**) | `imu_noise.vibration_std` = 1.0 m/s² per axis, white, keyed by (seed, stamp) like the base noise, for the whole run. Needed because the original takeoff detector requires accelerometer-magnitude variance ≥ 0.5 (m/s²)²; chosen to exceed that, not measured. With the default 0 the IMU output is unchanged from P01 |
+| `reef_adapter` | `/x3/reef/imu/data` (FLU → FRD, **truth** attitude slerped to the IMU stamp), `/x3/reef/sonar` (= `/x3/range`), `/x3/reef/input_labels` |
+| Estimator | `reef_estimator_node` in namespace `/x3/reef` with `estimator_master.yaml` + `simulation.yaml`, `use_sim_time` |
+| Recorded in addition | `/x3/reef/imu/data`, `/x3/reef/sonar`, `/x3/reef/xyz_estimate`, `/x3/reef/xyz_debug_estimate`, `/x3/reef/is_flying_reef`, `/x3/reef/input_labels` |
+| Analysis | `analyze_reef_vertical` → `analysis_reef/` (report.json/md, altitude, vertical_velocity, and covariance plots, labelled idealized). Truth: range-sensor height and v_up from `/x3/truth/odom`; initialization interval until REEF takeoff + 2 s |
+
+Replays of a recording (IDEALIZED INPUTS as above):
+
+- **Offline, deterministic:** `ros2 run reef_sim x3_reef_offline RUN_DIR`
+  applies the adapter to the bag in recorded order and runs the ported core
+  (`reef_estimator_event_replay`); no ROS graph, no `/clock`. The result
+  differs from the live estimate in the first samples (the bag starts after
+  the live nodes did, so the 20-sample initialization begins elsewhere); the
+  metrics agree (P04 evidence).
+- **ROS graph:** `scripts/replay_reef_estimator.sh RUN_DIR` plays only the
+  simulation inputs (never `/x3/cmd_vel` or recorded REEF outputs) in a domain
+  of its own, refuses to start if any `/clock` publisher exists there, and
+  checks that the bag player is the only `/clock` publisher during playback
+  (`clock.json`).
+

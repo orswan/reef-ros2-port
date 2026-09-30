@@ -94,6 +94,19 @@ with this file, this file wins.
   ROS types belong in the node and adapter layers.
 - Invalid parameters are errors at startup, never silently replaced.
 
+## Estimator port rules (P04, docs/INTERFACES.md §3)
+
+- The vertical port must stay bit-identical to the reference:
+  `baseline/tools/check_vertical.py` (via `reef_check.sh estimator`) after
+  any change to `src/reef_estimator` or `reef_msgs` helpers.
+- Keep the estimator state on the executor thread. Callbacks that other
+  threads may run (clock-jump handlers, time sources) only set flags.
+- Simulation inputs to REEF that come from truth (the attitude) are labelled
+  idealized in topics, reports, and plots. The IMU vibration overlay is a
+  scenario assumption, not a sensor model; do not tune it to pass limits.
+- Scripts that build C++ packages use the per-environment tree
+  (`scripts/colcon_tree.py`); the shared `build/` belongs to manual builds.
+
 ## Simulation data rules (`src/reef_sim`, docs/X3_SCENARIO.md)
 
 - Keep **truth** (`/x3/truth/...`) separate from **measurements** (`/x3/imu`,

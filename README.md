@@ -9,9 +9,9 @@ Estimator baseline (master `e4179f48`) and its reference harness:
 [docs/BASELINE_DECISION.md](docs/BASELINE_DECISION.md), [baseline/](baseline/README.md).
 Acceptance criteria: [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md). Interfaces:
 [docs/INTERFACES.md](docs/INTERFACES.md). Source audit and plan:
-[docs/MIGRATION.md](docs/MIGRATION.md). Ported so far (P03): `reef_msgs` (messages
-and helpers) and the `reef_estimator` parameter contract; the estimator node
-follows in P04.
+[docs/MIGRATION.md](docs/MIGRATION.md). Ported so far: `reef_msgs` (messages and
+helpers, P03) and the `reef_estimator` node with the **vertical** filter (P04,
+bit-identical to master on the fixtures). The horizontal filter follows in P05.
 
 ## Checks and demos
 
@@ -25,9 +25,12 @@ scripts/reef_check.sh clock --gui --regress
 scripts/reef_check.sh sim-data
 scripts/reef_check.sh baseline
 scripts/reef_check.sh interfaces
+scripts/reef_check.sh estimator
 scripts/reef_demo.sh help
 scripts/reef_demo.sh stock --gui
 scripts/reef_demo.sh replay recordings/<run>
+scripts/reef_demo.sh estimator
+scripts/reef_demo.sh estimator --offline recordings/<run>
 ```
 
 Exit status: 0 PASS, 1 FAIL (the check ran and failed), 2 BLOCKED / NOT
@@ -52,7 +55,7 @@ Every command below is labelled with where it runs:
 
 | Path | Purpose |
 |---|---|
-| `src/` | ROS 2 packages (colcon source space): `reef_sim` (X3 scenario), `reef_msgs` (messages, helpers), `reef_estimator` (P03: parameters and configuration), `third_party/rosflight_ros_pkgs/rosflight_msgs` (unmodified upstream, for `RCRaw`) |
+| `src/` | ROS 2 packages (colcon source space): `reef_sim` (X3 scenario), `reef_msgs` (messages, helpers), `reef_estimator` (vertical estimator node, parameters, configuration; the unported horizontal filter in `upstream/`), `third_party/rosflight_ros_pkgs/rosflight_msgs` (unmodified upstream, for `RCRaw`) |
 | `sim/` | Gazebo worlds and launch files for demos/tests |
 | `scripts/` | Launch and check scripts; they set up their own environment |
 | `docs/` | Migration notes; `docs/setup/` has the original container recipe |
@@ -374,7 +377,9 @@ differ. A `build/<pkg>` configured in one container can fail in the other
 (for example `No rule to make target '/opt/ros/jazzy/lib/libfastcdr.so.…'`).
 Build in one container only, or remove `build/<pkg>` and `install/<pkg>`
 before building in the other. `reef_check.sh interfaces` is not affected: it
-builds in its own tree per environment, `build/colcon_check/<env>/`. The `CMAKE_BUILD_PARALLEL_LEVEL=1` / `--executor sequential` form
+builds in its own tree per environment, `build/colcon_env/<env>/`
+(`scripts/colcon_tree.py`), as do `run_x3_scenario.sh --estimator` and the
+REEF replay. The `CMAKE_BUILD_PARALLEL_LEVEL=1` / `--executor sequential` form
 limits memory use in Docker Desktop; drop both for speed.
 
 Inspecting failures:
@@ -388,10 +393,11 @@ Inspecting failures:
 
 A summary of "0 tests" is **not** a pass: it means nothing ran. `colcon test`
 without `--return-code-on-test-failure` exits 0 even when tests fail. As of
-P03: `reef_sim` 7 unit tests (geometry; the nodes are exercised by
-`reef_check.sh sim-data`), `reef_msgs` 49 and `reef_estimator` 33 test cases.
-`scripts/reef_check.sh interfaces` runs the whole sequence and fails on any
-failure, skip, or missing results (`scripts/check_colcon.py`).
+P04: `reef_sim` 12 unit tests (the nodes are exercised by `reef_check.sh
+sim-data` and `estimator`), `reef_msgs` 49 and `reef_estimator` 58 test
+cases, including a launch test. `scripts/reef_check.sh interfaces` and
+`estimator` run the whole sequence and fail on any failure, skip, or
+missing results (`scripts/check_colcon.py`).
 
 ## Using the original container
 
