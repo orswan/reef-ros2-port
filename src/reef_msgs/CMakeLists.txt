@@ -4,6 +4,14 @@ project(reef_msgs)
 # ROS 2 port (P03) of reef_msgs 7fb63ff: the messages and helpers used by
 # reef_estimator master e4179f48. See README.md.
 
+# Optimized by default, like the reference harness (-O2): Eigen's dynamic
+# matrices are slow at -O0 (colcon's default). Results are unchanged
+# (check_port.py compares every field; no -ffast-math, no FMA contraction
+# without -march).
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+  set(CMAKE_BUILD_TYPE RelWithDebInfo)
+endif()
+
 if(NOT CMAKE_CXX_STANDARD)
   set(CMAKE_CXX_STANDARD 17)
   set(CMAKE_CXX_STANDARD_REQUIRED ON)

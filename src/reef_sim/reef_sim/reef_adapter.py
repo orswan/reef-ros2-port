@@ -4,6 +4,12 @@
         -> /x3/reef/imu/data   sensor_msgs/Imu, body FRD, orientation of FRD in NED
     /x3/range (idealized, derived from truth)
         -> /x3/reef/sonar      sensor_msgs/Range, unchanged
+    /x3/truth/odom (TRUTH)
+        -> /x3/reef/mocap_velocity/body_level_frame   geometry_msgs/TwistWithCovarianceStamped:
+           IDEALIZED simulated velocity observation (P05): the truth velocity in
+           REEF's body-level frame plus white noise (velocity_noise_std, keyed by
+           (velocity_seed, stamp)), one per truth sample (100 Hz), covariance[0]
+           and [7] = noise variance. Not RGB-D odometry.
     /x3/reef/input_labels      std_msgs/String (transient local): what is idealized
 
 IDEALIZED INPUTS: the orientation in /x3/reef/imu/data is the truth attitude
@@ -15,9 +21,13 @@ FLU -> FRD (x, -y, -z). Ranges are passed through unchanged, including REP 117
 through its chi-square gate, BASELINE_DECISION.md section 4.8). No tilt
 compensation is applied (as in master; correction C5 is deferred).
 
-An IMU message is held until a truth sample at or after its stamp has
-arrived, so every IMU gets an interpolated attitude; messages are emitted in
-arrival order. IMU messages older than the first truth sample are dropped.
+Each IMU message is converted immediately (no waiting, P05): its attitude is
+the truth attitude slerped between the two truth samples around its stamp
+when both have arrived, otherwise extrapolated (slerp beyond the last
+sample) from the last two truth samples by at most MAX_EXTRAPOLATION_NS,
+otherwise the latest truth sample. IMU messages before the second truth
+sample are dropped. (P04 held each IMU until the next truth sample, which
+added up to 10 ms of latency.)
 
 Conversions (X3_SCENARIO.md section 5): R_NED<-FRD = T R_ENU<-FLU B with
 T = [[0,1,0],[1,0,0],[0,0,-1]] and B = diag(1,-1,-1); as quaternions
@@ -27,8 +37,13 @@ import math
 from collections import deque
 
 LABEL = ('IDEALIZED INPUTS: imu/data orientation = TRUTH attitude from /x3/truth/odom '
-         '(slerp to the IMU stamp); sonar = idealized range derived from truth (/x3/range). '
+         '(slerp to the IMU stamp); sonar = idealized range derived from truth (/x3/range); '
+         'mocap_velocity/body_level_frame = TRUTH velocity in the body-level frame plus white noise '
+         '(simulated velocity observation, not RGB-D odometry). '
          'Specific force and angular rate are the simulated IMU measurement (FLU -> FRD).')
+
+VELOCITY_NOISE_STD = 0.02   # m/s per axis (ACCEPTANCE.md 4d)
+VELOCITY_SEED = 11
 
 S = math.sqrt(0.5)
 Q_T = (0.0, S, S, 0.0)      # (w, x, y, z): ENU -> NED, 180 deg about (1, 1, 0)/sqrt(2)
@@ -70,6 +85,45 @@ def flu_to_frd(v):
     return (v[0], -v[1], -v[2])
 
 
+def rotate(q_wxyz, v):
+    """R(q) v for a unit quaternion (w, x, y, z)."""
+    w, x, y, z = q_wxyz
+    r = ((1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)),
+         (2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)),
+         (2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)))
+    return tuple(sum(r[i][k] * v[k] for k in range(3)) for i in range(3))
+
+
+def body_level_velocity(q_enu_flu, v_flu):
+    """Truth velocity in REEF's body-level frame (NED rotated by yaw).
+
+    v_ENU = R_ENU<-FLU v_FLU (odometry twist is in the body FLU frame);
+    v_NED = (v_ENU.y, v_ENU.x, -v_ENU.z); yaw psi of the FRD body in NED;
+    v_level = R_z(psi)^T v_NED. Returns (vx, vy) forward/right, horizontal.
+    """
+    ve = rotate(q_enu_flu, v_flu)
+    vn = (ve[1], ve[0], -ve[2])
+    w, x, y, z = ned_frd_from_enu_flu(q_enu_flu)
+    psi = math.atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z))
+    c, s = math.cos(psi), math.sin(psi)
+    return (c * vn[0] + s * vn[1], -s * vn[0] + c * vn[1])
+
+
+def velocity_noise(t_ns, seed=VELOCITY_SEED, std=VELOCITY_NOISE_STD):
+    import numpy as np
+    return tuple(np.random.default_rng([seed, t_ns]).normal(0.0, std, 2))
+
+
+def velocity_observation(t_ns, q_enu_flu, v_flu, std=VELOCITY_NOISE_STD, seed=VELOCITY_SEED):
+    """(vx, vy, variance) of the simulated observation at t_ns."""
+    vx, vy = body_level_velocity(q_enu_flu, v_flu)
+    nx, ny = velocity_noise(t_ns, seed, std)
+    return vx + nx, vy + ny, std * std
+
+
+MAX_EXTRAPOLATION_NS = 20_000_000
+
+
 class TruthInterpolator:
     """Truth attitude samples (t_ns, q_ENU<-FLU as w, x, y, z), interpolated on request."""
 
@@ -88,9 +142,18 @@ class TruthInterpolator:
         return self.samples[0][0] if self.samples else None
 
     def at(self, t_ns):
-        """q_NED<-FRD at t_ns, or None if t_ns is outside the samples held."""
-        if not self.samples or t_ns < self.samples[0][0] or t_ns > self.samples[-1][0]:
+        """q_NED<-FRD at t_ns, or None before the second truth sample.
+
+        Inside the held samples: slerp between the neighbours. After the last
+        sample: extrapolated from the last two (at most MAX_EXTRAPOLATION_NS
+        beyond the last sample, else the last sample itself)."""
+        if len(self.samples) < 2 or t_ns < self.samples[0][0]:
             return None
+        if t_ns > self.samples[-1][0]:
+            (t0, q0), (t1, q1) = self.samples[-2], self.samples[-1]
+            if t_ns - t1 > MAX_EXTRAPOLATION_NS:
+                return ned_frd_from_enu_flu(q1)
+            return ned_frd_from_enu_flu(slerp(q0, q1, (t_ns - t0) / (t1 - t0)))
         prev = self.samples[0]
         for cur in self.samples:
             if cur[0] >= t_ns:
@@ -116,24 +179,14 @@ class Adapter:
         return self._flush()
 
     def on_imu(self, t_ns, payload):
-        first = self.truth.earliest()
-        if first is None or t_ns < first:
+        q = self.truth.at(t_ns)
+        if q is None:
             self.dropped_early += 1
             return []
-        self.pending.append((t_ns, payload))
-        return self._flush()
+        return [(t_ns, payload, q)]
 
     def _flush(self):
-        out = []
-        latest = self.truth.latest()
-        while self.pending and latest is not None and self.pending[0][0] <= latest:
-            t_ns, payload = self.pending.popleft()
-            q = self.truth.at(t_ns)
-            if q is None:   # fell out of the held window (should not happen)
-                self.dropped_early += 1
-                continue
-            out.append((t_ns, payload, q))
-        return out
+        return []   # nothing is held (kept so on_truth has one return type)
 
 
 def main(args=None):
@@ -141,6 +194,7 @@ def main(args=None):
     from nav_msgs.msg import Odometry
     from rclpy.node import Node
     from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
+    from geometry_msgs.msg import TwistWithCovarianceStamped
     from sensor_msgs.msg import Imu, Range
     from std_msgs.msg import String
 
@@ -152,6 +206,10 @@ def main(args=None):
             self.range_pub = self.create_publisher(Range, '/x3/reef/sonar', 10)
             latched = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
                                  durability=DurabilityPolicy.TRANSIENT_LOCAL)
+            self.vel_std = float(self.declare_parameter('velocity_noise_std', VELOCITY_NOISE_STD).value)
+            self.vel_seed = int(self.declare_parameter('velocity_seed', VELOCITY_SEED).value)
+            self.vel_pub = self.create_publisher(
+                TwistWithCovarianceStamped, '/x3/reef/mocap_velocity/body_level_frame', 50)
             self.label_pub = self.create_publisher(String, '/x3/reef/input_labels', latched)
             self.label_pub.publish(String(data=LABEL))
             self.create_subscription(Imu, '/x3/imu', self.on_imu, 50)
@@ -164,8 +222,17 @@ def main(args=None):
             return stamp.sec * 1_000_000_000 + stamp.nanosec
 
         def on_truth(self, m):
-            o = m.pose.pose.orientation
-            self.emit(self.adapter.on_truth(self.ns(m.header.stamp), (o.w, o.x, o.y, o.z)))
+            o, v = m.pose.pose.orientation, m.twist.twist.linear
+            t = self.ns(m.header.stamp)
+            self.emit(self.adapter.on_truth(t, (o.w, o.x, o.y, o.z)))
+            vx, vy, var = velocity_observation(t, (o.w, o.x, o.y, o.z), (v.x, v.y, v.z),
+                                               self.vel_std, self.vel_seed)
+            tw = TwistWithCovarianceStamped()
+            tw.header.stamp = m.header.stamp
+            tw.header.frame_id = 'x3/body_level'
+            tw.twist.twist.linear.x, tw.twist.twist.linear.y = vx, vy
+            tw.twist.covariance[0] = tw.twist.covariance[7] = var
+            self.vel_pub.publish(tw)
 
         def on_imu(self, m):
             self.emit(self.adapter.on_imu(self.ns(m.header.stamp), m))

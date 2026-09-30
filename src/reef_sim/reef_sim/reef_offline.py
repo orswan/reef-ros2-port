@@ -1,6 +1,7 @@
 """Offline replay of an X3 recording through the REEF estimator (no ROS graph).
 
     ros2 run reef_sim x3_reef_offline RUN_DIR [--out DIR] [--params A.yaml B.yaml ...]
+                                      [--drop TOPIC T0 T1 ...]
 
 Reads RUN_DIR/bag in recorded order, applies the adapter (reef_adapter.py:
 FLU -> FRD, truth attitude, range unchanged) exactly as the live node does,
@@ -8,6 +9,11 @@ and writes DIR/inputs.events and DIR/params.params in the reference-harness
 format. It then runs reef_estimator_event_replay (core mode) and writes
 DIR/estimates.csv. Deterministic: the same recording always gives the same
 result. No clock is published, so no /clock source can compete.
+
+The simulated velocity observations (reef_adapter.velocity_observation) are
+generated from the recorded truth exactly as the live adapter does, with the
+same seed. --drop imu|range|velocity T0 T1 removes that input between sim
+times T0 and T1 (fault injection; repeatable).
 
 Default parameters: reef_estimator's config/estimator_master.yaml followed
 by config/simulation.yaml (the files the live launch uses).
@@ -19,7 +25,7 @@ from pathlib import Path
 
 import yaml
 
-from reef_sim.reef_adapter import LABEL, Adapter, flu_to_frd
+from reef_sim.reef_adapter import LABEL, Adapter, flu_to_frd, velocity_observation
 
 INPUT_TOPICS = ('/x3/imu', '/x3/truth/odom', '/x3/range')
 
@@ -42,8 +48,11 @@ def harness_params(files, out):
     return merged
 
 
-def bag_to_events(bag_dir, out):
+def bag_to_events(bag_dir, out, drops=()):
     """Adapter applied to the bag in recorded order; returns counts."""
+    def dropped(kind, t_ns):
+        return any(k == kind and t0 <= t_ns * 1e-9 < t1 for k, t0, t1 in drops)
+
     import rosbag2_py
     from rclpy.serialization import deserialize_message
     from rosidl_runtime_py.utilities import get_message
@@ -58,13 +67,16 @@ def bag_to_events(bag_dir, out):
     reader.set_filter(rosbag2_py.StorageFilter(topics=list(INPUT_TOPICS)))
     classes = {t: get_message(types[t]) for t in INPUT_TOPICS}
     adapter = Adapter()
-    lines, counts = [], {'imu': 0, 'range': 0, 'truth': 0}
+    lines, counts = [], {'imu': 0, 'range': 0, 'truth': 0, 'velocity': 0, 'dropped': 0}
 
     def ns(stamp):
         return stamp.sec * 1_000_000_000 + stamp.nanosec
 
     def emit(items):
         for t, m, q in items:
+            if dropped('imu', t):
+                counts['dropped'] += 1
+                continue
             a = flu_to_frd((m.linear_acceleration.x, m.linear_acceleration.y, m.linear_acceleration.z))
             # event quaternion order: x y z w
             lines.append('imu {} {!r} {!r} {!r} {!r} {!r} {!r} {!r}'.format(t, *a, q[1], q[2], q[3], q[0]))
@@ -74,11 +86,20 @@ def bag_to_events(bag_dir, out):
         topic, data, _ = reader.read_next()
         m = deserialize_message(data, classes[topic])
         if topic == '/x3/truth/odom':
-            o = m.pose.pose.orientation
-            emit(adapter.on_truth(ns(m.header.stamp), (o.w, o.x, o.y, o.z)))
+            o, v = m.pose.pose.orientation, m.twist.twist.linear
+            t = ns(m.header.stamp)
+            emit(adapter.on_truth(t, (o.w, o.x, o.y, o.z)))
             counts['truth'] += 1
+            if dropped('velocity', t):
+                counts['dropped'] += 1
+            else:
+                vx, vy, var = velocity_observation(t, (o.w, o.x, o.y, o.z), (v.x, v.y, v.z))
+                lines.append(f'mocap_twist {t} {vx!r} {vy!r} {var!r} {var!r}')
+                counts['velocity'] += 1
         elif topic == '/x3/imu':
             emit(adapter.on_imu(ns(m.header.stamp), m))
+        elif dropped('range', ns(m.header.stamp)):
+            counts['dropped'] += 1
         else:
             lines.append(f'range {ns(m.header.stamp)} {float(m.range)!r} {float(m.max_range)!r}')
             counts['range'] += 1
@@ -95,18 +116,23 @@ def main(argv=None):
     ap.add_argument('run_dir', type=Path)
     ap.add_argument('--out', type=Path)
     ap.add_argument('--params', nargs='+')
+    ap.add_argument('--drop', nargs=3, action='append', default=[], metavar=('INPUT', 'T0', 'T1'),
+                    help='remove imu|range|velocity between sim times T0 and T1 (s)')
     a = ap.parse_args(argv)
+    drops = [(k, float(t0), float(t1)) for k, t0, t1 in a.drop]
+    if any(k not in ('imu', 'range', 'velocity') for k, _, _ in drops):
+        ap.error('--drop INPUT must be imu, range, or velocity')
     cfg = Path(get_package_share_directory('reef_estimator')) / 'config'
     params = a.params or [str(cfg / 'estimator_master.yaml'), str(cfg / 'simulation.yaml')]
     out = a.out or a.run_dir / 'reef_offline'
     out.mkdir(parents=True, exist_ok=True)
     harness_params(params, out / 'params.params')
-    counts = bag_to_events(a.run_dir / 'bag', out / 'inputs.events')
+    counts = bag_to_events(a.run_dir / 'bag', out / 'inputs.events', drops)
     replay = Path(get_package_prefix('reef_estimator')) / 'lib' / 'reef_estimator' / 'reef_estimator_event_replay'
     rc = subprocess.run([str(replay), str(out / 'params.params'), str(out / 'inputs.events'),
                          str(out / 'estimates.csv')]).returncode
     (out / 'offline.yaml').write_text(yaml.safe_dump({
-        'run_dir': str(a.run_dir), 'parameter_files': params, 'counts': counts,
+        'run_dir': str(a.run_dir), 'parameter_files': params, 'counts': counts, 'drops': drops,
         'replay_exit': rc, 'labels': LABEL}, sort_keys=False))
     print(f'offline replay: {counts} -> {out / "estimates.csv"} (exit {rc})')
     return rc

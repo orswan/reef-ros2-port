@@ -5,6 +5,14 @@ project(reef_estimator)
 # P03: parameter contract and configuration only. The estimator core and
 # node follow in P04 (docs/INTERFACES.md section 3).
 
+# Optimized by default, like the reference harness (-O2): Eigen's dynamic
+# matrices are slow at -O0 (colcon's default). Results are unchanged
+# (check_port.py compares every field; no -ffast-math, no FMA contraction
+# without -march).
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+  set(CMAKE_BUILD_TYPE RelWithDebInfo)
+endif()
+
 if(NOT CMAKE_CXX_STANDARD)
   set(CMAKE_CXX_STANDARD 17)
   set(CMAKE_CXX_STANDARD_REQUIRED ON)

@@ -22,8 +22,9 @@ from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
 PLAYED = ['/clock', '/x3/truth/odom', '/x3/imu', '/x3/range', '/x3/scenario/phase']
-RECORDED = PLAYED[1:] + ['/x3/reef/imu/data', '/x3/reef/sonar', '/x3/reef/xyz_estimate',
-                         '/x3/reef/xyz_debug_estimate', '/x3/reef/is_flying_reef', '/x3/reef/input_labels']
+REEF_INPUTS = ['/x3/reef/imu/data', '/x3/reef/sonar', '/x3/reef/mocap_velocity/body_level_frame']
+RECORDED = PLAYED[1:] + REEF_INPUTS + ['/x3/reef/xyz_estimate', '/x3/reef/xyz_debug_estimate',
+                                       '/x3/reef/is_flying_reef', '/x3/reef/input_labels', '/x3/reef/diagnostics']
 
 
 def generate_launch_description():

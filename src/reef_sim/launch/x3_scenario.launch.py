@@ -15,7 +15,7 @@ Arguments:
   record:=true|false    rosbag2 recording
   enable_range:=true|false   test hook: false omits the range stream
   with_estimator:=true|false also run the REEF adapter and the ported REEF
-                        estimator (vertical filter; namespace /x3/reef) beside
+                        estimator (combined filter; namespace /x3/reef) beside
                         the truth-fed stock controller, and record their topics.
                         REEF is NOT in the control loop.
 
@@ -36,9 +36,10 @@ from launch_ros.substitutions import FindPackageShare
 
 RECORDED_TOPICS = ['/clock', '/x3/truth/odom', '/x3/imu', '/x3/range',
                    '/x3/cmd_vel', '/x3/scenario/phase']
-REEF_TOPICS = ['/x3/reef/imu/data', '/x3/reef/sonar', '/x3/reef/xyz_estimate',
-               '/x3/reef/xyz_debug_estimate', '/x3/reef/is_flying_reef', '/x3/reef/input_labels']
-REEF_REQUIRED = ['/x3/reef/imu/data', '/x3/reef/xyz_estimate']
+REEF_TOPICS = ['/x3/reef/imu/data', '/x3/reef/sonar', '/x3/reef/mocap_velocity/body_level_frame',
+               '/x3/reef/xyz_estimate', '/x3/reef/xyz_debug_estimate', '/x3/reef/is_flying_reef',
+               '/x3/reef/input_labels', '/x3/reef/diagnostics']
+REEF_REQUIRED = ['/x3/reef/imu/data', '/x3/reef/mocap_velocity/body_level_frame', '/x3/reef/xyz_estimate']
 
 
 def generate_launch_description():
