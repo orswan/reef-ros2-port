@@ -1,0 +1,15 @@
+# Overlay for X3 runs with the REEF estimator (run_x3_scenario.sh --estimator),
+# merged over x3_scenario.yaml; the merged file is copied into the run.
+#
+# SCENARIO ASSUMPTION (not a measured model): rotor vibration on the IMU.
+# The original REEF takeoff detector declares takeoff only when the variance
+# of the accelerometer magnitude over 20 samples is >= 0.5 (m/s^2)^2 while the
+# range is >= 0.25 m (BASELINE_DECISION.md section 4.4). Without vibration the
+# simulated IMU never reaches that, the estimator stays "landed", and its
+# landing reset pins the vertical velocity at 0 (characterized in
+# docs/reviews/P04.md). 1.0 m/s^2 per axis gives a magnitude variance of about
+# 1.0, twice the threshold. The value was chosen to exceed the threshold, not
+# measured on hardware.
+imu_noise:
+  ros__parameters:
+    vibration_std: 1.0

@@ -146,10 +146,21 @@ port's event driver, with the same subscription rules.
 
 ### Estimator quality in simulation (sim time; idealized sensors)
 
-Stock-controlled X3 scenario (`x3_scenario.yaml`, seeds 7/42), truth-fed
-controller, REEF **not** in the loop. Inputs: `/x3/imu` converted FLU → FRD,
-attitude from **truth** (idealized), range from the idealized sensor (no
-tilt compensation, as in master). Truth for scoring: the vertical height of
+Stock-controlled X3 scenario (`x3_scenario.yaml` merged with
+`x3_reef_overlay.yaml`, seeds 7/42), truth-fed controller, REEF **not** in
+the loop. Inputs: `/x3/imu` converted FLU → FRD, attitude from **truth**
+(idealized), range from the idealized sensor (no tilt compensation, as in
+master).
+
+**Scenario assumption (added 2026-09-30, before any simulation result was
+scored; limits unchanged):** the IMU gets 1.0 m/s² per-axis white "rotor
+vibration" (`imu_noise.vibration_std`). The original takeoff detector needs
+accelerometer-magnitude variance ≥ 0.5 (m/s²)², which vibration supplied on
+the REEF hardware. An offline replay of an existing vibration-free P01
+recording showed that the estimator then never declares takeoff and its
+landing reset pins ż at 0 for the whole flight. The value was chosen to
+exceed the threshold (variance ≈ 1.0), not measured. The vibration-free
+behaviour is reported as a characterization, not scored. Truth for scoring: the vertical height of
 the range-sensor origin (−z NED) and the vertical velocity from
 `/x3/truth/odom`, interpolated to each estimate stamp. **Initialization
 interval:** from start until 2 s after REEF declares takeoff; not scored.
@@ -162,7 +173,8 @@ Scoring window: from its end to the end of `hover_low`.
 | Altitude error (z vs −h_sensor) | RMSE ≤ 0.05 m; peak ≤ 0.15 m |
 | Vertical velocity error (ż vs −v_up) | RMSE ≤ 0.10 m/s |
 | Consistency | fraction of samples within ±3σ (from `p`) reported per phase; no limit (the filter is not claimed to be consistent) |
-| Labels | plots and reports state "idealized attitude (truth) and idealized range" |
+| Labels | plots and reports state "idealized attitude (truth) and idealized range" and the vibration assumption |
+| Characterization (not scored) | the same estimator on a vibration-free recording: takeoff declared or not, ż behaviour |
 
 ## 5. Future targets: criteria to be fixed before implementation
 

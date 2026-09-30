@@ -219,9 +219,16 @@ def run_checks(a, types, result, params):
         m = in_window(ti, settle['t_start'] + 1.0, settle['t_end'])
         mean, std = acc[m].mean(0), acc[m].std(0)
         err = np.linalg.norm(mean - [0, 0, G])
-        c.add('IMU stationary: specific force = +g on z (FLU)', err < 0.2 and np.all(std < 0.1),
+        ip = params.get('imu_noise', {}).get('ros__parameters', {})
+        vib = float(ip.get('vibration_std', 0.0))
+        if vib > 0:   # REEF runs: configured vibration (imu_noise.py); expect the combined sigma
+            sig = float(np.hypot(float(ip.get('accel_noise_std', 0.02)), vib))
+            std_ok, std_rule = bool(np.all(np.abs(std - sig) < 0.3 * sig)), f'std within 30% of {sig:.3f} per axis'
+        else:
+            std_ok, std_rule = bool(np.all(std < 0.1)), 'std < 0.1 per axis'
+        c.add('IMU stationary: specific force = +g on z (FLU)', err < 0.2 and std_ok,
               f'mean {np.round(mean, 3).tolist()} m/s^2, std {np.round(std, 3).tolist()}',
-              '|mean - (0,0,9.807)| < 0.2, std < 0.1 per axis')
+              f'|mean - (0,0,9.807)| < 0.2, {std_rule}')
         gm = np.linalg.norm(gyr[m].mean(0))
         c.add('IMU stationary: gyro ~ 0', gm < 0.02, f'|mean| {gm:.4f} rad/s', '< 0.02 rad/s')
     hov = [p for p in phases if p['name'].startswith('hover')]
