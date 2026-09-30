@@ -223,8 +223,8 @@ case "$target" in
     run_step "baseline golden and fixture lock unchanged since P02" 0 "$logdir/golden.log" \
       git -C "$REEF_ROOT" diff --exit-code --stat 04c9b19 -- baseline/golden baseline/fixtures.lock.json
     grep -E '^(reef_|rosflight_)[a-z_]* +files=|^check_colcon:' "$logdir/colcon.log" | sed 's/^/     /' || true
-    artifacts+=("$REEF_ROOT/build/reef_msgs/test_results" "$REEF_ROOT/build/reef_estimator/test_results"
-                "$REEF_ROOT/build/reef_sim/pytest.xml")
+    tree="$(grep -m1 -oE 'build tree [^ ]+' "$logdir/colcon.log" | cut -d' ' -f3)"
+    [[ -n "$tree" ]] && artifacts+=("$REEF_ROOT/$tree/build/<pkg>/test_results" "$REEF_ROOT/$tree/log")
     sim_notes+=("not applicable (unit tests only)")
     ;;
 

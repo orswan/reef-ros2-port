@@ -128,6 +128,17 @@ P00 was run inside `reef_ros2_dev` by the implementer.
 | `rosdep check --from-paths src --ignore-src` | 0 | all system dependencies satisfied |
 | shellcheck -x (scripts, baseline), hadolint (Dockerfile) | 0 | no findings |
 
+USER, dev container, at `7963c84`: `reef_check.sh interfaces` **FAIL** (exit 1)
+in the colcon step: `No rule to make target '/opt/ros/jazzy/lib/libfastcdr.so.2.2.7'`.
+Cause [V]: the check reused the shared `build/reef_msgs`, which the implementer
+had configured in the original container (fastcdr 2.2.7 there, not in the dev
+image). Fix: `check_colcon.py` now builds in `build/colcon_check/<env>/`
+(keyed by a hash of the installed package list), and the stale
+`build/`/`install/` outputs of the three new packages were removed. After the
+fix, in the original container: PASS 5/5 (tree `build/colcon_check/bfcf57e680be`),
+with the shared tree deliberately left stale. The dev-container rerun is
+pending (H5).
+
 Not rerun: `reef_check.sh baseline`, because no file it uses changed since
 `04c9b19` (only the new `baseline/helper_vectors.*` were added). Nothing in
 P03 was run inside `reef_ros2_dev` by the implementer.
@@ -164,8 +175,9 @@ P03 was run inside `reef_ros2_dev` by the implementer.
   PASS with 28/28, and your browser desktop still working afterwards.
 - **H4 (P02):** done. USER: `reef_check.sh baseline` passed in the dev
   container; C1–C5 deferred to R1.
-- **H5 (P03, dev container):** `scripts/reef_check.sh interfaces` (expect
-  PASS 5/5, about 5 min on a first build). Read INTERFACES.md §3 (the node
+- **H5 (P03, dev container):** rerun `scripts/reef_check.sh interfaces` after
+  the build-tree fix (expect PASS 5/5, about 5 min on the first build in the
+  new tree; the first attempt failed on a stale shared build tree, §5c). Read INTERFACES.md §3 (the node
   contract) and decide whether to merge `p03-msgs-interfaces`.
 - **H3:** open the three plots and `manifest.yaml` of a recent
   `recordings/x3_*` run, and check them against

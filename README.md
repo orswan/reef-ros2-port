@@ -367,7 +367,14 @@ colcon test-result --verbose
 ```
 
 Run each line only after the previous one succeeds (`echo $?` shows the exit
-status). The `CMAKE_BUILD_PARALLEL_LEVEL=1` / `--executor sequential` form
+status).
+
+**Both containers share this tree** (bind mount), but their ROS packages
+differ. A `build/<pkg>` configured in one container can fail in the other
+(for example `No rule to make target '/opt/ros/jazzy/lib/libfastcdr.so.…'`).
+Build in one container only, or remove `build/<pkg>` and `install/<pkg>`
+before building in the other. `reef_check.sh interfaces` is not affected: it
+builds in its own tree per environment, `build/colcon_check/<env>/`. The `CMAKE_BUILD_PARALLEL_LEVEL=1` / `--executor sequential` form
 limits memory use in Docker Desktop; drop both for speed.
 
 Inspecting failures:

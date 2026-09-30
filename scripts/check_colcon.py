@@ -10,9 +10,16 @@
    minimum number of executed test cases, with 0 failures, errors, and skips.
    An empty test run is a FAIL.
 
+The project tree is bind-mounted into both containers, whose ROS packages
+differ. A CMake cache configured in one container references libraries that
+may not exist in the other, so this check never uses the shared build/ and
+install/. It builds in build/colcon_check/<env>/, where <env> is a hash of the
+installed package list (dpkg), so each environment has its own tree.
+
 Expects a sourced ROS 2 environment (reef_check.sh provides it).
 Exit: 0 PASS, 1 FAIL, 2 invalid environment.
 """
+import hashlib
 import os
 import shutil
 import subprocess
@@ -28,8 +35,21 @@ MINIMUM = {
     'reef_estimator': (20, {'gtest', 'xunit'}),
     'reef_sim': (7, {'pytest'}),
 }
-COLCON = ['colcon']
 BASE = ['--base-paths', 'src']
+
+
+def environment_id():
+    """Short hash of the installed package list: differs between the containers."""
+    out = subprocess.run(['dpkg-query', '-W', '-f=${Package}\t${Version}\n'],
+                         capture_output=True, text=True, check=True).stdout
+    return hashlib.sha256(''.join(sorted(out.splitlines(True))).encode()).hexdigest()[:12]
+
+
+ENV_ID = environment_id()
+TREE = ROOT / 'build' / 'colcon_check' / ENV_ID
+BUILD, INSTALL = TREE / 'build', TREE / 'install'
+COLCON = ['colcon', '--log-base', str(TREE / 'log')]
+BASES = ['--build-base', str(BUILD), '--install-base', str(INSTALL)]
 
 
 def run(cmd, **kw):
@@ -65,29 +85,30 @@ def main():
         failures.append(f'unexpected rosflight packages (out of scope): {extra_rosflight}')
 
     env = dict(os.environ, CMAKE_BUILD_PARALLEL_LEVEL=os.environ.get('CMAKE_BUILD_PARALLEL_LEVEL', '2'))
+    print(f'environment {ENV_ID}: build tree {TREE.relative_to(ROOT)}')
     if run(COLCON + ['build', '--symlink-install', '--executor', 'sequential',
-                     '--event-handlers', 'console_cohesion-'] + BASE, env=env).returncode != 0:
-        print('FAIL colcon build (see log/latest_build/<pkg>/stdout_stderr.log)')
+                     '--event-handlers', 'console_cohesion-'] + BASES + BASE, env=env).returncode != 0:
+        print(f'FAIL colcon build (see {(TREE / "log").relative_to(ROOT)}/latest_build/<pkg>/stdout_stderr.log)')
         return 1
 
     for p in pkgs:   # stale results must not count
-        shutil.rmtree(ROOT / 'build' / p / 'test_results', ignore_errors=True)
-        (ROOT / 'build' / p / 'pytest.xml').unlink(missing_ok=True)
+        shutil.rmtree(BUILD / p / 'test_results', ignore_errors=True)
+        (BUILD / p / 'pytest.xml').unlink(missing_ok=True)
     test_rc = run(COLCON + ['test', '--executor', 'sequential', '--return-code-on-test-failure',
-                            '--event-handlers', 'console_cohesion-'] + BASE, env=env).returncode
+                            '--event-handlers', 'console_cohesion-'] + BASES + BASE, env=env).returncode
     if test_rc != 0:
         failures.append(f'colcon test exited {test_rc}')
-    result_rc = run(COLCON + ['test-result', '--verbose', '--test-result-base', 'build']).returncode
+    result_rc = run(COLCON + ['test-result', '--verbose', '--test-result-base', str(BUILD)]).returncode
     if result_rc != 0:
         failures.append(f'colcon test-result exited {result_rc}')
 
     grand = 0
     for p in sorted(pkgs):
-        files = sorted((ROOT / 'build' / p / 'test_results').rglob('*.xml'))
+        files = sorted((BUILD / p / 'test_results').rglob('*.xml'))
         files = [f for f in files if f.name.endswith(('.gtest.xml', '.xunit.xml'))]
         kinds = {f.name.rsplit('.', 2)[-2] for f in files}
-        if (ROOT / 'build' / p / 'pytest.xml').is_file():
-            files.append(ROOT / 'build' / p / 'pytest.xml')
+        if (BUILD / p / 'pytest.xml').is_file():
+            files.append(BUILD / p / 'pytest.xml')
             kinds.add('pytest')
         t = [0, 0, 0, 0]
         for f in files:
