@@ -228,8 +228,21 @@ ordered inputs: horizontal output fields are NaN until the horizontal
 filter is ported; a `~/reset` service and a reset on a backward ROS time
 jump (both only when triggered); throttled rejection logs; logged (not
 altered) IMU stamp anomalies. Evidence that the vertical port reproduces
-master: `check_vertical.py`, 40 event streams bit-identical per event
+master: `check_vertical.py` (since P05 `check_port.py`), 40 event streams bit-identical per event
 (docs/reviews/P04.md).
+
+P05 (combined estimator) adds, again without changing any estimate for the
+same ordered inputs: a `diagnostics` topic (callback timing, observation
+accounting), and an optimized default build (-O2, as the reference harness).
+Correction **C1 is implemented opt-in** (`correction_c1_clear_xy_flag`,
+default false, NOT APPROVED) so that R1 can evaluate it; with it off, all 50
+parity streams are bit-identical to master. P05 evidence for C1 (faults
+F1/F11): with master's D1, a velocity dropout during motion keeps the stale
+observation fused, so the velocity variance stays small and, when
+observations return, every one is rejected by the gate (a permanent
+lock-out: 2629 of 2629 rejected in the simulation fault case, error 0.51 m/s
+RMS); with C1 the first observation after the dropout is accepted and the
+error returns to 0.015 m/s RMS.
 
 **Must be preserved for fidelity:** everything in section 4, including D1–D9
 (D10 concerns invalid input only; see above) and the float32 conversions (they affect gating decisions exactly).
@@ -245,7 +258,7 @@ golden variant:
 
 | ID | Candidate | Evidence it matters | Evaluation needed |
 |---|---|---|---|
-| C1 | Clear the XY flag after a partial update (restores the pre-`e4179f4` behaviour) | `s07` | fidelity golden for "master + C1"; estimator quality on X3 data |
+| C1 | Clear the XY flag after a partial update (restores the pre-`e4179f4` behaviour). **Implemented opt-in in P05** (default off) | `s07`; P05 faults F1/F11: with D1 the filter locks out after a velocity dropout | fidelity golden for "master + C1"; estimator quality on X3 data (P05: error after a dropout 0.015 vs 0.51 m/s) |
 | C2 | Make the XY use of the Z bias consistent with master's Z convention | D2 | quantify the tilt coupling; check sign against the REEF paper |
 | C3 | Use the measured gravity magnitude (or a parameter) instead of 9.81 | `s08` | effect on Z bias convergence |
 | C4 | Allow airborne initialization (for example, skip the gate until the first accepted range) | `s15` | relevant for restarts in flight |

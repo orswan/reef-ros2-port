@@ -264,6 +264,39 @@ noise keyed by (seed, stamp), at 100 Hz, through REEF's mocap-velocity input
 | Replays | two offline replays bit-identical; ROS-replay metrics reported next to live |
 | Consistency (reported, no limit) | per axis: fraction within ±3σ and mean NEES, with the effective sample size from the error autocorrelation; assumptions stated in the report |
 
+### Measured (P05, 2026-09-30; limits above unchanged)
+
+Evidence and commands: [reviews/P05.md](reviews/P05.md), [reviews/R1_packet.md](reviews/R1_packet.md).
+
+| Criterion | Measured |
+|---|---|
+| Numerical parity | 50 streams, 282,490 events, 18,079,360 values: **all bit-identical** (built -O2 and -O0); discrete fields and gates identical; golden 15/15 |
+| Wrapper equivalence | 50/50 streams, XY message fields and fusion counts included |
+| Negatives | simulation revision 2.08e9 × tolerance; C1 on s07 4.87e8 × tolerance |
+| Frame conversions | propagation Δv vs independent AngleAxis construction ≤ 1e−12 for yaw 0/30/90/−135/170° with tilt to 20° (a transpose mutation fails the test); adapter body-level velocity vs independent matrices ≤ 1e−12 (200 random attitudes, yaw 90° and tilted known cases) |
+| D1 / C1 | D1: s07 1 observation fused 999 times; C1: no observation fused twice on 7 streams (fusions = IMU steps with a new observation; superseded observations counted: 3 at initialization, 104 duplicates in h04) |
+| QoS / executor | graph-level QoS test; callback wall time: 27 of 17,390 callbacks > 2 ms (0.16 %), median 0.18 ms, max 6.9 ms |
+| Replay isolation | foreign `/clock` and foreign `/x3/imu` both refused (exit 2); during playback each input has only its intended publisher |
+| Vertical (sim) | altitude RMSE 6.8 mm, ż RMSE 0.037 m/s |
+| Horizontal (sim, idealized velocity observations) | body-level x RMSE 0.0106 m/s (peak 0.035), y 0.0109 m/s (peak 0.044) |
+| Bias plausibility | ≤ 0.0066 rad attitude, ≤ 0.011 m/s² accel |
+| Covariance | published Z p: max asymmetry 1.5e−16, min eigenvalue > 0; full Z and XY P in the offline core output checked the same way |
+| Initialization | first estimate at the 21st IMU message; takeoff at 7.77 s (ascend) |
+| Timing | estimate age p99 16 ms (limit 20 ms; the tail comes from the Python simulation nodes; the estimator stage adds p99 about 4 ms at the 2 ms clock resolution) |
+| Recorded-stream parity, replays | simulation stream port = original, bit-identical; two offline replays byte-identical; ROS replay metrics equal to live within 0.1 mm / 0.1 mm/s RMSE |
+| Consistency (reported) | 100 % within ±3σ for z, ż, vx, vy (conservative covariances); NEES and effective sample sizes in the report |
+
+### Measured: faults (2026-09-30)
+
+35 of 36 assertions pass. **F11 (baseline, C1 off) fails**: after the 5 s
+simulated velocity dropout during `forward`, all 2629 later observations are
+rejected by the gate (the stale observation kept the variance small, D1) and
+the horizontal error stays at 0.51 m/s RMS (limit 0.10). With C1 the error
+returns to 0.015 m/s. F1 baseline D1 behaviour asserted (1499 re-fusions,
+variance not growing); F1/F11 with C1 pass; F2–F10, F12, determinism pass.
+This failure is the approved baseline's behaviour and is left failing for
+R1 (correction C1); the limit is not changed.
+
 ## 5. Future targets: criteria to be fixed before implementation
 
 These are drafts. Items marked **PROPOSED** must be confirmed (or replaced,

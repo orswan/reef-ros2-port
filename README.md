@@ -10,8 +10,9 @@ Estimator baseline (master `e4179f48`) and its reference harness:
 Acceptance criteria: [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md). Interfaces:
 [docs/INTERFACES.md](docs/INTERFACES.md). Source audit and plan:
 [docs/MIGRATION.md](docs/MIGRATION.md). Ported so far: `reef_msgs` (messages and
-helpers, P03) and the `reef_estimator` node with the **vertical** filter (P04,
-bit-identical to master on the fixtures). The horizontal filter follows in P05.
+helpers, P03) and the complete `reef_estimator` node (vertical P04, horizontal
+P05), bit-identical to master on 50 event streams. Review packet for R1:
+[docs/reviews/R1_packet.md](docs/reviews/R1_packet.md).
 
 ## Checks and demos
 
@@ -26,6 +27,7 @@ scripts/reef_check.sh sim-data
 scripts/reef_check.sh baseline
 scripts/reef_check.sh interfaces
 scripts/reef_check.sh estimator
+scripts/reef_check.sh faults
 scripts/reef_demo.sh help
 scripts/reef_demo.sh stock --gui
 scripts/reef_demo.sh replay recordings/<run>
@@ -55,7 +57,7 @@ Every command below is labelled with where it runs:
 
 | Path | Purpose |
 |---|---|
-| `src/` | ROS 2 packages (colcon source space): `reef_sim` (X3 scenario), `reef_msgs` (messages, helpers), `reef_estimator` (vertical estimator node, parameters, configuration; the unported horizontal filter in `upstream/`), `third_party/rosflight_ros_pkgs/rosflight_msgs` (unmodified upstream, for `RCRaw`) |
+| `src/` | ROS 2 packages (colcon source space): `reef_sim` (X3 scenario), `reef_msgs` (messages, helpers), `reef_estimator` (estimator node, parameters, configuration), `third_party/rosflight_ros_pkgs/rosflight_msgs` (unmodified upstream, for `RCRaw`) |
 | `sim/` | Gazebo worlds and launch files for demos/tests |
 | `scripts/` | Launch and check scripts; they set up their own environment |
 | `docs/` | Migration notes; `docs/setup/` has the original container recipe |

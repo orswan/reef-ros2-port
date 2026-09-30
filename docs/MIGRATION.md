@@ -670,3 +670,35 @@ timestamp anomalies, tilted descent, `enable_z` false).
 - [V] With vibration, the simulated vertical estimate is good and
   conservative: altitude RMSE 6.8 mm, ż RMSE 0.037 m/s, 100 % within ±3σ.
 
+## 13. P05: combined estimator (branch `p05-horizontal-estimator`)
+
+**Port.** The horizontal filter (`xy_estimator.*`, unchanged except
+includes) moved from `upstream/` into the package; `vertical_estimator.*`
+was renamed back to `xyz_estimator.*` and regained the horizontal parts of
+master verbatim. [V] 50 event streams bit-identical, including new
+horizontal fixtures with nonzero yaw and tilt.
+
+**Findings.**
+- [V] **D1 lock-out.** With master's partial update, the last XY
+  observation is re-fused at every IMU step until a new one arrives. During
+  a velocity dropout the variance therefore stays small, and when
+  observations return after the vehicle's velocity changed, the χ² gate
+  rejects all of them: the estimate stays at the stale value. Faults F11
+  fails for the baseline (0.51 m/s RMS); correction C1 (opt-in) recovers
+  (0.015 m/s). Evidence for R1.
+- [V] ROS 2's parameter-file merge silently drops a later file's value when
+  it changes the type of a key set by an earlier file (`6.0` after `6`); the
+  node cannot see it. Documented in INTERFACES §3.6.
+- [V] colcon's default build type is empty (-O0): Eigen dynamic matrices
+  made the median callback 1.1 ms. The packages now default to
+  RelWithDebInfo (-O2, as the reference harness); results unchanged.
+- [V] The P04 adapter held each IMU message for the next truth sample
+  (up to 10 ms latency); it now extrapolates the truth attitude.
+- [V] The ROS 1 velocity producer `position_to_velocity`'s pinned commit
+  (`126dae14`) no longer exists upstream; its current HEAD publishes the type
+  REEF reads. No ROS 2 ports of the mocap-velocity or RGB-D producers exist
+  (INTERFACES §3.10).
+- [V] The master landing transition resets only the Z filter; the XY reset
+  comes from the landing reset at the next IMU step, where a pending
+  observation is fused in the same step.
+

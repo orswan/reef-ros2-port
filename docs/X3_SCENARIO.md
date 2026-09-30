@@ -314,29 +314,32 @@ gives the Mac-terminal commands.
 
 `scripts/run_x3_scenario.sh --estimator` (or `scripts/reef_demo.sh
 estimator`) flies the same scenario with the stock truth-fed controller and
-runs the ported REEF estimator (vertical filter) beside it. **REEF is not in
-the control loop.**
+runs the ported REEF estimator (vertical and horizontal) beside it. **REEF is
+not in the control loop.**
 
 | Addition | Details |
 |---|---|
 | Parameters | `x3_scenario.yaml` merged with `config/x3_reef_overlay.yaml` into the run's `x3_scenario.yaml` |
 | IMU vibration (**scenario assumption**) | `imu_noise.vibration_std` = 1.0 m/s² per axis, white, keyed by (seed, stamp) like the base noise, for the whole run. Needed because the original takeoff detector requires accelerometer-magnitude variance ≥ 0.5 (m/s²)²; chosen to exceed that, not measured. With the default 0 the IMU output is unchanged from P01 |
-| `reef_adapter` | `/x3/reef/imu/data` (FLU → FRD, **truth** attitude slerped to the IMU stamp), `/x3/reef/sonar` (= `/x3/range`), `/x3/reef/input_labels` |
+| `reef_adapter` | `/x3/reef/imu/data` (FLU → FRD, **truth** attitude slerped between truth samples or extrapolated ≤ 20 ms from the last two, so no IMU message waits), `/x3/reef/sonar` (= `/x3/range`), `/x3/reef/mocap_velocity/body_level_frame` (**simulated velocity observation**, P05: truth velocity rotated FLU → ENU → NED → body-level with the truth yaw, plus 0.02 m/s white noise keyed by (seed 11, stamp), one per truth sample (100 Hz), covariance[0]/[7] = 0.0004; **not RGB-D odometry**), `/x3/reef/input_labels` |
 | Estimator | `reef_estimator_node` in namespace `/x3/reef` with `estimator_master.yaml` + `simulation.yaml`, `use_sim_time` |
-| Recorded in addition | `/x3/reef/imu/data`, `/x3/reef/sonar`, `/x3/reef/xyz_estimate`, `/x3/reef/xyz_debug_estimate`, `/x3/reef/is_flying_reef`, `/x3/reef/input_labels` |
-| Analysis | `analyze_reef_vertical` → `analysis_reef/` (report.json/md, altitude, vertical_velocity, and covariance plots, labelled idealized). Truth: range-sensor height and v_up from `/x3/truth/odom`; initialization interval until REEF takeoff + 2 s |
+| Recorded in addition | `/x3/reef/imu/data`, `/x3/reef/sonar`, `/x3/reef/mocap_velocity/body_level_frame`, `/x3/reef/xyz_estimate`, `/x3/reef/xyz_debug_estimate`, `/x3/reef/is_flying_reef`, `/x3/reef/input_labels`, `/x3/reef/diagnostics` |
+| Analysis | `analyze_reef_vertical` (name kept) → `analysis_reef/`: report.json/md and altitude, vertical-velocity, horizontal-velocity, and bias/covariance plots, labelled idealized. Truth: range-sensor height, v_up, and body-level velocity from `/x3/truth/odom`; initialization interval until REEF takeoff + 2 s. Also timing (estimate age, callback wall time) and consistency with stated assumptions |
 
 Replays of a recording (IDEALIZED INPUTS as above):
 
 - **Offline, deterministic:** `ros2 run reef_sim x3_reef_offline RUN_DIR`
-  applies the adapter to the bag in recorded order and runs the ported core
-  (`reef_estimator_event_replay`); no ROS graph, no `/clock`. The result
+  applies the adapter to the bag in recorded order (including the simulated
+  velocity observations, same seed) and runs the ported core
+  (`reef_estimator_event_replay`); no ROS graph, no `/clock`. `--drop
+  imu|range|velocity T0 T1` removes an input for fault cases. The result
   differs from the live estimate in the first samples (the bag starts after
   the live nodes did, so the 20-sample initialization begins elsewhere); the
   metrics agree (P04 evidence).
 - **ROS graph:** `scripts/replay_reef_estimator.sh RUN_DIR` plays only the
   simulation inputs (never `/x3/cmd_vel` or recorded REEF outputs) in a domain
-  of its own, refuses to start if any `/clock` publisher exists there, and
-  checks that the bag player is the only `/clock` publisher during playback
-  (`clock.json`).
+  of its own, refuses to start if `/clock`, any played topic, or any REEF
+  input already has a publisher there, and checks during playback that each
+  played topic comes only from the bag player and each REEF input only from
+  the adapter (`sources.json`).
 

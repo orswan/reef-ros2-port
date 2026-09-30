@@ -92,14 +92,13 @@ the **truth** orientation in `/x3/truth/odom`, which is **idealized**. No
 attitude estimator is implemented. The IMU deliberately does not carry
 orientation.
 
-## 3. REEF estimator node interface (vertical filter implemented in P04)
+## 3. REEF estimator node interface (implemented: vertical P04, horizontal P05)
 
 This is the contract for the ROS 2 `reef_estimator` node
 (`reef_estimator_node`, class `SensorManager`). P03 implemented the
 messages, the parameter contract, and the configuration files; P04
-implemented the node with the **vertical** filter. The horizontal filter is
-not ported yet: its inputs are not subscribed and its output fields are
-**NaN** (§3.3). Everything marked "horizontal" below is PLANNED (P05). Behaviour is
+implemented the node with the vertical filter, and P05 added the horizontal
+filter: the node now runs the complete estimator of master. Behaviour is
 that of master `e4179f48` ([BASELINE_DECISION.md §4](BASELINE_DECISION.md#4-specification-of-the-baseline-master-e4179f48));
 corrections C1–C6 are deferred to R1. Differences from ROS 1 are limited to
 middleware and are listed in §3.9.
@@ -130,7 +129,7 @@ All quantities are SI: m, m/s, m/s², rad, s. No TF is used or published.
 Input `frame_id` values are **not checked** (as in ROS 1); inputs must
 already be in the frames listed in §3.4.
 
-### 3.3 Outputs (implemented, P04; horizontal fields NaN until P05)
+### 3.3 Outputs (implemented)
 
 | Topic | Type | When | QoS |
 |---|---|---|---|
@@ -138,6 +137,7 @@ already be in the frames listed in §3.4.
 | `xyz_debug_estimate` | `reef_msgs/XYZDebugEstimate` | same, only if `debug_mode` | same |
 | `is_flying_reef` | `std_msgs/Bool` | **only on takeoff and landing transitions** (nothing is published before the first takeoff) | same |
 | `sonar_ned` | `sensor_msgs/Range` | every range message, only if `debug_mode` and `enable_sonar`; `range` negated, other fields copied | reliable, volatile, keep last 1 |
+| `diagnostics` (P05, not in ROS 1) | `diagnostic_msgs/DiagnosticArray` | every 250 IMU callbacks: callback wall time (window p50/p99/max, total, number over 2 ms, max), estimates, stamp anomalies, gate counts, accepted XY observations, XY fusions (D1 accounting), RGB-D messages ignored by `enable_measurements`, `correction_c1` | reliable, volatile, keep last 10 |
 
 Output fields (see the comments in `src/reef_msgs/msg/*.msg`):
 
@@ -146,17 +146,17 @@ Output fields (see the comments in `src/reef_msgs/msg/*.msg`):
 | `header.stamp` | stamp of the IMU message that triggered the step (sensor time; sim time in simulation) |
 | `header.frame_id` | **empty**: the message mixes two frames (NED vertical, body-level horizontal) |
 | `node_id` | not set (0) |
-| `xy_plus.x_dot`, `y_dot` | horizontal velocity, body-level frame [m/s], after the update of this step. **P04: NaN** (not estimated; the horizontal filter is not ported) |
+| `xy_plus.x_dot`, `y_dot` | horizontal velocity, body-level frame [m/s], after the update of this step |
 | `z_plus.z` | vertical position, NED [m], relative to the altitude reference: the ground below the range sensor, or the mocap origin when mocap z is used |
 | `z_plus.z_dot` | vertical velocity, NED [m/s] (positive down) |
 | debug `*_minus` / `*_plus` | state after propagation / after the update of the same step |
-| debug `xy_*` | [x_dot, y_dot, pitch_bias, roll_bias, xa_bias, ya_bias] in m/s, rad, m/s²; `sigma_plus/minus` = state ± 3·sqrt(diag P). **P04: all NaN** |
+| debug `xy_*` | [x_dot, y_dot, pitch_bias, roll_bias, xa_bias, ya_bias] in m/s, rad, m/s²; `sigma_plus/minus` = state ± 3·sqrt(diag P). Only the diagonal of the 6×6 XY covariance is published (as in ROS 1) |
 | debug `z_*` | `z`, `z_dot`, `bias` (a = u − b, m/s²), `u` (vertical specific force in NED + 9.81, m/s²), `p` = covariance of [z, z_dot, bias], **row-major 3×3**; `sigma_plus/minus` as above |
 | debug `z_*.truth`, `z_error`, `z_dot_error` | **not set (0)**; not measurements and not truth |
 
 `XYZEstimate` carries no covariance; only the debug message does.
 
-### 3.4 Inputs (vertical inputs implemented, P04)
+### 3.4 Inputs (implemented)
 
 The legacy topic names are kept (relative names, remappable). A topic is
 subscribed only if its enable parameter is true.
@@ -166,8 +166,8 @@ subscribed only if its enable parameter is true.
 | `imu/data` | `sensor_msgs/Imu` | `linear_acceleration`: specific force in **body FRD** [m/s²] (level and at rest ≈ (0, 0, −9.81)); `orientation`: attitude of the body in NED (Hamilton x, y, z, w; not normalized by REEF); `header.stamp`: defines dt. Angular velocity and all covariances are ignored | always | best effort, volatile, keep last 10 (ROS 1 queue 10) |
 | `sonar` | `sensor_msgs/Range` | `range` [m], used as vertical distance (no tilt compensation, D/C5); accepted only if `range <= max_range`. `min_range`, field of view, and stamp are ignored | `enable_sonar` | best effort, keep last 1 |
 | `mocap_ned` (`mocap_pose_topic`) | `geometry_msgs/PoseStamped` | `pose.position.z` only, NED [m] | `enable_mocap_z` | best effort, keep last 1 |
-| `mocap_velocity/body_level_frame` (`mocap_twist_topic`) | `geometry_msgs/TwistWithCovarianceStamped` | `twist.twist.linear.x/.y` [m/s], body-level; `twist.covariance[0]`, `[7]` = variances of x and y (row-major 6×6); off-diagonal terms ignored | `enable_mocap_xy` (**P04: never subscribed**, horizontal) | best effort, keep last 1 |
-| `rgbd_velocity_body_frame` (`rgbd_twist_topic`) | `reef_msgs/DeltaToVel` | `vel.twist.twist.linear.x/.y` and `vel.twist.covariance[0]`, `[7]` as for mocap; other fields unused | `enable_rgbd` (**P04: never subscribed**, horizontal) | best effort, keep last 1 |
+| `mocap_velocity/body_level_frame` (`mocap_twist_topic`) | `geometry_msgs/TwistWithCovarianceStamped` | `twist.twist.linear.x/.y` [m/s], body-level; `twist.covariance[0]`, `[7]` = variances of x and y (row-major 6×6); off-diagonal terms ignored | `enable_mocap_xy` | best effort, keep last 1 |
+| `rgbd_velocity_body_frame` (`rgbd_twist_topic`) | `reef_msgs/DeltaToVel` | `vel.twist.twist.linear.x/.y` and `vel.twist.covariance[0]`, `[7]` as for mocap; other fields unused | `enable_rgbd`; each message applied only while the parameter `enable_measurements` is true (read at every message) | best effort, keep last 1 |
 | `rc_raw` | `rosflight_msgs/RCRaw` (upstream v2.0.1) | `values[mocap_override_channel]`, PWM µs (§3.5) | `enable_mocap_switch` | best effort, keep last 1 |
 
 Best effort matches publishers of either reliability. QoS can be changed at
@@ -247,6 +247,7 @@ Defaults are the legacy code defaults; shipped values are in
 | `enable_xy`, `enable_z` | bool | true | landing reset and updates of the horizontal / vertical filter (propagation always runs) |
 | `enable_mocap_xy`, `enable_rgbd`, `enable_mocap_z`, `enable_sonar` | bool | true | subscriptions and selection (§3.5) |
 | `enable_partial_update` | bool | true | β-weighted partial updates instead of full updates |
+| `correction_c1_clear_xy_flag` (P05) | bool | false | correction candidate C1, **NOT APPROVED** (R1): clear the XY flag after a partial update so each observation is fused once; false reproduces master (D1) |
 | `enable_mocap_switch` | bool | false | RC switch (§3.5) |
 | `mocap_override_channel` | integer | 4 | 0–7 (descriptor range); a double such as `6.0` is rejected (roscpp silently used the default) |
 | `enable_measurements` | bool | true | runtime-settable RGB-D switch |
@@ -256,6 +257,13 @@ Defaults are the legacy code defaults; shipped values are in
 | `xy_x0` (6×1), `z_x0` (3×1) | double list | **required** | initial states; finite |
 | `xy_P0`, `xy_Q` (6×6), `xy_R0` (2×2), `z_P0`, `z_P0_flying` (3×3), `z_Q` (2×2), `z_R0`, `z_R_flying` (1×1) | double list | **required** | covariances: rows·cols values row-major, or n values = diagonal of an n×n matrix; finite, exactly symmetric, diagonal ≥ 0 |
 | `xy_beta` (6×1), `z_beta` (3×1) | double list | **required** | partial-update weights in [0, 1] |
+
+**Parameter files (ROS 2 behaviour, found in P05).** When several
+`--params-file` arguments set the same key, a later file that gives it a
+*different type* (for example `6.0` after `6`) is silently dropped by the
+ROS 2 parameter-file merge: the node receives only the first value and cannot
+detect this. Same-type overrides apply. Write override files with the types
+of the base file.
 
 Matrix lists may be integer lists (converted exactly). Missing, empty,
 wrong-length, non-finite, or wrongly typed values are errors. In ROS 1 a
@@ -310,6 +318,40 @@ triggered:
   harness drives the original, so the comparison with the golden output does
   not depend on scheduling.
 
+### 3.10 Optional measurement producers: ROS 2 compatibility (P05)
+
+REEF's optional inputs came from other REEF packages in ROS 1. Their ROS 2
+status [V: checked 2026-09-30 against the pinned ROS 1 sources and the Jazzy
+apt index]:
+
+| REEF input | ROS 1 producer | Its output | ROS 2 status |
+|---|---|---|---|
+| mocap velocity (`TwistWithCovarianceStamped`, body-level) | `position_to_velocity` (bundle pin `126dae14`, **no longer present upstream**; current HEAD `d61ee3c` inspected): differentiates `pose_stamped`, publishes `velocity/body_level_frame` | the exact type REEF reads | **no ROS 2 port**. The type is compatible; a ROS 2 producer must supply body-level velocity and covariance[0]/[7]. In simulation, `reef_adapter` provides an idealized stand-in from truth |
+| mocap pose (`PoseStamped`, z NED) | `ros_vrpn_client` (bundle pin `f48e2725`) | pose in the mocap frame | ROS 2 mocap drivers exist in Jazzy (`motion_capture_tracking`, `mocap_optitrack`, `mocap4r2`) and publish poses, but not in NED: a frame conversion node is needed. Not exercised |
+| RGB-D velocity (`reef_msgs/DeltaToVel`) | `rgbd_to_velocity` (`b7637198`): from `cam_to_init` (`nav_msgs/Odometry` of an RGB-D odometry) publishes `rgbd_to_velocity/body_level_frame` | `DeltaToVel` (ported in P03) | **no ROS 2 port**; the message type exists. RGB-D odometry in ROS 2 (for example RTAB-Map, in Jazzy) would need an adapter. **Not exercised: the simulated velocity observations are not RGB-D odometry** |
+| RC switch (`rosflight_msgs/RCRaw`) | `rosflight_io` | `rc_raw` | type vendored from upstream ROS 2 rosflight (P03); hardware path P10+ |
+
+### 3.11 QoS compatibility and callback ordering (P05)
+
+| Publisher → subscriber | Publisher QoS | Subscriber QoS | Compatible |
+|---|---|---|---|
+| simulation (`imu_noise`, `range_sensor`, bridge) → `reef_adapter` | reliable, volatile | reliable (rclpy default) | yes |
+| `reef_adapter` → estimator (`imu/data`, `sonar`, mocap velocity) | reliable, volatile, depth 50/10/50 | best effort, volatile, depth 10/1/1 | yes (a best-effort subscriber accepts a reliable publisher) |
+| estimator → recorder / consumers (`xyz_estimate`, `xyz_debug_estimate`, `is_flying_reef`) | reliable, transient local, depth 1 | any; `ros2 bag record` adapts | yes; late joiners get the last value |
+| `rosbag2_player` → adapter (replay) | as recorded (reliable) | reliable | yes |
+
+The node-level test checks these profiles from the graph
+(`test_sensor_manager` `QoSMatchesTheContract`). Best-effort subscriptions
+with ROS 1's queue depths can drop messages when the node falls behind; the
+simulation run shows no drops: every IMU input produced an estimate.
+
+**Executor.** A single-threaded executor with one mutually exclusive group
+is the simplest adequate configuration: in the simulation run the median
+callback takes about 0.1–0.2 ms and fewer than 0.2 % of callbacks exceed
+2 ms (IMU period 4 ms; limit 1 %), so no parallelism is needed and callback
+order is the executor's delivery order (§3.8). A multithreaded executor
+would add locking without benefit.
+
 ### 3.9 Differences from ROS 1 (middleware only)
 
 | ROS 1 | ROS 2 |
@@ -320,6 +362,7 @@ triggered:
 | private parameters, silent zero/default on bad values | node parameters with descriptors; invalid values stop the node |
 | ROS 1 `rosflight_msgs` (`44e5f37e`) | upstream ROS 2 `rosflight_msgs` v2.0.1, vendored unmodified; same `RCRaw` layout |
 | callback queue with one spinner | single-threaded executor, one mutually exclusive group |
-| (P04) horizontal fields always estimated | NaN until the horizontal filter is ported |
+| (P04) horizontal fields NaN | estimated since P05 |
+| (P05) no diagnostics | `diagnostics` topic (timing, observation accounting); correction C1 available opt-in (off) |
 | (P04) no reset | `~/reset` service; reset on a backward ROS time jump |
 | (P04) range/mocap rejection logged at every message | throttled to 1 Hz; stamp anomalies logged (throttled) and counted |

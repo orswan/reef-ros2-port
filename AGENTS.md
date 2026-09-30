@@ -98,13 +98,17 @@ with this file, this file wins.
 
 ## Estimator port rules (P04, docs/INTERFACES.md §3)
 
-- The vertical port must stay bit-identical to the reference:
-  `baseline/tools/check_vertical.py` (via `reef_check.sh estimator`) after
-  any change to `src/reef_estimator` or `reef_msgs` helpers.
+- The port must stay bit-identical to the reference:
+  `baseline/tools/check_port.py` (via `reef_check.sh baseline`) after any
+  change to `src/reef_estimator` or `reef_msgs` helpers. Physical plausibility
+  is `reef_check.sh estimator`; fault behaviour is `reef_check.sh faults`.
+- Correction C1 stays opt-in (`correction_c1_clear_xy_flag`, default false)
+  until R1 decides; never change the default to make a faults case pass.
 - Keep the estimator state on the executor thread. Callbacks that other
   threads may run (clock-jump handlers, time sources) only set flags.
-- Simulation inputs to REEF that come from truth (the attitude) are labelled
-  idealized in topics, reports, and plots. The IMU vibration overlay is a
+- Simulation inputs to REEF that come from truth (the attitude and the
+  simulated velocity observations) are labelled idealized in topics, reports,
+  and plots. Never describe the velocity observations as RGB-D odometry. The IMU vibration overlay is a
   scenario assumption, not a sensor model; do not tune it to pass limits.
 - Scripts that build C++ packages use the per-environment tree
   (`scripts/colcon_tree.py`); the shared `build/` belongs to manual builds.
