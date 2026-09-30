@@ -295,7 +295,7 @@ passes only when that behaviour is observed (never merely "no crash").
 
 | Case | Specified behaviour (limit) |
 |---|---|
-| F1 velocity dropout (fixture h-series) | XY propagates on IMU only; velocity variance grows monotonically during the dropout; the first observation after it is accepted |
+| F1 velocity dropout (fixture h05) | **amended 2026-09-30, see note.** Baseline (C1 off): as master, the last observation is re-fused at every IMU step during the dropout (D1): re-fusions counted > 0 and the velocity variance does not grow (characterization, asserted). With C1 on: no fusion during the dropout, velocity variance grows monotonically. Both: the first observation after the dropout is accepted |
 | F2 outlier observation | rejected by the gate (maha² > limit); state and flags unchanged by it |
 | F3 duplicate observation | processed as master (parity); fusion count through the node = core |
 | F4 out-of-order measurement stamps | no effect beyond arrival order (measurement stamps unused, as in master; parity) |
@@ -305,9 +305,18 @@ passes only when that behaviour is observed (never merely "no crash").
 | F8 resets | reset service and backward time jump reset (node tests); landing transition resets both filters (parity v01/h-series) |
 | F9 parameter failures | node exits 1 naming the parameter, before publishing |
 | F10 replay isolation | foreign `/clock` or foreign `/x3/imu` in the replay domain: replay refuses (exit 2) |
-| F11 simulated velocity dropout (offline replay of the simulation run with the velocity stream removed for 5 s) | outputs finite; horizontal variance grows during the dropout; horizontal error ≤ 0.10 m/s RMS from 1 s after the dropout ends |
+| F11 simulated velocity dropout (offline replay of the simulation run with the velocity stream removed for 5 s) | outputs finite; horizontal error ≤ 0.10 m/s RMS from 1 s after the dropout ends. **Amended:** variance growth during the dropout is required with C1 on; with C1 off the D1 re-fusion is reported (count, error during the dropout) |
 | F12 missing IMU stream (offline replay without IMU) | no estimates; the analysis fails (exit 1) |
 | Replay determinism | two offline replays bit-identical; ROS replay nondeterminism (delivery order) documented |
+
+Note on F1/F11 (amended 2026-09-30, after the first run of the h05 fixture
+and before any faults result was scored): as first written, F1 and F11
+required the velocity variance to grow during a dropout. The approved
+baseline cannot do that: master re-fuses the last observation at every IMU
+step (legacy defect D1), which the USER decided to preserve until R1. The
+requirement now applies with correction C1 enabled, and the baseline's D1
+behaviour is asserted as a characterization, as the P02 characterization
+cases do. Recorded for R1 as evidence for C1.
 
 ### `control` (P06–P07)
 
