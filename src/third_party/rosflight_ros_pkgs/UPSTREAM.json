@@ -1,0 +1,18 @@
+{
+  "repository": "https://github.com/rosflight/rosflight_ros_pkgs.git",
+  "tag": "v2.0.1",
+  "commit": "cefdb425d39a4c9f8c87cd1f1e367dd32887f478",
+  "commit_date": "2026-03-17",
+  "license": "BSD-3-Clause (LICENSE.md, copied from the repository root)",
+  "vendored": {
+    "rosflight_msgs": {
+      "git_tree": "0f469ec18f12c446a0420f37f122a650467b79b0",
+      "package_version": "2.0.0"
+    },
+    "LICENSE.md": {
+      "git_blob": "e0e1b24b62ba70465487acbd46f26a0d14471648"
+    }
+  },
+  "used_by_reef": ["msg/RCRaw.msg"],
+  "not_vendored": "rosflight_io, rosflight_firmware, rosflight_sim, rosflight_gcs, and the other packages of the repository (firmware, hardware I/O, and simulation are out of scope)"
+}
