@@ -1,0 +1,25 @@
+{
+ "_comment": "Original sources compiled by the controller reference harness. baseline/control/build_control_reference.sh extracts each file from the pinned Git objects and refuses to build if a SHA-256 differs.",
+ "reef_control": {
+  "url": "https://github.com/uf-reef-avl/reef_control.git",
+  "commit": "12237b76b85d755364275ed8c1147f15d8ddf15c",
+  "source": "hardware bundle (reef_estimator_bundle) pin; on master. The sim bundle pins its ancestor fa4ffa39 (same controller math, see docs/CONTROL_CHAIN.md)",
+  "license": "no LICENSE file at 12237b76; MIT added by the same repository in 43cdee8 (2020)",
+  "files": {
+   "include/controller.h": "7bb5a578f9449d18f9858831f3f1206bf7a3ce2254ec979a4458d9b5313a4993",
+   "include/PID.h": "109569229bb67c1517a0fa139c7a521edeb8c54bb49a8daa0a0f91a0ac3fe1ce",
+   "include/simple_pid.h": "01592a16c08e2cfb6f8760184edc9ce3030718ac59f9a3f1357faec1454efaaa",
+   "src/controller.cpp": "80276f7b6aa041fad34506fc454566984177727d2a411a8e13614713ce6635ca",
+   "src/PID.cpp": "dae0b99d77bbe99f1d6e4810aeaf9807e06f32bc9a3e2dd1e2b79564c83a1106",
+   "src/simple_pid.cpp": "32f4db7fb3fb5663c90af805b7f308fe8a5835d4da035fcd3d6e6d0ebca061fe",
+   "cfg/Gains.cfg": "726f6cb6c022dc53b2cd3c82dde6d2b58d5f76c6b0dd3a6bbe1e884134126910"
+  }
+ },
+ "reef_msgs": {
+  "url": "https://github.com/uf-reef-avl/reef_msgs.git",
+  "commit": "7fb63ff93269040316b71d346dbc32919da1f63d",
+  "files": {
+   "include/reef_msgs/dynamics.h": "22f9e28e7a9d25c8d0586954a97d3af60864da82e77546d31db3a00f55e80a6c"
+  }
+ }
+}

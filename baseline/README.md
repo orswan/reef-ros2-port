@@ -66,3 +66,38 @@ independent check caught this during development.)
 at `95987b51`). `reef_msgs` has no license file at `7fb63ff9`. The original
 sources are **not** copied into this repository. They are extracted from the
 pinned upstream Git objects at build time, into `build/` (ignored by Git).
+
+## Controller reference harness (P06)
+
+`baseline/control/build_control_reference.sh` builds
+`build/baseline/control/control_ref` from `reef_control` `12237b76`
+(`controller.cpp`, `PID.cpp`, `simple_pid.cpp` and their headers) and
+`reef_msgs` `7fb63ff9` (`dynamics.h`, for `get_yaw`), extracted from the
+pinned Git objects and checked against `baseline/control/provenance.json`.
+The event format is described at the top of `control_ref_main.cpp`; the
+output columns are listed in `control/control_columns.txt` and are shared
+with the port's replay tool. Adaptations (the complete list):
+
+- **C1:** `control/access_prelude.h` is force-included, as A1: library
+  headers first, then the access keywords are redefined so the harness can
+  read the controller's private and protected state. It also defines
+  `BOOST_BIND_GLOBAL_PLACEHOLDERS` (roscpp exposed `_1`, `_2` globally).
+- **C2:** stand-ins in `control/shim` (searched before `harness/shim`):
+  roscpp with ROS 1 `Time − Time` (`Duration` normalized as roscpp_core,
+  `toSec() = sec + 1e−9·nsec`), private `~` parameters, roscpp `getParam`
+  type rules (doubles accept integers, booleans only booleans), subscribers
+  that store callbacks; dynamic_reconfigure's `Server` (defaults, then the
+  node's parameters, then clamping to the cfg ranges; the callback runs at
+  `setCallback` and at each runtime change) and the generated
+  `GainsConfig` (fields, defaults, and ranges of `cfg/Gains.cfg`); the
+  legacy message layouts (`rosflight_msgs/Command` with `x, y, z, F`,
+  `Status`, `reef_msgs/DesiredState`, `nav_msgs/Odometry`); a
+  `geometry_msgs/Quaternion` that default-constructs to zeros, as in ROS 1.
+- **C3:** the controller object is constructed in zeroed storage (and the
+  harness is built with `-fno-lifetime-dse`), so `PIDController::theta`,
+  which the original reads before writing when `face_target` is set, is 0.
+  The port initializes it to 0 (CONTROL_CHAIN.md K10).
+
+`ROS_ASSERT` failures (a missing required parameter) exit with status 3.
+The ROS 2 `rc_raw` subscription of the original had an empty callback and
+is not driven.
