@@ -107,6 +107,63 @@ nothing here scores estimates. Wall-clock time is not a criterion.
 | Legacy YAML | the verbatim master `params/*.yaml` files are characterized under ROS 2's parser (accepted or rejected, with the reason recorded), and the converted ROS 2 file loads to matrices identical to the legacy interpretation of the verbatim file | verbatim files rejected (no `ros__parameters`); wrapped matrix files rejected for mixed int/float lists; wrapped `basic_params` loads with integer gates. Converted file: same keys and values, loads as double arrays |
 | Baseline untouched | `baseline/golden/` and `baseline/fixtures.lock.json` unchanged | `git diff 04c9b19 -- baseline/golden baseline/fixtures.lock.json` empty |
 
+## 4c. `estimator` (P04): vertical estimator and ROS 2 wrapper
+
+Fixed on 2026-09-30 before any P04 code was written. Scope: the **vertical**
+filter of master `e4179f48` (Z Kalman filter, IMU handling, accelerometer
+initialization, landing reset, range and mocap-z updates and gates, RC
+switch for z, takeoff/landing detection). The horizontal filter is not
+ported; its cases are reported as NOT IMPLEMENTED and never counted as
+passed. No corrections (C1–C5 deferred to R1).
+
+### Fidelity: port vs reference (fixture time)
+
+Event streams: the 15 P02 fixtures (master, both parameter kinds) and the P04
+vertical fixtures `v01`–`v10` (`baseline/tools/fixtures_vertical.py`, locked
+by `baseline/fixtures_vertical.lock.json`). Each stream is fed unchanged to the
+reference harness (pinned original, `build_reference.sh master`) and to the
+port's event driver, with the same subscription rules.
+
+| Criterion | Limit |
+|---|---|
+| Continuous Z fields per event (`z, zdot, zbias`, 9 × `zP`, `z_meas`, `zR`, `u`, `z_dt`, `g_init`) | \|port − ref\| ≤ 1e−9 · max_run\|ref_field\| (ACCEPTANCE §4, unchanged); NaN/inf classification identical |
+| Discrete fields per event (`z_flag`, `takeoff`, `n_prop`, `use_mocap_z`, `acc_init`, `n_published`, `delivered`) | exact |
+| Gate value `maha2` on events where the port evaluated a Z gate | same tolerance as continuous fields |
+| Port vs committed P02 golden (decimated rows, Z fields) | same tolerance; discrete exact |
+| Negative: port vs the simulation-revision reference (`95987b51`) on `s09` | must **exceed** the tolerance (the comparison can fail) |
+| Named vertical cases | stationary `s01`; ascent `s02`, `s03`; descent and landing `v01`; tilt/range geometry `s05`; parameter errors (node test); missing data `v02`, `s11`; range-invalid `v03`, `s10`; repeated measurements `v04`, `v08`; timestamp anomalies `v05`–`v07`; gravity/bias `s04`, `s08`; mocap z `s12`; RC switch `s13`; full update `s14`; z disabled `v10`; 250 Hz `s09`; airborne start `s15` (characterization). Each passes the fidelity rows above |
+
+### ROS 2 wrapper
+
+| Criterion | Limit |
+|---|---|
+| Wrapper equivalence | every fixture event delivered through the node's message callbacks (ROS types, float32 ranges, `builtin_interfaces/Time` stamps) gives outputs bit-identical to the core, for all vertical-relevant fixtures |
+| Live transport | a node started as a process receives IMU/range messages over DDS and publishes `xyz_estimate` whose values equal the core's for the same stream; `is_flying_reef` and outputs use the QoS of INTERFACES.md §3.3 |
+| Clock policy | dt from IMU header stamps with the ROS 1 formula (sec + 1e−9 · nanosec); output stamp = triggering IMU stamp; node clock not used for estimation |
+| Parameter errors | an invalid parameter file makes the node exit non-zero before publishing, naming the parameter |
+| Reset | the reset service returns the core to its startup state: the following outputs equal those of a fresh node on the same stream |
+| Shutdown | SIGINT exits 0 within 5 s; no process of the test survives |
+
+### Estimator quality in simulation (sim time; idealized sensors)
+
+Stock-controlled X3 scenario (`x3_scenario.yaml`, seeds 7/42), truth-fed
+controller, REEF **not** in the loop. Inputs: `/x3/imu` converted FLU → FRD,
+attitude from **truth** (idealized), range from the idealized sensor (no
+tilt compensation, as in master). Truth for scoring: the vertical height of
+the range-sensor origin (−z NED) and the vertical velocity from
+`/x3/truth/odom`, interpolated to each estimate stamp. **Initialization
+interval:** from start until 2 s after REEF declares takeoff; not scored.
+Scoring window: from its end to the end of `hover_low`.
+
+| Criterion | Limit |
+|---|---|
+| Takeoff | declared during `ascend`; no landing declared before the end of `hover_low` |
+| Outputs | finite; count ≥ 50 % of IMU messages after initialization |
+| Altitude error (z vs −h_sensor) | RMSE ≤ 0.05 m; peak ≤ 0.15 m |
+| Vertical velocity error (ż vs −v_up) | RMSE ≤ 0.10 m/s |
+| Consistency | fraction of samples within ±3σ (from `p`) reported per phase; no limit (the filter is not claimed to be consistent) |
+| Labels | plots and reports state "idealized attitude (truth) and idealized range" |
+
 ## 5. Future targets: criteria to be fixed before implementation
 
 These are drafts. Items marked **PROPOSED** must be confirmed (or replaced,
@@ -119,11 +176,11 @@ Scenario: the X3 scenario (or its extension), fixed seeds, sim time. Warm-up:
 the settle phase plus 2 s after takeoff. Metrics per phase, in the estimator's
 documented frame (NED/body-level), after conversion from truth.
 
-- **Altitude RMSE (PROPOSED):** ≤ 0.05 m, and peak error ≤ 0.15 m outside
-  takeoff/landing transients. Rationale: idealized sonar σ = 0.01 m and IMU
-  σ_a = 0.02 m/s² should support centimetre-level vertical estimates; the
-  margin covers lag during 0.4 m/s ramps.
-- **Vertical velocity RMSE (PROPOSED):** ≤ 0.10 m/s.
+- **Altitude and vertical velocity:** fixed for P04 in §4c (the proposed
+  0.05 m / 0.15 m peak / 0.10 m/s were confirmed). Rationale: idealized sonar
+  σ = 0.01 m and IMU σ_a = 0.02 m/s² should support centimetre-level vertical
+  estimates; the margin covers lag during 0.4 m/s ramps and the uncompensated
+  slant range (≤ 9 mm at the scenario's tilt).
 - **Horizontal velocity:** thresholds are set once the velocity input is
   defined. With idealized truth-derived velocity inputs, results must be
   labelled idealized.
