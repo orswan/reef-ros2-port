@@ -44,26 +44,32 @@ Targets (simulation only; nothing here talks to hardware):
   sim-data [--gui] [--regress]  X3 scenario: flight, recording, analysis
                                 (run_x3_scenario.sh); --regress adds
                                 regress_x3_scenario.sh (13 cases)
-  baseline [--floor]            P02 estimator baseline: build the pinned original
-                                estimator (master e4179f48, sim 95987b51) in the
-                                reference harness, run 15 fixtures x 2 parameter
-                                sets, independent step-wise re-derivation,
-                                covariance invariants, analytic/characterization
-                                checks, golden comparison (about 8 min);
-                                --floor adds -O0/FMA builds (floating-point floor)
+  baseline [--floor]            Numerical parity. P02: build the pinned original
+                                (master e4179f48, sim 95987b51) in the reference
+                                harness, 15 fixtures x 2 parameter sets,
+                                independent re-derivation, invariants, analytic
+                                and characterization checks, golden; --floor adds
+                                -O0/FMA builds. P05: the ported estimator (built
+                                in the per-environment tree) vs the original on
+                                50 event streams, every Z and XY field, wrapper
+                                equivalence, negatives, D1/C1 accounting (about
+                                15 min)
   interfaces                    P03 messages, helpers, parameters: vendored
                                 rosflight_msgs pin (+ tampered-copy negative),
                                 legacy reef_msgs helper vectors reproduce,
                                 colcon build + test of src/ with minimum test
                                 counts, baseline golden unchanged (about 5 min)
-  estimator                     P04 vertical estimator: colcon build + tests (unit,
-                                node, launch), port vs reference on 40 event streams
-                                with wrapper equivalence and named vertical cases,
-                                X3 simulation + REEF scored against truth (idealized
-                                inputs), offline and ROS replays of that run, and a
-                                foreign-/clock negative case (about 15 min).
-                                Horizontal cases: NOT IMPLEMENTED (P05), not counted
-  faults                        NOT IMPLEMENTED (milestone P05)
+  estimator                     Physical plausibility (P04/P05): colcon build +
+                                tests; X3 simulation + REEF scored against truth
+                                (idealized inputs: truth attitude, idealized
+                                range, simulated velocity observations, IMU
+                                vibration assumption); parity with the original
+                                on that recorded stream; two offline replays
+                                bit-identical; ROS replay isolated from foreign
+                                clock/sensor streams (about 12 min)
+  faults                        F1-F12 (ACCEPTANCE.md section 5) on fixtures, the
+                                node, replays, and an own simulation run (about
+                                12 min)
   control                       NOT IMPLEMENTED (milestones P06-P07)
   vision                        NOT IMPLEMENTED (milestone P08)
   release                       NOT IMPLEMENTED (milestone P09)
@@ -150,14 +156,13 @@ for a in "$@"; do
 done
 case "$target" in
   help|-h|--help) usage; exit 0 ;;
-  faults) not_implemented faults P05 ;;
   control) not_implemented control P06-P07 ;;
   vision) not_implemented vision P08 ;;
   release) not_implemented release P09 ;;
-  env|clock|sim-data|baseline|interfaces|estimator) ;;
+  env|clock|sim-data|baseline|interfaces|estimator|faults) ;;
   *) echo "unknown target '$target'"; usage; exit 2 ;;
 esac
-if [[ "$target" == env || "$target" == interfaces || "$target" == estimator ]] && (( gui || regress || floor )); then
+if [[ "$target" == env || "$target" == interfaces || "$target" == estimator || "$target" == faults ]] && (( gui || regress || floor )); then
   echo "target '$target' takes no options"; exit 2
 fi
 if [[ "$target" == baseline ]] && (( gui || regress )); then echo "target 'baseline' accepts only --floor"; exit 2; fi
@@ -206,6 +211,19 @@ case "$target" in
                 "$REEF_ROOT/build/baseline/out")
     sim_notes+=("not applicable (fixture time only): $(grep -m1 -oE '[0-9]+ runs, [0-9]+ rows' "$logdir/baseline.log" || echo '?')")
     grep -E '^(PASS|FAIL): [0-9]+/[0-9]+ assertions' "$logdir/baseline.log" | sed 's/^/     /' || true
+    # P05: the port against the original (numerical parity).
+    tree="$(python3 "$S/colcon_tree.py")"
+    configs+=("$B/fixtures_vertical.lock.json" "$B/fixtures_horizontal.lock.json" "$B/tools/check_port.py")
+    # shellcheck disable=SC2016  # expanded by the inner shell
+    run_step "port build (per-environment tree)" 0 "$logdir/port_build.log" \
+      bash -c 'cd "$1" && colcon --log-base "$2/log" build --base-paths src --symlink-install --build-base "$2/build" --install-base "$2/install" --packages-up-to reef_estimator --event-handlers console_cohesion-' \
+      _ "$REEF_ROOT" "$tree"
+    # shellcheck disable=SC2016  # expanded by the inner shell
+    run_step "port vs original: 50 streams, all fields, wrapper, C1" 0 "$logdir/port_parity.log" \
+      bash -c 'source "$1/install/setup.bash" && exec python3 "$2" --port "$1/install/reef_estimator/lib/reef_estimator/reef_estimator_event_replay"' \
+      _ "$tree" "$B/tools/check_port.py"
+    grep -E '^(PASS|FAIL) \[(negative|accounting)\]|^(PASS|FAIL): ' "$logdir/port_parity.log" | sed 's/^/     /' || true
+    artifacts+=("$REEF_ROOT/build/baseline/port_parity/fixtures/results.json")
     ;;
 
   interfaces)
@@ -235,9 +253,7 @@ case "$target" in
 
   estimator)
     tree="$(python3 "$S/colcon_tree.py")"
-    configs+=("$REEF_ROOT/baseline/provenance.json" "$REEF_ROOT/baseline/fixtures.lock.json"
-              "$REEF_ROOT/baseline/fixtures_vertical.lock.json"
-              "$REEF_ROOT/src/reef_estimator/config/estimator_master.yaml"
+    configs+=("$REEF_ROOT/src/reef_estimator/config/estimator_master.yaml"
               "$REEF_ROOT/src/reef_estimator/config/simulation.yaml"
               "$REEF_ROOT/src/reef_sim/config/x3_scenario.yaml" "$REEF_ROOT/src/reef_sim/config/x3_reef_overlay.yaml")
     "$REEF_ROOT/baseline/fetch_sources.sh" >"$logdir/sources_precheck.log" 2>&1 \
@@ -246,25 +262,24 @@ case "$target" in
       || blocked "X3 assets missing or modified; run scripts/setup_assets.py"
     run_step "colcon build + test (unit, node, launch tests)" 0 "$logdir/colcon.log" \
       python3 "$S/check_colcon.py"
-    # shellcheck disable=SC2016  # expanded by the inner shell
-    run_step "vertical fidelity vs reference, wrapper, named cases" 0 "$logdir/vertical.log" \
-      bash -c 'source "$1/install/setup.bash" && exec python3 "$2" --port "$1/install/reef_estimator/lib/reef_estimator/reef_estimator_event_replay"' \
-      _ "$tree" "$REEF_ROOT/baseline/tools/check_vertical.py"
-    grep -E '^(PASS|FAIL) \[(case|negative)\]|^NOT IMPLEMENTED|^(PASS|FAIL): ' "$logdir/vertical.log" | sed 's/^/     /' || true
     run="$logdir/x3_reef"
-    run_step "simulation: X3 + REEF vertical vs truth (idealized)" 0 "$logdir/sim.log" \
+    run_step "simulation: X3 + REEF vs truth (idealized inputs)" 0 "$logdir/sim.log" \
       env REEF_X3_OUT="$run" "$S/run_x3_scenario.sh" --estimator
-    grep -E '^(PASS|FAIL) (takeoff|no landing|outputs|altitude|vertical velocity)' "$logdir/sim.log" | sed 's/^/     /' || true
+    grep -E '^(PASS|FAIL) (takeoff|no landing|outputs|covariance|altitude|vertical velocity|horizontal|bias|estimate age|callback)' "$logdir/sim.log" | sed 's/^/     /' || true
     # shellcheck disable=SC2016  # expanded by the inner shell
-    run_step "offline replay of that run (deterministic core)" 0 "$logdir/offline.log" \
+    run_step "offline replay of that run (core, full covariances)" 0 "$logdir/offline.log" \
       bash -c 'source "$1/install/setup.bash" && ros2 run reef_sim x3_reef_offline "$2" && ros2 run reef_sim analyze_reef_vertical "$2" --offline "$2/reef_offline"' \
       _ "$tree" "$run"
-    run_step "ROS replay of that run (bag is the only /clock)" 0 "$logdir/replay.log" \
+    # shellcheck disable=SC2016  # expanded by the inner shell
+    run_step "recorded simulation stream: port = original" 0 "$logdir/stream_parity.log" \
+      bash -c 'source "$1/install/setup.bash" && exec python3 "$2" --port "$1/install/reef_estimator/lib/reef_estimator/reef_estimator_event_replay" --stream "$3/reef_offline/params.params" "$3/reef_offline/inputs.events" x3_run' \
+      _ "$tree" "$REEF_ROOT/baseline/tools/check_port.py" "$run"
+    # shellcheck disable=SC2016  # expanded by the inner shell
+    run_step "two offline replays bit-identical" 0 "$logdir/determinism.log" \
+      bash -c 'source "$1/install/setup.bash" && ros2 run reef_sim x3_reef_offline "$2" --out "$2/reef_offline_repeat" >/dev/null && cmp "$2/reef_offline/estimates.csv" "$2/reef_offline_repeat/estimates.csv" && echo "identical: $(wc -c < "$2/reef_offline/estimates.csv") bytes"' \
+      _ "$tree" "$run"
+    run_step "ROS replay (no foreign clock or sensor streams)" 0 "$logdir/replay.log" \
       "$S/replay_reef_estimator.sh" "$run"
-    run_step "negative: replay refuses a foreign /clock" 0 "$logdir/clock_guard.log" \
-      "$S/check_replay_clock_guard.sh" "$run"
-    results+=("N/A|horizontal filter (XY velocity, biases, mocap/RGB-D XY)|NOT IMPLEMENTED (milestone P05); not counted")
-    echo "NOT IMPLEMENTED: horizontal estimation (XY filter not ported, milestone P05); not counted"
     span="$(python3 - "$run/scenario_result.json" 2>/dev/null <<'PY' || echo '?'
 import json, sys
 r = json.load(open(sys.argv[1]))
@@ -272,7 +287,25 @@ print(f"{r['phases'][0]['t_start']:.2f} -> {r['phases'][-1]['t_end']:.2f} s (sce
 PY
 )"
     sim_notes+=("$span")
-    artifacts+=("$REEF_ROOT/build/baseline/port_vertical/results.json" "$run/analysis_reef" "$run/reef_offline/analysis_reef")
+    artifacts+=("$run/analysis_reef" "$run/reef_offline/analysis_reef")
+    ;;
+
+  faults)
+    tree="$(python3 "$S/colcon_tree.py")"
+    configs+=("$REEF_ROOT/scripts/check_faults.py" "$REEF_ROOT/baseline/fixtures_horizontal.lock.json")
+    "$REEF_ROOT/baseline/fetch_sources.sh" >"$logdir/sources_precheck.log" 2>&1 \
+      || blocked "pinned upstream sources unavailable (see ${logdir#"$REEF_ROOT"/}/sources_precheck.log)"
+    python3 "$S/setup_assets.py" --verify >"$logdir/assets_precheck.log" 2>&1 \
+      || blocked "X3 assets missing or modified; run scripts/setup_assets.py"
+    run="$logdir/x3_reef"
+    run_step "simulation run for the fault cases (--estimator)" 0 "$logdir/sim.log" \
+      env REEF_X3_OUT="$run" "$S/run_x3_scenario.sh" --estimator
+    # shellcheck disable=SC2016  # expanded by the inner shell
+    run_step "fault cases F1-F12" 0 "$logdir/faults.log" \
+      bash -c 'source "$1/install/setup.bash" && exec python3 "$2" --tree "$1" --run "$3"' \
+      _ "$tree" "$S/check_faults.py" "$run"
+    grep -E '^(PASS|FAIL) \[(F[0-9]+|determinism)\]|^(PASS|FAIL): ' "$logdir/faults.log" | grep -v 'parity and wrapper' | sed 's/^/     /' || true
+    sim_notes+=("fixture time and the simulation run in ${run#"$REEF_ROOT"/}")
     ;;
 
   sim-data)

@@ -28,17 +28,18 @@ Modes (simulation only):
                       Attach consumers in that domain with use_sim_time:=true.
                       REEF_REPLAY_DOMAIN=<n> selects the domain.
   estimator [--gui]   X3 flown by the stock truth-fed controller with the ported
-                      REEF estimator (VERTICAL filter only) running beside it on
-                      idealized inputs (truth attitude, idealized range, IMU
-                      vibration assumption). REEF is not in the control loop.
+                      REEF estimator (vertical + horizontal) running beside it on
+                      IDEALIZED inputs (truth attitude, idealized range, simulated
+                      velocity observations from truth, IMU vibration assumption).
+                      REEF is not in the control loop.
                       Records, scores against truth, plots (analysis_reef/).
   estimator --offline RUN_DIR
                       Deterministic replay of a recording: adapter + ported core,
                       no ROS graph and no /clock (RUN_DIR/reef_offline/).
   estimator --replay RUN_DIR [--rate R]
                       Replay on a ROS graph in its own domain; the bag is the only
-                      /clock source (checked) (RUN_DIR/reef_replay_*/).
-                      Horizontal estimation: NOT IMPLEMENTED (milestone P05).
+                      /clock source and no foreign sensor streams exist (checked)
+                      (RUN_DIR/reef_replay_*/).
   closed-loop         NOT IMPLEMENTED (milestone P07)
   vision              NOT IMPLEMENTED (milestone P08)
 
@@ -91,7 +92,7 @@ case "$mode" in
         # shellcheck disable=SC1091
         source "$tree/install/setup.bash"
         set -u
-        echo "SIMULATION REPLAY (offline, deterministic) of $run: IDEALIZED INPUTS; vertical filter only."
+        echo "SIMULATION REPLAY (offline, deterministic) of $run: IDEALIZED INPUTS."
         ros2 run reef_sim x3_reef_offline "$run" || rc=1
         (( rc == 0 )) && { ros2 run reef_sim analyze_reef_vertical "$run" --offline "$run/reef_offline" || rc=1; }
         ;;
@@ -112,9 +113,9 @@ case "$mode" in
         if [[ " ${args[*]:-} " == *" --gui "* ]] && ! "$S/check_display.sh" >/dev/null 2>&1; then
           echo "BLOCKED: browser desktop not ready (scripts/check_display.sh)"; exit 2
         fi
-        echo "SIMULATION: X3 flown by the stock truth-fed controller; REEF vertical estimator runs beside it"
-        echo "on IDEALIZED INPUTS (truth attitude, idealized range, IMU vibration assumption); not in the loop."
-        echo "Horizontal estimation: NOT IMPLEMENTED (milestone P05)."
+        echo "SIMULATION: X3 flown by the stock truth-fed controller; the REEF estimator runs beside it on"
+        echo "IDEALIZED INPUTS (truth attitude, idealized range, simulated velocity observations from truth,"
+        echo "IMU vibration assumption). REEF is not in the control loop."
         "$S/run_x3_scenario.sh" --estimator "${args[@]}" || rc=$?
         ;;
       *) echo "invalid option '$1' for 'estimator'"; usage; exit 2 ;;
