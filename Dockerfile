@@ -41,6 +41,12 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 #   ros-jazzy-rosbag2, ros-jazzy-rosbag2-py, ros-jazzy-rosbag2-storage-mcap
 #               recording and reading the X3 scenario bags (already in the
 #               ros-base image; listed because reef_sim depends on them)
+#   ros-jazzy-rosidl-default-generators, -rosidl-default-runtime,
+#   -eigen3-cmake-module, -rclcpp, -rclpy, -ament-cmake-gtest,
+#   -ament-cmake-pytest, -rosidl-runtime-py, python3-pytest, python3-yaml
+#               P03 packages (reef_msgs, reef_estimator, vendored
+#               rosflight_msgs) and their tests; expected in the ros-base
+#               image already, listed because package.xml declares them
 # The ROS apt repository keeps only current versions, so versions are recorded
 # at build time (/etc/reef-image-packages.txt), not pinned.
 # DL3008: see above. DL3015: recommends are installed on purpose (as in the original).
@@ -65,6 +71,16 @@ RUN apt-get update \
         ros-jazzy-rosbag2 \
         ros-jazzy-rosbag2-py \
         ros-jazzy-rosbag2-storage-mcap \
+        ros-jazzy-rosidl-default-generators \
+        ros-jazzy-rosidl-default-runtime \
+        ros-jazzy-eigen3-cmake-module \
+        ros-jazzy-rclcpp \
+        ros-jazzy-rclpy \
+        ros-jazzy-ament-cmake-gtest \
+        ros-jazzy-ament-cmake-pytest \
+        ros-jazzy-rosidl-runtime-py \
+        python3-pytest \
+        python3-yaml \
     && rm -rf /var/lib/apt/lists/* \
     && dpkg-query -W -f='${Package}\t${Version}\n' | sort > /etc/reef-image-packages.txt
 
