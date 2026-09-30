@@ -265,7 +265,13 @@ case "$target" in
       "$S/check_replay_clock_guard.sh" "$run"
     results+=("N/A|horizontal filter (XY velocity, biases, mocap/RGB-D XY)|NOT IMPLEMENTED (milestone P05); not counted")
     echo "NOT IMPLEMENTED: horizontal estimation (XY filter not ported, milestone P05); not counted"
-    sim_notes+=("scenario $(python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); print(f"{r[\"phases\"][0][\"t_start\"]:.2f} -> {r[\"phases\"][-1][\"t_end\"]:.2f} s")' "$run/scenario_result.json" 2>/dev/null || echo '?')")
+    span="$(python3 - "$run/scenario_result.json" 2>/dev/null <<'PY' || echo '?'
+import json, sys
+r = json.load(open(sys.argv[1]))
+print(f"{r['phases'][0]['t_start']:.2f} -> {r['phases'][-1]['t_end']:.2f} s (scenario phases)")
+PY
+)"
+    sim_notes+=("$span")
     artifacts+=("$REEF_ROOT/build/baseline/port_vertical/results.json" "$run/analysis_reef" "$run/reef_offline/analysis_reef")
     ;;
 

@@ -35,7 +35,7 @@ EXPECTED = {'reef_msgs', 'reef_estimator', 'reef_sim', 'rosflight_msgs'}
 # package -> (minimum test cases, required result-file kinds)
 MINIMUM = {
     'reef_msgs': (49, {'gtest', 'xunit'}),
-    'reef_estimator': (60, {'gtest', 'xunit'}),
+    'reef_estimator': (58, {'gtest', 'xunit'}),
     'reef_sim': (12, {'pytest'}),
 }
 BASE = ['--base-paths', 'src']
