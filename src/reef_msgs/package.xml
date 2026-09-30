@@ -1,25 +1,38 @@
 <?xml version="1.0"?>
-<package format="2">
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
   <name>reef_msgs</name>
-  <version>1.0.0</version>
-  <description>The reef_msgs package</description>
-  <maintainer email="prashant.ganehs@ufl.edu">Prashant Ganesh</maintainer>
-
-
+  <version>2.0.0</version>
+  <description>
+    ROS 2 port of the UF REEF reef_msgs package (7fb63ff): the messages and
+    helpers used by reef_estimator, plus parameter validation for matrices.
+  </description>
+  <maintainer email="orswan@stanford.edu">orswan</maintainer>
+  <!-- Upstream declares license TODO; the reef_estimator_bundle that pins it
+       is MIT. See README.md (license status is an open question). -->
   <license>TODO</license>
+  <author>Prashant Ganesh (original ROS 1 package)</author>
 
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>rosidl_default_generators</buildtool_depend>
+  <buildtool_depend>eigen3_cmake_module</buildtool_depend>
+  <buildtool_export_depend>eigen3_cmake_module</buildtool_export_depend>
 
-  <doc_depend>doxygen</doc_depend>
-  <buildtool_depend>catkin</buildtool_depend>
-  <depend>geometry_msgs</depend>
-  <depend>roscpp</depend>
-  <depend>rospy</depend>
   <depend>std_msgs</depend>
-  <depend>tf2_eigen</depend>
-  <depend>message_generation</depend>
-  <depend>message_runtime</depend>
+  <depend>geometry_msgs</depend>
+  <depend>rclcpp</depend>
+  <depend>eigen</depend>
+
+  <exec_depend>rosidl_default_runtime</exec_depend>
+
+  <test_depend>ament_cmake_gtest</test_depend>
+  <test_depend>ament_cmake_pytest</test_depend>
+  <test_depend>python3-pytest</test_depend>
+  <test_depend>rosidl_runtime_py</test_depend>
+
+  <member_of_group>rosidl_interface_packages</member_of_group>
 
   <export>
-
+    <build_type>ament_cmake</build_type>
   </export>
 </package>

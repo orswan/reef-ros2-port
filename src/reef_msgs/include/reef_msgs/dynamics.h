@@ -1,65 +1,29 @@
 //
 // Created by prashant on 2/28/19.
 //
+// ROS 2 port (P03): only the functions used by reef_estimator master e4179f48
+// are kept, with their bodies unchanged; the rest remain in the history
+// (reef_msgs 7fb63ff). This header depends on Eigen only. The
+// geometry_msgs overload of quaternion_to_rotation is in ros_conversions.hpp.
 
 #ifndef PROJECT_DYNAMICS_H
 #define PROJECT_DYNAMICS_H
 
-#include <eigen3/Eigen/Core>
-#include <eigen3/Eigen/Geometry>
-#include <ros/ros.h>
-#include <tf/tf.h>
-#include <geometry_msgs/Quaternion.h>
+#include <Eigen/Core>
+#include <Eigen/Geometry>
 
 namespace reef_msgs
 {
 
-void roll_pitch_yaw_from_quaternion(Eigen::Matrix<double,4,1>q, double &phi, double &theta, double &psi);
-void roll_pitch_yaw_from_quaternion(Eigen::Quaterniond q, double &phi, double &theta, double &psi);
-void roll_pitch_yaw_from_quaternion(geometry_msgs::Quaternion q, double &phi, double &theta, double &psi);
-
-Eigen::Matrix<double,4,1> quaternion_from_roll_pitch_yaw(double phi, double theta, double psi);
-void quaternion_from_roll_pitch_yaw(double phi, double theta, double psi, Eigen::Quaterniond& q);
-void quaternion_from_roll_pitch_yaw(double phi, double theta, double psi, geometry_msgs::Quaternion& q);
-
+// Returns C = I - 2 w [v]x + 2 [v]x^2 for q = (w, v). For a unit Hamilton
+// quaternion that is the transpose of q.toRotationMatrix(): with q the
+// orientation of the body in NED, C maps NED vectors into the body frame.
+// q is not normalized.
 Eigen::Matrix3d quaternion_to_rotation(Eigen::Quaterniond q);
-Eigen::Matrix3d quaternion_to_rotation(geometry_msgs::Quaternion q);
 
-Eigen::Matrix3d roll_pitch_yaw_to_rotation_321(double roll, double pitch, double yaw);
-Eigen::Matrix3d DCM_from_Euler321(const Eigen::Vector3d rpy);
-
+// 3-2-1 Euler angles [rad] from C (NED to body):
+// roll = atan2(C12, C22), pitch = -asin(C02), yaw = atan2(C01, C00).
 void roll_pitch_yaw_from_rotation321(Eigen::Matrix3d C, double& roll, double& pitch, double& yaw );
-void roll_pitch_yaw_from_rotation321(Eigen::Matrix3d C, Eigen::Vector3d &rpy);
-
-Eigen::Matrix4d Omega(Eigen::Vector3d pqr);
-
-Eigen::Matrix<double,4,1> quaternionMultiplication(Eigen::Matrix<double,4,1> p,Eigen::Matrix<double,4,1> q);
-Eigen::Quaterniond quaternionMultiplication(Eigen::Quaterniond p , Eigen::Quaterniond q);
-
-Eigen::Quaterniond vector2quat(Eigen::Matrix<double, 4,1> mat_in);
-Eigen::Matrix<double, 4,1> quat2vector(Eigen::Quaterniond q_in);
-
-Eigen::Affine3d convertNWU2NED(const Eigen::Affine3d& nwu);
-
-inline Eigen::Vector3d unSkew(const Eigen::Matrix3d& skew_matrix){
-    Eigen::Vector3d vec;
-    vec << -skew_matrix(1,2) , skew_matrix(0,2), -skew_matrix(0,1);
-    return vec;
-}
-
-inline void get_yaw(Eigen::Matrix3d C, double& yaw){
-  yaw =  atan2(C(0,1),C(0,0));
-}
-
-inline double get_yaw(Eigen::Quaterniond q)
-  {
-    return std::atan2(2.0*(q.w()*q.z()+q.x()*q.y()), 1.0-2.0*(q.y()*q.y() + q.z()*q.z()));
-  }
-
-inline double get_yaw(geometry_msgs::Quaternion q)
-{
-  return std::atan2(2.0*(q.w*q.z+q.x*q.y), 1.0-2.0*(q.y*q.y + q.z*q.z));
-}
 
 inline Eigen::Matrix3d skew(const Eigen::Vector3d& vec)
 {
@@ -68,20 +32,6 @@ inline Eigen::Matrix3d skew(const Eigen::Vector3d& vec)
           vec(2),       0, -vec(0), \
           -vec(1),  vec(0),       0;
   return skew;
-}
-
-inline double pi2pi(double angle)
-{
-    double return_angle;
-    if(std::abs(angle - M_PI ) > 0.001)
-    {
-        if(angle > M_PI)
-            return_angle = angle - 2 * M_PI;
-        if(angle < -M_PI)
-            return_angle = angle + 2 * M_PI;
-    } else
-        return_angle = angle;
-    return return_angle;
 }
 
 }
