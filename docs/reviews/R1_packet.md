@@ -88,7 +88,7 @@ Physical plausibility (`reef_check.sh estimator`; idealized inputs, REEF
 not in the loop): altitude RMSE 6.8 mm, vertical velocity 0.037 m/s,
 horizontal 0.011 m/s per axis, biases ≤ 0.007 rad / 0.011 m/s²,
 covariances symmetric and PSD, 100 % within ±3σ (conservative), callback
-p99 about 1.4 ms, estimate age p99 16 ms. See [reviews/P05.md](P05.md).
+p99 about 1.5 ms, estimate age p99 8–16 ms (run to run). See [reviews/P05.md](P05.md).
 
 Faults (`reef_check.sh faults`): 35/36 pass. **F11 baseline fails**: after a
 5 s velocity dropout during motion, master's D1 keeps the stale observation

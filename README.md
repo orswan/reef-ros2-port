@@ -395,8 +395,8 @@ Inspecting failures:
 
 A summary of "0 tests" is **not** a pass: it means nothing ran. `colcon test`
 without `--return-code-on-test-failure` exits 0 even when tests fail. As of
-P04: `reef_sim` 12 unit tests (the nodes are exercised by `reef_check.sh
-sim-data` and `estimator`), `reef_msgs` 49 and `reef_estimator` 58 test
+P05: `reef_sim` 15 unit tests (the nodes are exercised by `reef_check.sh
+sim-data` and `estimator`), `reef_msgs` 49 and `reef_estimator` 66 test
 cases, including a launch test. `scripts/reef_check.sh interfaces` and
 `estimator` run the whole sequence and fail on any failure, skip, or
 missing results (`scripts/check_colcon.py`).
