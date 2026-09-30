@@ -77,7 +77,7 @@ wrapper boundary ([INTERFACES.md §1](INTERFACES.md#1-command-interface)).
 | P03 messages, helpers, ROS 2 interfaces | done, merged (USER: dev-container `interfaces` PASS) | [reviews/P03.md](reviews/P03.md) |
 | P04 vertical estimator and ROS 2 wrapper | done, merged (USER: dev-container `estimator` PASS) | [reviews/P04.md](reviews/P04.md) |
 | P05 combined estimator, faults | **done on `p05-horizontal-estimator`**; `faults` fails F11 (legacy D1, by design until R1) | `reef_check.sh baseline|estimator|faults`; [ACCEPTANCE.md §4d, §5](ACCEPTANCE.md), [reviews/P05.md](reviews/P05.md) |
-| R1 independent review | **packet ready**: [reviews/R1_packet.md](reviews/R1_packet.md) | decisions C1–C6 |
+| R1 independent review | packet ready: [reviews/R1_packet.md](reviews/R1_packet.md). **A Claude self-review was run at `49f7073` (§5f): SELF-REVIEW, not independent confirmation.** C1–C6 are still undecided (USER) | decisions C1–C6 |
 | P06–P07 controller, REEF closed loop | not started | |
 | P08 RGB-D | not started | |
 | P09 simulation release | not started | |
@@ -186,6 +186,51 @@ PASS 6/6 (age p99 8 ms, adapter stage p99 4 ms), `faults` 35/36 (F11 only),
 is pending (H7).
 
 Nothing in P05 was run inside `reef_ros2_dev` by the implementer.
+
+## 5f. R1 review: Claude self-review (dev container, 2026-09-30, `49f7073`)
+
+**Label: SELF-REVIEW.** This was a fresh Claude session (Opus 5.5, `claude-opus-5-5`) using the R1
+prompt. It shares the implementer's model and may share its blind spots, so it is
+not the independent R1 confirmation that
+[handoff/REEF_TESTING_AND_REVIEW.md](handoff/REEF_TESTING_AND_REVIEW.md) asks for.
+It does not authorize flight. The reviewer edited no source; the only change is this STATUS entry.
+
+| Check (run by the reviewer) | Exit | Result |
+|---|---|---|
+| originals in `c80f824`/`d8e3096` vs `reference/` at `e4179f48`/`7fb63ff9` (sha256) | 0 | identical (12 files) |
+| `baseline/tools/source_diff.sh <scratch>` | 0 | math files: include lines only |
+| reference rebuilt (`REF_TAG=r1 build_reference.sh master`), port rebuilt; h05 ref vs port | 0 | 6720 events, all 79 shared columns byte-identical; D1 visible (estimate pinned near 0.196 m/s while truth reaches 0.40) |
+| `test_horizontal_core` | 0 | 7/7; expected values from Eigen AngleAxis and f = C(a − g), not from the code |
+| F1, F2 (`check_faults.f1/f2`, fixtures) | 0 | 5/5 |
+| fresh `run_x3_scenario.sh --estimator`, then F11/F12/determinism | 1 | **F11 baseline FAIL** 0.506 m/s RMS (0 of 2629 later observations accepted); F11 C1 PASS 0.015; F12, determinism PASS |
+
+Findings (not fixed):
+1. **Publish order differs from master** (`sensor_manager.cpp:242-249`).
+   The node publishes after `checkTakeoffState`, but master published before
+   it (BASELINE_DECISION §4.5 step 8). At a landing step, `xyz_estimate`
+   carries z = z_x0 and ż = 0 instead of the pre-landing estimate (h08,
+   t = 11.922 s: master ≈ −0.236 m, +0.34 m/s). At takeoff and landing, the debug P and σ
+   carry P0_flying/P0. The parity checks cannot see this, because harness and
+   port both record the state after the callback.
+2. D1 makes the filter about 3× overconfident even without dropouts (F1: P_vx
+   7.3e−4 vs 2.3e−3 with C1). F11 shows a permanent lock-out.
+3. No case covers a NaN, zero, or negative velocity-message covariance or
+   observation, which master's gate accepts (NaN D²), or a NaN attitude (D8).
+4. Covariance parameters are checked only for symmetry and diagonal ≥ 0, not
+   for positive semidefiniteness (`matrix_operation.h:138-155`).
+5. Stale docs: this file's §1 (`main` is `49f7073` and contains P05), and
+   INTERFACES §1 (`faults` "not implemented", `estimator` "vertical only") and
+   §3.7 ("no health topic").
+6. The vibration assumption is applied for the whole run, including on the
+   ground. In simulation the takeoff detector therefore reduces to the
+   range ≥ 0.25 m test. Gazebo's default gravity (9.8) against REEF's 9.81 is
+   the likely source of the ≈ 0.01 m/s² z bias (D3).
+
+Recommendations, for the USER to decide: C1 approve; C6 revise before P07 (or
+make the vibration depend on thrust); C4 decide before P07; C2, C3, and C5
+defer (small effect on the declared simulation inputs); keep the vibration
+assumption, labelled, until C6 is decided. Still needed: a genuinely
+independent R1 (a different model or a human), and a decision on finding 1.
 
 ## 6. Open items and known limits
 
