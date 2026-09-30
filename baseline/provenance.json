@@ -1,0 +1,63 @@
+{
+  "_comment": "Original sources compiled by the reference harness. baseline/build_reference.sh extracts each file from the pinned Git objects and refuses to build if a SHA-256 differs.",
+  "repositories": {
+    "reef_estimator": {
+      "url": "https://github.com/uf-reef-avl/reef_estimator.git",
+      "license": "MIT (LICENSE at e4179f48; the file is absent at 95987b51)"
+    },
+    "reef_msgs": {
+      "url": "https://github.com/uf-reef-avl/reef_msgs.git",
+      "license": "no LICENSE file in the repository at 7fb63ff9"
+    }
+  },
+  "reef_msgs": {
+    "commit": "7fb63ff93269040316b71d346dbc32919da1f63d",
+    "note": "pinned identically by reef_estimator_bundle and reef_estimator_sim_bundle",
+    "files": {
+      "include/reef_msgs/dynamics.h": "22f9e28e7a9d25c8d0586954a97d3af60864da82e77546d31db3a00f55e80a6c",
+      "include/reef_msgs/matrix_operation.h": "7bb7c8d45c4db89927e90fd50f90256e7d73d57d231481745329b9866b1c84f3",
+      "src/dynamics.cpp": "1b8baffdc14332a4dd27333ccbbde151bf39ba9e22b4a25f0189b28bb3ceb44f",
+      "src/matrix_operation.cpp": "1fb31ac9bd467e759612c150d42f3b65137bc00be16f749df1dc205d60e4c484"
+    }
+  },
+  "variants": {
+    "master": {
+      "commit": "e4179f48c3f26e22bd1366b71ee1e117ce2f5f7f",
+      "source": "reef_estimator master; pinned by reef_estimator_bundle a20b4e1d",
+      "files": {
+        "include/estimator.h": "4789653396f4b7224fcea15febaf02ba8117f76786a5c05f6503b800ab3d44fa",
+        "include/sensor_manager.h": "e60b7ed6048294a586e1f7104921d5be00dddc48442071044cf1dfb3a0ac894a",
+        "include/xy_estimator.h": "f576165c03de2b77da05b2bd8235d3885b94fb8c742784f7d5bfd74e88de9d71",
+        "include/xyz_estimator.h": "d84871585fc859a004fc4aa83dcc5a08dfced9ce7865fa2ef452533c8ba3791a",
+        "include/z_estimator.h": "36621bdf064170fe1bc833145ee7359bdae6616129c1ac3b418ca84e9c3da5d0",
+        "src/estimator.cpp": "a72421a3e0ef403bfdd04ca5fa4f371f7c779fa983bf39fc26b32149c67a65dc",
+        "src/sensor_manager.cpp": "fb54b728410809845fd799743a290210491e7fdb63d2cf7a79676080f29157dc",
+        "src/xy_estimator.cpp": "0522d723a53b0a37163d1f6751819cf1b8a245a8b2ff05a412993bf384471091",
+        "src/xyz_estimator.cpp": "ffc59e7de7c625e6df3f3f7bd5523da1752a3507d1136637467630c3fa1ab4e0",
+        "src/z_estimator.cpp": "e06e0e694ff42da2ab3404bc644da6f9edb1f922de75445f685e959c3d42e24a",
+        "params/basic_params.yaml": "7dd2a865a039cff12d591fafbc0a3687e0715d1d919f29170110c502b19750bf",
+        "params/xy_est_params.yaml": "3a2230f308a265e43b762b87bcbe48251c956a406a1223434aa652a7516017ea",
+        "params/z_est_params.yaml": "d55738872971261720d5ae425d061d24d1a9eb1a84806fd0d9845242756e52d4"
+      }
+    },
+    "sim": {
+      "commit": "95987b5118b624208910d9e51424300022e1f512",
+      "source": "reef_estimator branch 'simulation'; pinned by reef_estimator_sim_bundle 1b5724f1",
+      "files": {
+        "include/estimator.h": "5e1b94f80b2ecfe8a9d4cff84c9d6d3434f4e1fdef42034f08f980d95575ad18",
+        "include/sensor_manager.h": "e60b7ed6048294a586e1f7104921d5be00dddc48442071044cf1dfb3a0ac894a",
+        "include/xy_estimator.h": "f576165c03de2b77da05b2bd8235d3885b94fb8c742784f7d5bfd74e88de9d71",
+        "include/xyz_estimator.h": "d84871585fc859a004fc4aa83dcc5a08dfced9ce7865fa2ef452533c8ba3791a",
+        "include/z_estimator.h": "c96e90df353112a5aba5d9a18d5b2d99a166fc186a64e31ed6c53ee40c1231a7",
+        "src/estimator.cpp": "a72421a3e0ef403bfdd04ca5fa4f371f7c779fa983bf39fc26b32149c67a65dc",
+        "src/sensor_manager.cpp": "fb54b728410809845fd799743a290210491e7fdb63d2cf7a79676080f29157dc",
+        "src/xy_estimator.cpp": "0522d723a53b0a37163d1f6751819cf1b8a245a8b2ff05a412993bf384471091",
+        "src/xyz_estimator.cpp": "cc817ca7e62fc20673a87a0215869560d9aea6ea3e343019a63109828d7c7fe0",
+        "src/z_estimator.cpp": "774f2d1e41324e168d979915a0dd437edd04c3f969c748d658354f1a47d76ed0",
+        "params/basic_params.yaml": "dd59052e8b5e3595683a8cdfb129bf2b0d2e7a1b74adaabf98748f42c0b19361",
+        "params/xy_est_params.yaml": "3a2230f308a265e43b762b87bcbe48251c956a406a1223434aa652a7516017ea",
+        "params/z_est_params.yaml": "feb5c896e86ea8bf0e327173554738ab81e9057be16da255ae3b8e964baff8df"
+      }
+    }
+  }
+}
