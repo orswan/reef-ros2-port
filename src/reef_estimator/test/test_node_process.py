@@ -133,16 +133,28 @@ class TestNode(unittest.TestCase):
             lambda m: echoes.add(m.header.stamp.sec * 10**9 + m.header.stamp.nanosec), 10)
         imu_pub = self.node.create_publisher(Imu, NS + '/imu/data', 10)
         range_pub = self.node.create_publisher(Range, NS + '/sonar', 10)
+        # Both directions must be matched: our publishers to the node, and the
+        # node's echo/output publishers to our subscriptions (best effort drops
+        # messages sent before discovery completes).
         self.assertTrue(self.spin_until(lambda: imu_pub.get_subscription_count() == 1
-                                        and range_pub.get_subscription_count() == 1), 'discovery')
+                                        and range_pub.get_subscription_count() == 1
+                                        and self.node.count_publishers(NS + '/sonar_ned') == 1
+                                        and self.node.count_publishers(NS + '/xyz_estimate') == 1), 'discovery')
+        self.spin_until(lambda: False, timeout=0.5)
 
         for typ, t, val in events():
             stamp = rclpy.time.Time(nanoseconds=t).to_msg()
             if typ == 'range':
                 m = Range()
                 m.header.stamp, m.range, m.max_range = stamp, float(val), 7.65
-                range_pub.publish(m)
-                self.assertTrue(self.spin_until(lambda: t in echoes), f'range {t} not processed')
+                # Re-send if not echoed within 1 s (a best-effort drop). A repeated
+                # range before the next IMU step is gated against the same state
+                # and stores the same value, so z and z_dot are unaffected.
+                for _ in range(10):
+                    range_pub.publish(m)
+                    if self.spin_until(lambda: t in echoes, timeout=1.0):
+                        break
+                self.assertIn(t, echoes, f'range {t} not processed')
             else:
                 m = Imu()
                 m.header.stamp = stamp
