@@ -1,8 +1,8 @@
 # REEF ROS 2: project status
 
-Updated 2026-09-30 (P02 estimator baseline). `main` = `6736eeb`, which
-includes P01 (X3 data) and P00 (status/wrappers), merged by fast-forward at the
-user's request. P02 is on branch `p02-baseline`. Section 3 reconciles
+Updated 2026-09-30 (start of P03). `main` = `04c9b19`, which includes P01
+(X3 data), P00 (status/wrappers) and P02 (estimator baseline), all merged by
+fast-forward at the user's request. P03 is on branch `p03-msgs-interfaces`. Section 3 reconciles
 [docs/handoff/](handoff/) (conversation-derived history) with the repository
 and the recorded evidence.
 
@@ -15,9 +15,10 @@ project by the implementer, with logs or manifests in the repository tree.
 
 | Branch | Head | Contents | Merged to `main`? |
 |---|---|---|---|
-| `main` | `6736eeb` | starter, checker fixes, dev container, P01, P00 | — |
+| `main` | `04c9b19` | starter, checker fixes, dev container, P01, P00, P02 | — |
 | `feature/x3-sim-dataset`, `p00-status-and-wrappers` | merged | P01, P00 | yes (fast-forward, 2026-09-30) |
-| `p02-baseline` | this work | P02: reference harness, fixtures, independent check, baseline decision, `reef_check.sh baseline` | no |
+| `p02-baseline` | `04c9b19` | P02: reference harness, fixtures, independent check, baseline decision, `reef_check.sh baseline` | yes (fast-forward, 2026-09-30) |
+| `p03-msgs-interfaces` | this work | P03: `reef_msgs`, `rosflight_msgs` pin, interface contract | no |
 
 No Git remote, pull request, or tag exists; the repository is local. Upstream
 references are pinned in [MIGRATION.md §2](MIGRATION.md): `reef_estimator`
@@ -70,8 +71,8 @@ wrapper boundary ([INTERFACES.md §1](INTERFACES.md#1-command-interface)).
 |---|---|---|
 | P00 reconcile and wrappers | done, merged | |
 | P01 quadrotor, sensors, recordings | done, merged | human check H3 (plots) still recommended |
-| P02 baseline decision and reference tests | **done on `p02-baseline`**; corrections C1–C5 await a decision | `reef_check.sh baseline`; [BASELINE_DECISION.md](BASELINE_DECISION.md), [reviews/P02.md](reviews/P02.md) |
-| P03 messages, helpers, ROS 2 interfaces | not started (**next**) | |
+| P02 baseline decision and reference tests | done, merged. USER: `reef_check.sh baseline` passed in the dev container. Corrections C1–C5 **deferred to R1** (USER, 2026-09-30); the initial port must match master exactly | `reef_check.sh baseline`; [BASELINE_DECISION.md](BASELINE_DECISION.md), [reviews/P02.md](reviews/P02.md) |
+| P03 messages, helpers, ROS 2 interfaces | **in progress** on `p03-msgs-interfaces` | criteria: [ACCEPTANCE.md §4b](ACCEPTANCE.md) |
 | P04–P05 estimator, replay/faults | not started | |
 | P06–P07 controller, REEF closed loop | not started | |
 | P08 RGB-D | not started | |
@@ -126,7 +127,7 @@ P00 was run inside `reef_ros2_dev` by the implementer.
 3. The dev image's built-in `reef-desktop` predates the 5 s probe timeout;
    rebuild when convenient.
 4. No independent review of the Dockerfile or of P01 has been performed.
-5. `p02-baseline` is unmerged.
+5. (resolved) `p02-baseline` was merged on 2026-09-30.
 6. `check_clock_demo.sh` and `scripts/sim_lib.sh` duplicate session logic
    (reviewed code left unchanged).
 7. The only unit tests are for reef_sim geometry; the ROS nodes are covered

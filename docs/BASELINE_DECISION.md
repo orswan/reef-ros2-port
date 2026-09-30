@@ -1,6 +1,6 @@
 # Estimator baseline decision (P02)
 
-Status: **decided for fidelity purposes; corrections pending approval.**
+Status: **decided. Corrections C1–C5 deferred to R1 by the user (2026-09-30).**
 Date 2026-09-30. Evidence: `scripts/reef_check.sh baseline` (section 10). The
 reference harness is described in [baseline/README.md](../baseline/README.md).
 
@@ -13,7 +13,7 @@ reference harness is described in [baseline/README.md](../baseline/README.md).
 | What "baseline" means | The ROS 2 port must reproduce this revision's behaviour for identical ordered inputs and initialization, within the tolerances in section 8. |
 | Approved algorithmic deviations | **none** in P02 (section 7) |
 | Characterized legacy defects | D1–D10 (section 6). Each is kept in the reference, and each has a regression that asserts it |
-| Candidate corrections | C1–C5 (section 7), for the user or reviewer (R1) to approve. If approved, each is added as a separately documented, separately tested deviation in P04/P05. None is blended in silently |
+| Candidate corrections | C1–C5 (section 7). **USER decision 2026-09-30: all deferred to the independent review R1**, so that the initial ROS 2 port reproduces master exactly. If R1 approves any, each is added afterwards as a separately documented, separately tested deviation. None is blended in silently |
 
 ## 2. What the two revisions actually are
 
@@ -221,8 +221,14 @@ from a single-threaded executor.
 **Must be preserved for fidelity:** everything in section 4, including D1–D10
 and the float32 conversions (they affect gating decisions exactly).
 
-**Correction candidates (NOT approved; each needs a user or R1 decision, then
-its own commit, tests, and golden variant):**
+**Correction candidates (NOT approved).** USER decision, 2026-09-30: "We will
+defer all algorithm corrections (C1-C5) to the independent review (R1) to
+guarantee our initial ROS 2 port is a bit-exact match of the legacy master
+branch." P03–P05 therefore implement none of them; the port is scored against
+the unmodified master golden (tolerances in section 8: discrete fields exact,
+continuous fields within 1e−9 of field scale, which covers only FMA/ordering
+rounding). After R1, each approved candidate gets its own commit, tests, and
+golden variant:
 
 | ID | Candidate | Evidence it matters | Evaluation needed |
 |---|---|---|---|
@@ -281,8 +287,8 @@ needs `--update-golden "<reason>"`, and the reason is stored).
 
 - **Which exact configuration flew.** The hardware bundle pins master, but
   the parameter files used on each vehicle are not known.
-- **Corrections C1–C5** need a decision. Until then the port targets master
-  as is.
+- **Corrections C1–C5** are deferred to R1 (USER, 2026-09-30). The port
+  targets master as is.
 - **Partial-update paper.** The formula is checked against the code and the
   cited paper's structure, not against a full reading of
   `reference/reef_estimator/docs/Partial_Update.pdf`.
