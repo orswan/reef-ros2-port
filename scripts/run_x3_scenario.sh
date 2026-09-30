@@ -5,8 +5,8 @@
 #   scripts/run_x3_scenario.sh --estimator  # also run the REEF adapter and ported
 #       estimator (vertical filter) beside the truth-fed controller, with the
 #       IMU vibration overlay (config/x3_reef_overlay.yaml), and score it
-#       (analysis_reef/). REEF is not in the control loop. Builds in the
-#       per-environment tree (scripts/colcon_tree.py).
+#       (analysis_reef/). REEF is not in the control loop.
+# Builds in the per-environment tree (scripts/colcon_tree.py).
 # Output: recordings/x3_<time>_<id>/ (manifest.yaml, x3_scenario.yaml, bag/,
 # scenario_result.json, launch.log, analysis/). Recordings are ignored by Git.
 #
@@ -49,25 +49,17 @@ say() { echo "== $*"; }
 
 # --- build the package (quick; --symlink-install keeps sources live)
 mkdir -p "$REEF_ROOT/log"
-if [[ "$estimator" == true ]]; then
-  # C++ packages: private tree per environment (the shared build/ may hold
-  # another container's CMake cache).
-  tree="$(python3 "$REEF_ROOT/scripts/colcon_tree.py")"
-  say "building reef_sim and the REEF estimator in ${tree#"$REEF_ROOT"/}"
-  if ! (cd "$REEF_ROOT" && colcon --log-base "$tree/log" build --base-paths src --symlink-install \
-        --build-base "$tree/build" --install-base "$tree/install" --packages-up-to reef_sim \
-        >"$REEF_ROOT/log/reef_sim_build.log" 2>&1); then
-    tail -n 20 "$REEF_ROOT/log/reef_sim_build.log"; fail 2 "colcon build failed"
-  fi
-  install_setup="$tree/install/setup.bash"
-else
-  say "building reef_sim"
-  if ! (cd "$REEF_ROOT" && colcon build --base-paths src --symlink-install --packages-select reef_sim \
-        >"$REEF_ROOT/log/reef_sim_build.log" 2>&1); then
-    tail -n 20 "$REEF_ROOT/log/reef_sim_build.log"; fail 2 "colcon build failed"
-  fi
-  install_setup="$REEF_ROOT/install/setup.bash"
+# Private tree per environment (the shared build/ may hold another container's
+# CMake cache). reef_sim depends on reef_estimator/reef_msgs (--estimator), so
+# they are built too; after the first run the build is incremental.
+tree="$(python3 "$REEF_ROOT/scripts/colcon_tree.py")"
+say "building reef_sim and its dependencies in ${tree#"$REEF_ROOT"/}"
+if ! (cd "$REEF_ROOT" && colcon --log-base "$tree/log" build --base-paths src --symlink-install \
+      --build-base "$tree/build" --install-base "$tree/install" --packages-up-to reef_sim \
+      >"$REEF_ROOT/log/reef_sim_build.log" 2>&1); then
+  tail -n 20 "$REEF_ROOT/log/reef_sim_build.log"; fail 2 "colcon build failed"
 fi
+install_setup="$tree/install/setup.bash"
 set +u
 # shellcheck disable=SC1090,SC1091
 source "$install_setup"
