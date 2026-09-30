@@ -318,9 +318,8 @@ by the implementer (H8).
   `scripts/reef_check.sh faults` (expect **FAIL 35/36**, only F11 baseline).
   Then decide whether to merge `p05-horizontal-estimator` and start R1 with
   [reviews/R1_packet.md](reviews/R1_packet.md).
-- **H8 (R1 fixes, dev container):** `scripts/reef_check.sh faults` (expect
-  PASS 36/36, F11 included) and `scripts/reef_check.sh baseline` (expect
-  PASS, about 28 min); optionally `estimator`.
+- **H8 (R1 fixes):** done. USER: `baseline` and `faults` passed in the dev
+  container.
 - **H3:** open the three plots and `manifest.yaml` of a recent
   `recordings/x3_*` run, and check them against
   [X3_SCENARIO.md](X3_SCENARIO.md). (`feature/x3-sim-dataset` is already
