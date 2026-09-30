@@ -1,0 +1,55 @@
+# reef_estimator parameters: the values shipped with master e4179f48
+# (params/xy_est_params.yaml, z_est_params.yaml, basic_params.yaml),
+# converted to ROS 2 syntax. Values are unchanged; integers were written as
+# floats because ROS 2 rejects lists that mix integers and floats
+# (test/test_legacy_params.py checks the values against the verbatim files).
+#
+# This is the HARDWARE configuration of the original: it enables the RC mocap
+# switch and debug output, and disables RGB-D measurements
+# (enable_measurements: false). Simulation overrides are in simulation.yaml.
+# Parameter meanings, units, and validation: docs/INTERFACES.md section 3.
+/**:
+  ros__parameters:
+    # basic_params.yaml
+    debug_mode: true
+    enable_partial_update: true
+    enable_mocap_switch: true
+    mahalanobis_d_sonar: 20.0
+    mahalanobis_d_rgbd_velocity: 80.0
+    mahalanobis_d_mocap_z: 20.0
+    mahalanobis_d_mocap_velocity: 50.0
+    enable_measurements: false
+    mocap_override_channel: 6
+
+    # xy_est_params.yaml. State order (from the code, not the original
+    # comment): x_dot, y_dot, pitch_bias, roll_bias, accX_bias, accY_bias.
+    xy_P0: [0.01, 0.0,  0.0,    0.0,    0.0,   0.0,
+            0.0,  0.01, 0.0,    0.0,    0.0,   0.0,
+            0.0,  0.0,  0.0031, 0.0,    0.0,   0.0,
+            0.0,  0.0,  0.0,    0.0031, 0.0,   0.0,
+            0.0,  0.0,  0.0,    0.0,    0.141, 0.0,
+            0.0,  0.0,  0.0,    0.0,    0.0,   0.141]
+    xy_Q: [0.0, 0.0, 0.0,  0.0,  0.0, 0.0,
+           0.0, 0.0, 0.0,  0.0,  0.0, 0.0,
+           0.0, 0.0, 0.03, 0.0,  0.0, 0.0,
+           0.0, 0.0, 0.0,  0.03, 0.0, 0.0,
+           0.0, 0.0, 0.0,  0.0,  0.1, 0.0,
+           0.0, 0.0, 0.0,  0.0,  0.0, 0.1]
+    # With RGB-D, R is set from each message; with mocap this value is used.
+    xy_R0: [0.02, 0.0,
+            0.0,  0.02]
+    xy_x0: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    xy_beta: [1.0, 1.0, 0.03, 0.03, 0.001, 0.001]
+
+    # z_est_params.yaml. State order: z, z_dot, accel bias.
+    z_P0: [0.025, 0.0, 0.0,
+           0.0,   1.0, 0.0,
+           0.0,   0.0, 0.01]
+    z_P0_flying: [0.25, 0.0, 0.0,
+                  0.0,  1.0, 0.0,
+                  0.0,  0.0, 0.01]
+    z_Q: [0.03, 0.0001]
+    z_R0: [0.04]
+    z_R_flying: [0.00016]
+    z_x0: [-0.25, 0.0, 0.0]
+    z_beta: [1.0, 1.0, 0.50]

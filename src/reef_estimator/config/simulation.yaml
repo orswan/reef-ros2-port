@@ -1,0 +1,9 @@
+# Simulation overrides, loaded after estimator_master.yaml.
+# There is no RC transmitter in simulation: the RC mocap switch is disabled
+# explicitly, so reef_estimator does not subscribe to rc_raw and the
+# measurement selection stays at its configured initial value
+# (docs/INTERFACES.md section 3.5). Further simulation settings are added
+# with the estimator node (P04).
+/**:
+  ros__parameters:
+    enable_mocap_switch: false
