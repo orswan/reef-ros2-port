@@ -235,7 +235,7 @@ fault behaviour is `reef_check.sh faults` (§5).
 |---|---|
 | Baseline | D1 preserved (parity above); the core counts XY fusions per accepted observation and the node reports it |
 | ROS layer | never adds fusions: fusion counts through the node = core counts on every stream |
-| C1 (opt-in, NOT APPROVED, default off) | with C1 on: each accepted observation is fused exactly once on s06/s07/h fixtures; with C1 off: parity unchanged |
+| C1 (opt-in, NOT APPROVED, default off) | with C1 on: no observation is fused twice (an IMU step fuses exactly when a new observation arrived since the previous step, then clears the flag) on s06/s07/h fixtures; observations superseded by a newer one before the next IMU step are never fused (last one wins, as in master) and are counted; with C1 off: parity unchanged |
 
 ### ROS 2 wrapper, QoS, executor, replay isolation
 
