@@ -1,0 +1,306 @@
+{
+  "reason": "P02 initial characterization of the pinned original sources (reef_estimator e4179f48 and 95987b51, reef_msgs 7fb63ff9); outputs of the unmodified originals, not of any port",
+  "every": 100,
+  "runs": {
+    "master/common/s01_ground_stationary": {
+      "rows": 2200,
+      "kept": 23,
+      "full_output_sha256": "675c1108746a06f37bcf0514cb112171ba9796f7a5984ed67569a5dd8f938a8c"
+    },
+    "master/common/s02_takeoff_hover": {
+      "rows": 5390,
+      "kept": 56,
+      "full_output_sha256": "b99a3cb2d4514fbe190dbd2f7f07197dc96d62f923f4e314e5e0b11970ec043f"
+    },
+    "master/common/s03_const_accel_up": {
+      "rows": 4840,
+      "kept": 51,
+      "full_output_sha256": "d3692aadbda482a435c8e74cb817e200564d3514a895688a84ca9250c9fa21c5"
+    },
+    "master/common/s04_accel_bias": {
+      "rows": 9240,
+      "kept": 95,
+      "full_output_sha256": "6cc92b8998d433333591bb1dc1dcacdf28fa92fb4fc7ab93ade1dd1d79f1c92a"
+    },
+    "master/common/s05_tilt_range": {
+      "rows": 5940,
+      "kept": 62,
+      "full_output_sha256": "7045bd3735aabe664a7a6103aac221b58af1fd264c30c74a3b420d0178ce12d3"
+    },
+    "master/common/s06_mocap_xy_velocity": {
+      "rows": 6370,
+      "kept": 66,
+      "full_output_sha256": "f766228a7e93219329787bfc57723e1303aa06bf9d82e75a4cb2492c734d593c"
+    },
+    "master/common/s07_single_mocap": {
+      "rows": 4291,
+      "kept": 45,
+      "full_output_sha256": "9dcd97ea5ed7512d49094aea44adc92598bf21f0941b50cbedca62e21b843f1a"
+    },
+    "master/common/s08_standard_gravity": {
+      "rows": 5940,
+      "kept": 62,
+      "full_output_sha256": "5c72c86f86e90c929e3e6d20790881c96ca018b40ea803925921bd6c8d477a66"
+    },
+    "master/common/s09_imu_250hz": {
+      "rows": 2640,
+      "kept": 29,
+      "full_output_sha256": "793390e3ec4c582a2d00452f7bf6aca61df7107ab90edc74e2b21e932c51ff98"
+    },
+    "master/common/s10_range_outliers": {
+      "rows": 5390,
+      "kept": 56,
+      "full_output_sha256": "935304af15a6413c1106c125bfa0e8ea9d433ee65e574cc32bd818b389b1b6a2"
+    },
+    "master/common/s11_imu_nan": {
+      "rows": 4290,
+      "kept": 45,
+      "full_output_sha256": "7b084ab78682ef0bbd9e8bfdb524781753cd199964e5bd66bd0e06a1e83ac723"
+    },
+    "master/common/s12_mocap_z": {
+      "rows": 5280,
+      "kept": 55,
+      "full_output_sha256": "5646798ab61796dea6ee5902c44eeeff986d732fe2c3a583783cb06820410d4f"
+    },
+    "master/common/s13_rc_mocap_switch": {
+      "rows": 7351,
+      "kept": 77,
+      "full_output_sha256": "d806cc3f6b20ce457aadd1560e848430329e38896e4c16c98059cc263276d877"
+    },
+    "master/common/s14_full_update": {
+      "rows": 6370,
+      "kept": 66,
+      "full_output_sha256": "7abc2e4fed5f5cc112831bcf4e35a3ff0158745b17c159b91990db76bc09ef3e"
+    },
+    "master/common/s15_airborne_start": {
+      "rows": 2750,
+      "kept": 29,
+      "full_output_sha256": "56e3f5d2bb1d82ecc436eb38a3f9c51ee6e62c913fe0d51f088ecf6bdfb27fd6"
+    },
+    "master/shipped/s01_ground_stationary": {
+      "rows": 2200,
+      "kept": 23,
+      "full_output_sha256": "675c1108746a06f37bcf0514cb112171ba9796f7a5984ed67569a5dd8f938a8c"
+    },
+    "master/shipped/s02_takeoff_hover": {
+      "rows": 5390,
+      "kept": 56,
+      "full_output_sha256": "b99a3cb2d4514fbe190dbd2f7f07197dc96d62f923f4e314e5e0b11970ec043f"
+    },
+    "master/shipped/s03_const_accel_up": {
+      "rows": 4840,
+      "kept": 51,
+      "full_output_sha256": "d3692aadbda482a435c8e74cb817e200564d3514a895688a84ca9250c9fa21c5"
+    },
+    "master/shipped/s04_accel_bias": {
+      "rows": 9240,
+      "kept": 95,
+      "full_output_sha256": "6cc92b8998d433333591bb1dc1dcacdf28fa92fb4fc7ab93ade1dd1d79f1c92a"
+    },
+    "master/shipped/s05_tilt_range": {
+      "rows": 5940,
+      "kept": 62,
+      "full_output_sha256": "7045bd3735aabe664a7a6103aac221b58af1fd264c30c74a3b420d0178ce12d3"
+    },
+    "master/shipped/s06_mocap_xy_velocity": {
+      "rows": 6370,
+      "kept": 66,
+      "full_output_sha256": "f766228a7e93219329787bfc57723e1303aa06bf9d82e75a4cb2492c734d593c"
+    },
+    "master/shipped/s07_single_mocap": {
+      "rows": 4291,
+      "kept": 45,
+      "full_output_sha256": "9dcd97ea5ed7512d49094aea44adc92598bf21f0941b50cbedca62e21b843f1a"
+    },
+    "master/shipped/s08_standard_gravity": {
+      "rows": 5940,
+      "kept": 62,
+      "full_output_sha256": "5c72c86f86e90c929e3e6d20790881c96ca018b40ea803925921bd6c8d477a66"
+    },
+    "master/shipped/s09_imu_250hz": {
+      "rows": 2640,
+      "kept": 29,
+      "full_output_sha256": "793390e3ec4c582a2d00452f7bf6aca61df7107ab90edc74e2b21e932c51ff98"
+    },
+    "master/shipped/s10_range_outliers": {
+      "rows": 5390,
+      "kept": 56,
+      "full_output_sha256": "935304af15a6413c1106c125bfa0e8ea9d433ee65e574cc32bd818b389b1b6a2"
+    },
+    "master/shipped/s11_imu_nan": {
+      "rows": 4290,
+      "kept": 45,
+      "full_output_sha256": "7b084ab78682ef0bbd9e8bfdb524781753cd199964e5bd66bd0e06a1e83ac723"
+    },
+    "master/shipped/s12_mocap_z": {
+      "rows": 5280,
+      "kept": 55,
+      "full_output_sha256": "5646798ab61796dea6ee5902c44eeeff986d732fe2c3a583783cb06820410d4f"
+    },
+    "master/shipped/s13_rc_mocap_switch": {
+      "rows": 7351,
+      "kept": 77,
+      "full_output_sha256": "d806cc3f6b20ce457aadd1560e848430329e38896e4c16c98059cc263276d877"
+    },
+    "master/shipped/s14_full_update": {
+      "rows": 6370,
+      "kept": 66,
+      "full_output_sha256": "7abc2e4fed5f5cc112831bcf4e35a3ff0158745b17c159b91990db76bc09ef3e"
+    },
+    "master/shipped/s15_airborne_start": {
+      "rows": 2750,
+      "kept": 29,
+      "full_output_sha256": "56e3f5d2bb1d82ecc436eb38a3f9c51ee6e62c913fe0d51f088ecf6bdfb27fd6"
+    },
+    "sim/common/s01_ground_stationary": {
+      "rows": 2200,
+      "kept": 23,
+      "full_output_sha256": "541ceaca9aff2c197a7a865d5570b4fcb08f7b49ac68e389241c98192ba5b0c9"
+    },
+    "sim/common/s02_takeoff_hover": {
+      "rows": 5390,
+      "kept": 56,
+      "full_output_sha256": "4404425ef1fa80c1a672e3c12be90881fde747a31e069f2f8d6f5750fd569e81"
+    },
+    "sim/common/s03_const_accel_up": {
+      "rows": 4840,
+      "kept": 51,
+      "full_output_sha256": "4fe0898a1882cdffc55e07b8695701ce3f31a3fbc0bf3f531e8e690b93f5cb16"
+    },
+    "sim/common/s04_accel_bias": {
+      "rows": 9240,
+      "kept": 95,
+      "full_output_sha256": "bba5e69168193e084970983d872b148f33ff631a4872ca7efdaa6d45b0eb4c9a"
+    },
+    "sim/common/s05_tilt_range": {
+      "rows": 5940,
+      "kept": 62,
+      "full_output_sha256": "e4890fe1b10ac1fd0f9023d2f46098f8e7dccc5b4d18da1cc96b1f1239d725fb"
+    },
+    "sim/common/s06_mocap_xy_velocity": {
+      "rows": 6370,
+      "kept": 66,
+      "full_output_sha256": "253dbc16c757fc4929a3703a92328516a8455aa58107203026df899a7ec56a3b"
+    },
+    "sim/common/s07_single_mocap": {
+      "rows": 4291,
+      "kept": 45,
+      "full_output_sha256": "bc67a1b9ddd56c9c4bc37bfdd47b9edf26425fb8a211b7ad4427aec48d193b90"
+    },
+    "sim/common/s08_standard_gravity": {
+      "rows": 5940,
+      "kept": 62,
+      "full_output_sha256": "ca6e1d110782d02d80a46c05ae39c778da42ae07d98b4312c2701a3ffc400316"
+    },
+    "sim/common/s09_imu_250hz": {
+      "rows": 2640,
+      "kept": 29,
+      "full_output_sha256": "8b66ecebbce44dc54281f78af313ea05c5517c94ec4a52ef53f315ecda6b3885"
+    },
+    "sim/common/s10_range_outliers": {
+      "rows": 5390,
+      "kept": 56,
+      "full_output_sha256": "0b68eec4c2a8f60af71706424022f3257f577458544fdd3734db7daef902b86f"
+    },
+    "sim/common/s11_imu_nan": {
+      "rows": 4290,
+      "kept": 45,
+      "full_output_sha256": "f923da749e294e59810cf5cd8bb3eadf69cf903a1770baba6af9793b4be66cf9"
+    },
+    "sim/common/s12_mocap_z": {
+      "rows": 5280,
+      "kept": 55,
+      "full_output_sha256": "b12721c21aa27d8fc358bc487f89da5ae01ee61a2b0a77dd9441dee26b919438"
+    },
+    "sim/common/s13_rc_mocap_switch": {
+      "rows": 7351,
+      "kept": 77,
+      "full_output_sha256": "3c5f47db23f5d81ce12abb1e6c968328b8ea5120d54f37f92838d661d99b7e74"
+    },
+    "sim/common/s14_full_update": {
+      "rows": 6370,
+      "kept": 66,
+      "full_output_sha256": "30f8a064885b997834359155fd7238cfb520396265c1aabca074d7d101608835"
+    },
+    "sim/common/s15_airborne_start": {
+      "rows": 2750,
+      "kept": 30,
+      "full_output_sha256": "a6d1e904e59bbbc65a8aca99683b12dd95e1f6df8307c8d29e4f5d385f5336a6"
+    },
+    "sim/shipped/s01_ground_stationary": {
+      "rows": 2200,
+      "kept": 23,
+      "full_output_sha256": "d821c58f18429d92fa2a4b156a32acc86bf164cbebcc931fd3c1ae1aae647020"
+    },
+    "sim/shipped/s02_takeoff_hover": {
+      "rows": 5390,
+      "kept": 56,
+      "full_output_sha256": "178406136851c4966fbef08834cd8564c19ce6eddce226e1d1dedf8ffb6371ed"
+    },
+    "sim/shipped/s03_const_accel_up": {
+      "rows": 4840,
+      "kept": 51,
+      "full_output_sha256": "a8cf945c347d558304f27fdbb1fee5bce62b5fd4b3cce2347fc89a37c9398898"
+    },
+    "sim/shipped/s04_accel_bias": {
+      "rows": 9240,
+      "kept": 95,
+      "full_output_sha256": "f8ab7f078e3358a600cc30046342fec2b18d0d8d76ae5523a85a8b42a777b4c3"
+    },
+    "sim/shipped/s05_tilt_range": {
+      "rows": 5940,
+      "kept": 62,
+      "full_output_sha256": "50162228033f32bd47472cb6cf4c50e683d212dd2baa50200e97d33fbf3c9f1c"
+    },
+    "sim/shipped/s06_mocap_xy_velocity": {
+      "rows": 6370,
+      "kept": 66,
+      "full_output_sha256": "85a397efca48df57659ca7ad7a5bdf635df018d38e253bb42e753fab1f4d285d"
+    },
+    "sim/shipped/s07_single_mocap": {
+      "rows": 4291,
+      "kept": 45,
+      "full_output_sha256": "5c97843f40aae655782ef78e0284a1ecd5a0ce27436d3e7b589f3ee83ee8c2f3"
+    },
+    "sim/shipped/s08_standard_gravity": {
+      "rows": 5940,
+      "kept": 62,
+      "full_output_sha256": "3edf3fa668a31b87a035f7ab65302e435a629af4d697e95908e343a2ea09cd06"
+    },
+    "sim/shipped/s09_imu_250hz": {
+      "rows": 2640,
+      "kept": 29,
+      "full_output_sha256": "4e607d289015fb6fd35fb00bc5d4e8d6478287557cea2f7c3381802595b5b487"
+    },
+    "sim/shipped/s10_range_outliers": {
+      "rows": 5390,
+      "kept": 56,
+      "full_output_sha256": "1d6da76de4d16ff8445496f2a06584aee1f57bbfc8e6593865cc875589710ae8"
+    },
+    "sim/shipped/s11_imu_nan": {
+      "rows": 4290,
+      "kept": 45,
+      "full_output_sha256": "efa24e2930021e81544df0e2ec515e6875c895cefc2a94fa435845c7e9633fa6"
+    },
+    "sim/shipped/s12_mocap_z": {
+      "rows": 5280,
+      "kept": 55,
+      "full_output_sha256": "68867375092dab99027d892879f60abd59ae0f3c5e7bd80cc1e884d882353f3e"
+    },
+    "sim/shipped/s13_rc_mocap_switch": {
+      "rows": 7351,
+      "kept": 77,
+      "full_output_sha256": "d1c791a9dbd65d6575037210818b31477f6e297654cc73fbea242d8573ceb127"
+    },
+    "sim/shipped/s14_full_update": {
+      "rows": 6370,
+      "kept": 66,
+      "full_output_sha256": "374decf359b04947be04c28a63bab0d74b79f828628d8f232f29dd78b2cc9faa"
+    },
+    "sim/shipped/s15_airborne_start": {
+      "rows": 2750,
+      "kept": 30,
+      "full_output_sha256": "54814904b58eefb5f6347e3c488a3ff2673885baa402dc305eee2d953efe02cd"
+    }
+  }
+}
