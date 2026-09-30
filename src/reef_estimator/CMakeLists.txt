@@ -79,6 +79,17 @@ if(BUILD_TESTING)
   target_link_libraries(test_rc_raw reef_estimator_core ${rosflight_msgs_TARGETS})
 
   ament_add_pytest_test(test_legacy_params test/test_legacy_params.py)
+
+  ament_add_gtest(test_vertical_core test/test_vertical_core.cpp)
+  target_link_libraries(test_vertical_core reef_estimator_core)
+
+  find_package(rosgraph_msgs REQUIRED)
+  ament_add_gtest(test_sensor_manager test/test_sensor_manager.cpp TIMEOUT 120)
+  target_link_libraries(test_sensor_manager reef_estimator_ros ${rosgraph_msgs_TARGETS})
+  target_compile_definitions(test_sensor_manager PRIVATE CONFIG_DIR="${CMAKE_CURRENT_SOURCE_DIR}/config")
+
+  find_package(launch_testing_ament_cmake REQUIRED)
+  add_launch_test(test/test_node_process.py TIMEOUT 180)
 endif()
 
 ament_package()

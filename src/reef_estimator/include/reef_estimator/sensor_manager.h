@@ -23,6 +23,7 @@
 #ifndef SENSOR_MANAGER_H
 #define SENSOR_MANAGER_H
 
+#include <atomic>
 #include <memory>
 #include <optional>
 
@@ -52,8 +53,8 @@ namespace reef_estimator {
         void rcRawCallback(const rosflight_msgs::msg::RCRaw& msg);
         void mocapPoseCallback(const geometry_msgs::msg::PoseStamped& msg);
 
-        // Returns the estimator to its startup state (reset service, backward
-        // ROS time jump).
+        // Returns the estimator to its startup state (reset service; a backward
+        // ROS time jump flags a reset that the next message callback applies).
         void reset(const std::string& reason);
 
         // Introspection for tests.
@@ -62,6 +63,7 @@ namespace reef_estimator {
         const std::optional<reef_msgs::msg::XYZDebugEstimate>& lastDebugEstimate() const { return last_debug_; }
         long publishedCount() const { return published_; }
         long stampAnomalies() const { return stamp_anomalies_; }
+        bool resetPending() const { return jump_reset_pending_; }
 
     private:
         EstimatorParameters params_;
@@ -84,8 +86,10 @@ namespace reef_estimator {
         long published_ = 0;
         long stamp_anomalies_ = 0;
         std::optional<double> last_imu_stamp_;
+        std::atomic<bool> jump_reset_pending_{false};
 
         void makeEstimator();
+        void applyPendingReset();
         void publishFlying(bool flying);
     };
 }

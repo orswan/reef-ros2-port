@@ -1,9 +1,16 @@
 # Simulation overrides, loaded after estimator_master.yaml.
-# There is no RC transmitter in simulation: the RC mocap switch is disabled
-# explicitly, so reef_estimator does not subscribe to rc_raw and the
-# measurement selection stays at its configured initial value
-# (docs/INTERFACES.md section 3.5). Further simulation settings are added
-# with the estimator node (P04).
+# The X3 simulation provides IMU and range only (docs/INTERFACES.md section 3,
+# X3_SCENARIO.md). Every input selection is stated explicitly, as the
+# original launch files did:
+# - no RC transmitter: the RC mocap switch is disabled, so reef_estimator
+#   does not subscribe to rc_raw and the selection never changes;
+# - no motion capture and no RGB-D: those inputs are disabled;
+# - the range sensor is the altitude measurement.
+# debug_mode stays true (from the master file) for the covariance plots.
 /**:
   ros__parameters:
     enable_mocap_switch: false
+    enable_mocap_xy: false
+    enable_rgbd: false
+    enable_mocap_z: false
+    enable_sonar: true

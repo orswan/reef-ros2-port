@@ -76,14 +76,16 @@ namespace reef_estimator
             });
 
         // A backward jump of ROS time (simulation reset, replay restarted)
-        // would otherwise produce a negative dt for the next IMU message.
+        // would otherwise produce a negative dt for the next IMU message. The
+        // time source may call this from its own thread, so it only flags the
+        // reset; the executor thread applies it before the next message.
         rcl_jump_threshold_t threshold;
         threshold.on_clock_change = false;
         threshold.min_forward.nanoseconds = 0;     // 0 disables forward-jump callbacks
         threshold.min_backward.nanoseconds = -1;
         jump_handler_ = get_clock()->create_jump_callback(nullptr,
             [this](const rcl_time_jump_t& jump) {
-                if (jump.delta.nanoseconds < 0) reset("ROS time jumped backwards");
+                if (jump.delta.nanoseconds < 0) jump_reset_pending_ = true;
             }, threshold);
 
         //Initialize subscribers with corresponding callbacks.
@@ -125,8 +127,15 @@ namespace reef_estimator
             publishFlying(false);   // the fresh estimator starts on the ground
     }
 
+    void SensorManager::applyPendingReset()
+    {
+        if (jump_reset_pending_.exchange(false))
+            reset("ROS time jumped backwards");
+    }
+
     void SensorManager::imuCallback(const sensor_msgs::msg::Imu& msg)
     {
+        applyPendingReset();
         //Pass the imu message to estimator.
         const ImuSample s = fromMsg(msg);
         // Diagnostics only: the estimator processes anomalous stamps exactly
@@ -157,16 +166,19 @@ namespace reef_estimator
     }
 
     void SensorManager::rcRawCallback(const rosflight_msgs::msg::RCRaw& msg) {
+        applyPendingReset();
         xyzEst->rcRawUpdate(fromMsg(msg));
     }
 
     void SensorManager::mocapPoseCallback(const geometry_msgs::msg::PoseStamped& msg)
     {
+        applyPendingReset();
         xyzEst->mocapUpdate(fromMsg(msg));
     }
 
 void SensorManager::altimeterCallback(const sensor_msgs::msg::Range& msg)
 {
+    applyPendingReset();
     xyzEst->sensorUpdate(fromMsg(msg));
 
     if (params_.debug_mode)
