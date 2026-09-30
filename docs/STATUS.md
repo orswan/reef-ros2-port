@@ -149,16 +149,17 @@ P03 was run inside `reef_ros2_dev` by the implementer.
 
 | Command | Exit | Result |
 |---|---|---|
-| `scripts/reef_check.sh estimator` | see §5d note | colcon build + tests (reef_msgs 49, reef_estimator 58, reef_sim 12 cases), vertical fidelity 40/40 streams bit-identical with wrapper equivalence and 16 named case groups, X3 + REEF vs truth (altitude RMSE 6.8 mm, ż RMSE 0.037 m/s), offline and ROS replays, foreign-`/clock` negative; horizontal N/A (NOT IMPLEMENTED) |
+| `scripts/reef_check.sh estimator` (at `7edaeb6`) | 0 | PASS 6/6 + 1 N/A, 495 s: colcon build + tests (reef_msgs 49, reef_estimator 58, reef_sim 12 cases), vertical fidelity 40/40 streams bit-identical with wrapper equivalence and 16 named case groups, X3 + REEF vs truth (takeoff 7.38 s, altitude RMSE 6.7 mm, ż RMSE 0.037 m/s), offline and ROS replays, foreign-`/clock` negative; horizontal N/A (NOT IMPLEMENTED) |
 | `reef_check.sh estimator --gui` | 2 | invalid option |
 | `reef_demo.sh estimator --offline <run>` | 0 | deterministic replay and plots |
-| `scripts/regress_x3_scenario.sh` | see §5d note | the P01 suite after the `reef_sim` and script changes |
+| `scripts/regress_x3_scenario.sh` (at `7edaeb6`) | 0 | 13/13 cases as expected |
+| `scripts/reef_check.sh sim-data` | 0 | PASS; it first FAILED (exit 2) once the implementer's stale shared builds were removed: `reef_sim` now depends on `reef_estimator`, which only the shared tree lacked. Fixed in `7edaeb6` (scenario always builds in the per-environment tree) |
 | mutation / discrimination checks | — | port vs simulation revision 2.08e9 × tolerance; the jump-reset test found a real threading defect (fixed: reset now applied on the executor thread) |
 | shellcheck -x, hadolint | 0 | no findings |
 
-Note: the final `reef_check.sh estimator` and regression results are
-recorded in [reviews/P04.md](reviews/P04.md) with their exit codes. Nothing in
-P04 was run inside `reef_ros2_dev` by the implementer.
+Nothing in P04 was run inside `reef_ros2_dev` by the implementer. The first
+dev-container run builds reef_msgs, rosflight_msgs, and reef_estimator in that
+container's own tree (a few minutes).
 
 ## 6. Open items and known limits
 
