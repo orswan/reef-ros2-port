@@ -2,14 +2,16 @@
 # Replay a recorded X3 run through the REEF adapter and estimator on a ROS graph.
 #   scripts/replay_reef_estimator.sh RUN_DIR [--rate R]
 # Output: RUN_DIR/reef_replay_<time>_<id>/ with bag/ (replayed inputs and REEF
-# outputs), x3_scenario.yaml and scenario_result.json (copied), clock.json,
+# outputs), x3_scenario.yaml and scenario_result.json (copied), sources.json,
 # launch.log, analysis_reef/.
 #
 # Isolation: a ROS domain of its own and LOCALHOST discovery; the session is
-# owned and torn down on exit (sim_lib.sh). Only the bag publishes /clock:
-# before playback no /clock publisher may exist in the domain, and during
-# playback exactly one, the bag player (recorded in clock.json). No Gazebo is
-# started. For a deterministic replay without any ROS graph use
+# owned and torn down on exit (sim_lib.sh). The replay cannot consume an
+# unrelated clock or sensor stream: before playback no publisher may exist in
+# the domain for /clock, for any played topic, or for any REEF input topic;
+# during playback each played topic has exactly one publisher, the bag player,
+# and each REEF input exactly one, the adapter (recorded in sources.json). No
+# Gazebo is started. For a deterministic replay without any ROS graph use
 # `ros2 run reef_sim x3_reef_offline RUN_DIR`.
 #
 # Exit: 0 replay completed and the analysis limits were met, 1 analysis
@@ -56,9 +58,11 @@ export ROS_DOMAIN_ID="${REEF_REPLAY_DOMAIN:-$(( RANDOM % 101 + 1 ))}"
 export GZ_PARTITION="reef_replay_$token"   # no Gazebo here; lets sim_env_matches identify our processes
 duration="$(python3 -c 'import sys,yaml; print(int(yaml.safe_load(open(sys.argv[1]))["rosbag2_bagfile_information"]["duration"]["nanoseconds"]/1e9))' "$run/bag/metadata.yaml")"
 
-pre="$(python3 "$REEF_ROOT/scripts/clock_sources.py" --wait 2)"
-[[ "$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["count"])' "$pre")" == 0 ]] \
-  || fail 2 "domain $ROS_DOMAIN_ID already has /clock publishers: $pre (choose another REEF_REPLAY_DOMAIN)"
+played=(/clock /x3/truth/odom /x3/imu /x3/range /x3/scenario/phase)
+reef_inputs=(/x3/reef/imu/data /x3/reef/sonar /x3/reef/mocap_velocity/body_level_frame)
+pre="$(python3 "$REEF_ROOT/scripts/topic_sources.py" --wait 2 "${played[@]}" "${reef_inputs[@]}")"
+python3 -c 'import json,sys; d=json.loads(sys.argv[1]); sys.exit(0 if not any(d.values()) else 1)' "$pre" \
+  || fail 2 "domain $ROS_DOMAIN_ID already has publishers of replay inputs: $pre (choose another REEF_REPLAY_DOMAIN)"
 
 launch_pid="" sid="" pending=""
 # shellcheck disable=SC2317  # reached only via traps
@@ -76,7 +80,7 @@ cleanup() {
 trap cleanup EXIT
 normal_traps
 
-say "replay $run/bag (sim time ${duration} s, rate $rate) in ROS_DOMAIN_ID=$ROS_DOMAIN_ID; no /clock publisher before playback"
+say "replay $run/bag (sim time ${duration} s, rate $rate) in ROS_DOMAIN_ID=$ROS_DOMAIN_ID; no foreign clock or input publishers"
 defer_traps
 sim_start_session "$out/launch.log" ros2 launch reef_sim reef_replay.launch.py \
   "bag:=$run/bag" "output_dir:=$out" "rate:=$rate"
@@ -84,17 +88,21 @@ sim_start_session "$out/launch.log" ros2 launch reef_sim reef_replay.launch.py \
 normal_traps
 exit_for_pending
 
-# During playback (it starts after a 3 s delay): exactly one /clock publisher, the bag player.
+# During playback (it starts after a 3 s delay): each played topic only from
+# the bag player, each REEF input only from the adapter.
 sleep 6
 sim_alive "$launch_pid" || fail 2 "replay launch exited early (see $out/launch.log)"
-during="$(python3 "$REEF_ROOT/scripts/clock_sources.py" --wait 2)"
-printf '{"before_playback": %s, "during_playback": %s}\n' "$pre" "$during" > "$out/clock.json"
-python3 - "$during" <<'PY' || fail 1 "the bag player is not the only /clock publisher: $during"
+during="$(python3 "$REEF_ROOT/scripts/topic_sources.py" --wait 2 "${played[@]}" "${reef_inputs[@]}")"
+printf '{"before_playback": %s, "during_playback": %s}\n' "$pre" "$during" > "$out/sources.json"
+python3 - "$during" "${#played[@]}" <<'PY' || fail 1 "unexpected publishers during playback: $during"
 import json, sys
-d = json.loads(sys.argv[1])
-sys.exit(0 if d['count'] == 1 and d['publishers'][0].split('/')[-1].startswith('rosbag2_player') else 1)
+d, n = json.loads(sys.argv[1]), int(sys.argv[2])
+topics = list(d)
+ok = all(len(d[t]) == 1 and d[t][0].split('/')[-1].startswith('rosbag2_player') for t in topics[:n] if t != '/x3/scenario/phase') \
+    and all(d[t] == ['/reef_adapter'] for t in topics[n:])
+sys.exit(0 if ok else 1)
 PY
-say "/clock sources during playback: $during"
+say "sources during playback: $during"
 
 limit="$(python3 -c "import sys; print(int(float(sys.argv[1]) / float(sys.argv[2]) + 60))" "$duration" "$rate")"
 sim_wait_launch_exit "$limit" || fail 124 "replay did not finish within ${limit} s"
