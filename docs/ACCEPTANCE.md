@@ -202,6 +202,68 @@ commands: [reviews/P04.md](reviews/P04.md).
 | Labels | plots and reports carry the idealized-input and vibration labels |
 | Characterization, vibration-free (P01 recording, offline replay) | takeoff **never declared**; ż stays within ±0.040 m/s all flight; from ascend + 2 s: altitude RMSE 16 mm, vertical velocity RMSE 0.145 m/s (would fail the limit) |
 
+## 4d. P05: combined (vertical + horizontal) estimator
+
+Fixed on 2026-09-30 before any P05 code was written. Scope: the complete
+estimator of master `e4179f48` (horizontal EKF with velocity, attitude-bias,
+and accelerometer-bias states; mocap and RGB-D velocity updates; RC switch;
+landing reset) plus the vertical filter of §4c. No corrections are approved
+(C1–C6 deferred to R1). Numerical parity (`reef_check.sh baseline`) and
+physical plausibility (`reef_check.sh estimator`) are judged separately;
+fault behaviour is `reef_check.sh faults` (§5).
+
+### Numerical parity (fixture time) — `reef_check.sh baseline`
+
+| Criterion | Limit |
+|---|---|
+| Streams | 15 P02 fixtures × 2 kinds, v01–v10, and new horizontal fixtures h01–h10 (`fixtures_horizontal.py`, locked), including nonzero yaw and tilt, mocap/RGB-D outliers, duplicates, out-of-order stamps, dropouts, RC switching both ways, full update, landing reset, `enable_xy` false |
+| Every state field (Z and XY: state, full P, measurement, R, dt, flags, takeoff, counters, `use_mocap_xy/z`) | \|port − ref\| ≤ 1e−9 · max_run\|ref_field\|; discrete fields exact; gate values within the same tolerance on events where the port evaluated a gate; NaN/inf class identical |
+| Golden anchor | port vs the committed P02 golden, all fields, same tolerance |
+| Wrapper equivalence | the same events through the node's callbacks as ROS 2 messages: node state = core state; published messages carry exactly that state (now including XY) |
+| Negative | port vs simulation revision on `s09` must exceed the tolerance; the port with correction C1 enabled must differ from the reference on `s07` |
+
+### Frame conversions (independent checks)
+
+| Criterion | Limit |
+|---|---|
+| Horizontal propagation | one propagation step with known specific force and attitude (yaw 0°, 30°, 90°, −135°; roll and pitch up to ±20°) gives Δv equal to the body-level acceleration × dt, computed independently (Eigen AngleAxis rotations, not the code's formula): error ≤ 1e−12 m/s |
+| Simulated velocity observation | the adapter's body-level velocity from truth (yaw 90° and tilted cases) equals an independent computation: ≤ 1e−12 m/s |
+
+### Observation reuse (D1) and correction C1
+
+| Criterion | Limit |
+|---|---|
+| Baseline | D1 preserved (parity above); the core counts XY fusions per accepted observation and the node reports it |
+| ROS layer | never adds fusions: fusion counts through the node = core counts on every stream |
+| C1 (opt-in, NOT APPROVED, default off) | with C1 on: each accepted observation is fused exactly once on s06/s07/h fixtures; with C1 off: parity unchanged |
+
+### ROS 2 wrapper, QoS, executor, replay isolation
+
+| Criterion | Limit |
+|---|---|
+| QoS | every publisher/subscriber pair of the REEF graph (adapter, estimator, recorder) is compatible (tested from graph info) |
+| Executor | single-threaded executor; callback wall time p99 ≤ 2 ms, max ≤ 20 ms in the simulation run (IMU period 4 ms) |
+| Replay isolation | the ROS replay refuses to start (exit 2) when its domain already has a publisher of `/clock` or of any played or REEF input topic; negative cases for a foreign `/clock` and a foreign `/x3/imu` |
+
+### Physical plausibility in simulation — `reef_check.sh estimator`
+
+Same scenario and assumptions as §4c, plus **idealized simulated velocity
+observations**: body-level velocity derived from truth, with 0.02 m/s white
+noise keyed by (seed, stamp), at 100 Hz, through REEF's mocap-velocity input
+(not RGB-D odometry). Initialization interval and scoring window as in §4c.
+
+| Criterion | Limit |
+|---|---|
+| Vertical | §4c limits unchanged |
+| Horizontal velocity, per body-level axis | RMSE ≤ 0.10 m/s; peak ≤ 0.30 m/s |
+| Bias plausibility (truth: zero attitude and accel bias) | \|attitude bias\| ≤ 0.05 rad, \|accel bias\| ≤ 0.5 m/s² in the scoring window |
+| Finite and covariance | all outputs finite; every published P symmetric (‖P − Pᵀ‖ ≤ 1e−9‖P‖), min eigenvalue ≥ −1e−9‖P‖ |
+| Initialization | first estimate after exactly 20 IMU messages; takeoff during `ascend`; the horizontal state before takeoff is reported |
+| Timing | estimate age (recorder receive time − stamp, sim time) p99 ≤ 20 ms |
+| Recorded-stream parity | the simulation run's inputs as an event stream: port = reference, bit-identical |
+| Replays | two offline replays bit-identical; ROS-replay metrics reported next to live |
+| Consistency (reported, no limit) | per axis: fraction within ±3σ and mean NEES, with the effective sample size from the error autocorrelation; assumptions stated in the report |
+
 ## 5. Future targets: criteria to be fixed before implementation
 
 These are drafts. Items marked **PROPOSED** must be confirmed (or replaced,
@@ -219,23 +281,33 @@ documented frame (NED/body-level), after conversion from truth.
   σ = 0.01 m and IMU σ_a = 0.02 m/s² should support centimetre-level vertical
   estimates; the margin covers lag during 0.4 m/s ramps and the uncompensated
   slant range (≤ 9 mm at the scenario's tilt).
-- **Horizontal velocity:** thresholds are set once the velocity input is
-  defined. With idealized truth-derived velocity inputs, results must be
-  labelled idealized.
+- **Horizontal velocity:** fixed for P05 in §4d (idealized truth-derived
+  velocity observations, labelled as such).
 - **Consistency:** finite values; covariance bounds reported. Any statistical
   consistency test (for example NEES) states its assumptions.
 - **Timing:** estimate stamp age relative to the input stamp is reported, in
   sim time and in wall time.
 
-### `faults` (P05)
+### `faults` (P05): fixed on 2026-09-30 before any P05 code was written
 
-A missing required stream or broken initialization gives a nonzero result or
-an explicit unhealthy state, never a silent pass. Out-of-order and duplicate
-measurements are rejected or handled as specified, with no double fusion.
-Pause/resume and reset behave as specified. **Replay determinism (PROPOSED):**
-two replays of the same bag with an ordered, single-threaded input path agree
-to 1e-9 relative, or the source of any nondeterminism is documented. Live and
-replay clocks never share a test scope.
+`reef_check.sh faults`. Each case states the specified behaviour; a case
+passes only when that behaviour is observed (never merely "no crash").
+
+| Case | Specified behaviour (limit) |
+|---|---|
+| F1 velocity dropout (fixture h-series) | XY propagates on IMU only; velocity variance grows monotonically during the dropout; the first observation after it is accepted |
+| F2 outlier observation | rejected by the gate (maha² > limit); state and flags unchanged by it |
+| F3 duplicate observation | processed as master (parity); fusion count through the node = core |
+| F4 out-of-order measurement stamps | no effect beyond arrival order (measurement stamps unused, as in master; parity) |
+| F5 IMU NaN / gap / backward stamp | outputs as master (parity); every output finite |
+| F6 range dropout / invalid ranges | z propagates; invalid ranges never gated in (parity v02/v03) |
+| F7 start-up | no output for the first 20 IMU messages; landing reset every 10 propagations until takeoff |
+| F8 resets | reset service and backward time jump reset (node tests); landing transition resets both filters (parity v01/h-series) |
+| F9 parameter failures | node exits 1 naming the parameter, before publishing |
+| F10 replay isolation | foreign `/clock` or foreign `/x3/imu` in the replay domain: replay refuses (exit 2) |
+| F11 simulated velocity dropout (offline replay of the simulation run with the velocity stream removed for 5 s) | outputs finite; horizontal variance grows during the dropout; horizontal error ≤ 0.10 m/s RMS from 1 s after the dropout ends |
+| F12 missing IMU stream (offline replay without IMU) | no estimates; the analysis fails (exit 1) |
+| Replay determinism | two offline replays bit-identical; ROS replay nondeterminism (delivery order) documented |
 
 ### `control` (P06–P07)
 
