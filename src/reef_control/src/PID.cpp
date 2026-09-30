@@ -1,27 +1,31 @@
-#include <ros/ros.h>
-#include "controller.h"
-#include "PID.h"
+// ROS 2 port (P06) of reef_control 12237b76 PID.cpp: ROS plumbing removed
+// (see PID.h); the control laws are unchanged.
+#include <cstdio>
+
+#include "reef_control/controller.h"
+#include "reef_control/PID.h"
 
 namespace reef_control
 {
-  PIDController::PIDController() : Controller()
+  PIDController::PIDController(const ControllerParameters& params) : Controller(params)
   {
-    func_ = boost::bind(&PIDController::gainsCallback,this,_1,_2);
-    server_.setCallback(func_);
-    desired_state_pub_ = nh_.advertise<reef_msgs::DesiredState>("controller_state", 1);
-    nh_.param<bool>("face_target",face_target_, false);
-    nh_.param<bool>("fly_fixed_wing",fly_fixed_wing_, false);
+    face_target_ = params.face_target;
+    fly_fixed_wing_ = params.fly_fixed_wing;
+    gainsCallback(params.gains);
   }
 
-  void PIDController::gainsCallback(reef_control::GainsConfig &config, uint32_t level)
+  void PIDController::gainsCallback(const GainsConfig &config)
   {
     double xIntegrator = config.xIntegrator?1.0:0.0;
     double uIntegrator = config.uIntegrator?1.0:0.0;
 
-    ROS_INFO("New u(PID):   %0.4f,%0.4f,%0.4f", config.uP,uIntegrator*config.uI,config.uD);
-    ROS_INFO("New v(PID):   %0.4f,%0.4f,%0.4f", config.vP,uIntegrator*config.vI,config.vD);
-    ROS_INFO("New w(PID):   %0.4f,%0.4f,%0.4f", config.wP,uIntegrator*config.wI,config.wD);
-    ROS_INFO("New YAW(PID): %0.4f,%0.4f,%0.4f", config.yawP,config.yawI,config.yawD);
+    if (log) {
+      char line[160];
+      std::snprintf(line, sizeof line, "New u(PID):   %0.4f,%0.4f,%0.4f", config.uP,uIntegrator*config.uI,config.uD); log(line);
+      std::snprintf(line, sizeof line, "New v(PID):   %0.4f,%0.4f,%0.4f", config.vP,uIntegrator*config.vI,config.vD); log(line);
+      std::snprintf(line, sizeof line, "New w(PID):   %0.4f,%0.4f,%0.4f", config.wP,uIntegrator*config.wI,config.wD); log(line);
+      std::snprintf(line, sizeof line, "New YAW(PID): %0.4f,%0.4f,%0.4f", config.yawP,config.yawI,config.yawD); log(line);
+    }
 
     kp = config.kp;
     deadzone = config.deadzone;
@@ -43,8 +47,8 @@ namespace reef_control
     w_.setMinMax(-config.max_w, config.max_w);
   }
 
-  void PIDController::computeCommand(const nav_msgs::Odometry current_state_,
-                                     reef_msgs::DesiredState& desired_state,
+  void PIDController::computeCommand(const Odometry current_state_,
+                                     DesiredState& desired_state,
                                      double dt)  {
     if(!initialized_) {
       d_.clearIntegrator();
@@ -54,7 +58,8 @@ namespace reef_control
       w_.clearIntegrator();
     }
 
-    current_yaw = reef_msgs::get_yaw(current_state_.pose.pose.orientation);
+    const Quaternion& q = current_state_.pose.pose.orientation;
+    current_yaw = reef_msgs::get_yaw(Eigen::Quaterniond(q.w, q.x, q.y, q.z));
     desired_state.velocity.z = d_.computePID(desired_state.pose.z, current_state_.pose.pose.position.z, dt);
     desired_state.acceleration.z = w_.computePID(desired_state.velocity.z, current_state_.twist.twist.linear.z, dt);
 
@@ -72,10 +77,11 @@ namespace reef_control
       desired_state.acceleration.x = u_.computePID(desired_state.velocity.x, current_state_.twist.twist.linear.x, dt);
       desired_state.acceleration.y = v_.computePID(desired_state.velocity.y, current_state_.twist.twist.linear.y, dt);
     }
-    desired_state_pub_.publish(desired_state);
+    ++numControllerStates;
+    if (desired_state_pub_) desired_state_pub_(desired_state);
   }
 
-  void PIDController::lookupTable(reef_msgs::DesiredState& desired_state ,const nav_msgs::Odometry& current_state_)
+  void PIDController::lookupTable(DesiredState& desired_state ,const Odometry& current_state_)
   {
     double velocity_request;
     double euclidian_distance;

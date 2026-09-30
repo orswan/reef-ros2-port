@@ -18,17 +18,17 @@ history until a later milestone needs it.
 | `XYZEstimate`, `XYEstimate`, `ZEstimate`, `XYZDebugEstimate`, `XYDebugEstimate` | `Header` → `std_msgs/Header` (no `seq`); unit/frame comments added |
 | `ZDebugEstimate` | as above, and `P` → `p` |
 | `DeltaToVel` | as above, and `S_upper_bound` → `s_upper_bound`, `S_lower_bound` → `s_lower_bound` |
+| `DesiredState`, `DesiredVector` (P06, for `reef_control`) | `Header` → `std_msgs/Header`; unit/frame comments added |
 
 ROS 2 requires lower-case field names, which forces the three renames. Field
 order, types, and fixed array sizes are unchanged (`test/test_messages.py`).
-Not ported: `DesiredState`, `DesiredVector` (controller), `SyncEstimateError`,
-`SyncVerifyEstimates` (analysis tools).
+Not ported: `SyncEstimateError`, `SyncVerifyEstimates` (analysis tools).
 
 ### Helpers
 
 | Library | Contents | Depends on |
 |---|---|---|
-| `reef_msgs_helpers` | `dynamics.h`: `quaternion_to_rotation`, `roll_pitch_yaw_from_rotation321`, `skew` (bodies unchanged). `matrix_operation.h`: `vectorToMatrix`, `vectorToDiagMatrix`, `matrixToArray`, `importMatrixFromVector`, plus validation (`covarianceError`, `rangeError`) | Eigen only |
+| `reef_msgs_helpers` | `dynamics.h`: `quaternion_to_rotation`, `roll_pitch_yaw_from_rotation321`, `skew`, and `get_yaw` (P06; the Eigen overload, body unchanged). `matrix_operation.h`: `vectorToMatrix`, `vectorToDiagMatrix`, `matrixToArray`, `importMatrixFromVector`, plus validation (`covarianceError`, `rangeError`) | Eigen only |
 | `reef_msgs_parameters` | `parameters.hpp`: `importMatrixFromParameter`, `getNumberArrayParameter` (replace ROS 1 `importMatrixFromParamServer`) | rclcpp |
 | header only | `ros_conversions.hpp`: `quaternion_to_rotation(geometry_msgs::msg::Quaternion)` | geometry_msgs |
 

@@ -1,5 +1,7 @@
 """The generated ROS 2 messages have the legacy fields (reef_msgs 7fb63ff).
 
+DesiredState and DesiredVector were added in P06 (reef_control).
+
 LEGACY is transcribed from the ROS 1 .msg files at 7fb63ff, in their field
 order. The only allowed differences are RENAMED (ROS 2 field names must be
 lower case) and `Header` becoming `std_msgs/Header` (ROS 2 has no `seq`).
@@ -11,6 +13,12 @@ LEGACY = {
     'DeltaToVel': [
         ('header', 'Header'), ('S_upper_bound', 'float64[6]'), ('S_lower_bound', 'float64[6]'),
         ('scaled_std_xyz', 'float64[3]'), ('vel', 'geometry_msgs/TwistWithCovarianceStamped')],
+    'DesiredVector': [('x', 'float64'), ('y', 'float64'), ('z', 'float64'), ('yaw', 'float64')],
+    'DesiredState': [
+        ('header', 'Header'), ('node_id', 'uint32'), ('pose', 'DesiredVector'),
+        ('velocity', 'DesiredVector'), ('acceleration', 'DesiredVector'),
+        ('attitude', 'DesiredVector'), ('attitude_valid', 'bool'), ('position_valid', 'bool'),
+        ('velocity_valid', 'bool'), ('acceleration_valid', 'bool'), ('altitude_only', 'bool')],
     'XYEstimate': [('x_dot', 'float64'), ('y_dot', 'float64')],
     'ZEstimate': [('z', 'float64'), ('z_dot', 'float64')],
     'XYZEstimate': [
@@ -32,7 +40,7 @@ LEGACY = {
 RENAMED = {('DeltaToVel', 'S_upper_bound'): 's_upper_bound',
            ('DeltaToVel', 'S_lower_bound'): 's_lower_bound',
            ('ZDebugEstimate', 'P'): 'p'}
-NOT_PORTED = {'DesiredState', 'DesiredVector', 'SyncEstimateError', 'SyncVerifyEstimates'}
+NOT_PORTED = {'SyncEstimateError', 'SyncVerifyEstimates'}  # DesiredState/Vector: P06
 
 
 def ros2_type(msg, legacy_type):

@@ -1,41 +1,43 @@
-#include <ros/ros.h>
-#include "controller.h"
+// ROS 2 port (P06) of reef_control 12237b76 controller.cpp: ROS plumbing
+// removed (see controller.h); the command computation is unchanged.
+#include "reef_control/controller.h"
 
 namespace reef_control
 {
-  Controller::Controller() :
-    nh_(),
-    nh_private_("~"),
-    armed_(false),
+  double durationSec(const Stamp& a, const Stamp& b)
+  {
+    // roscpp_core: Duration::fromNSec(a.toNSec() - b.toNSec()), normalized
+    // to nsec in [0, 1e9); toSec() = sec + 1e-9 * nsec.
+    const int64_t d = (a.sec * 1000000000LL + a.nsec) - (b.sec * 1000000000LL + b.nsec);
+    int64_t sec = d / 1000000000LL;
+    int64_t nsec = d % 1000000000LL;
+    if (nsec < 0) { nsec += 1000000000LL; --sec; }
+    return static_cast<double>(static_cast<int32_t>(sec)) + 1e-9 * static_cast<double>(static_cast<int32_t>(nsec));
+  }
+
+  Controller::Controller(const ControllerParameters& params) :
     initialized_(false),
-    is_flying_(false)
+    is_flying_(false),
+    armed_(false)
   {
 
-    // Get Global Parameters
-    nh_.param<double>("gravity", gravity_, 9.80665);
+    // Parameters (the original asserted that these exist; gravity was read
+    // but never used).
+    max_roll_ = params.max_roll;
+    max_pitch_ = params.max_pitch;
+    max_yaw_rate_ = params.max_yaw_rate;
 
-    ROS_ASSERT_MSG(nh_private_.getParam("max_roll", max_roll_), "[rotor_controller] - missing parameters");
-    ROS_ASSERT(nh_private_.getParam("max_pitch", max_pitch_));
-    ROS_ASSERT(nh_private_.getParam("max_yaw_rate", max_yaw_rate_));
-    command_publisher_       = nh_.advertise<rosflight_msgs::Command>("command", 1);
-
-    desired_state_subcriber_ = nh_.subscribe("desired_state",1,&Controller::desiredStateCallback,this);
-    status_subscriber_       = nh_.subscribe("status",1,&Controller::statusCallback,this);
-    is_flying_subcriber_     = nh_.subscribe("is_flying",1, &Controller::isflyingCallback,this);
-    current_state_subcriber_ = nh_.subscribe("xyz_estimate", 1, &Controller::currentStateCallback,this);
-    rc_in_subcriber_         = nh_.subscribe("rc_raw",1,&Controller::RCInCallback,this);
-    pose_subcriber_          = nh_.subscribe("pose_stamped", 1, &Controller::poseCallback,this);
-
-    time_of_previous_control_ = ros::Time(0);
+    time_of_previous_control_ = Stamp();
+    dt = 0; thrust = 0; phi_desired = 0; theta_desired = 0;
 
   }
 
-  void Controller::desiredStateCallback(const reef_msgs::DesiredState& msg)
+  void Controller::desiredStateCallback(const DesiredState& msg)
   {
     desired_state_ = msg;
   }
 
-  void Controller::currentStateCallback(const reef_msgs::XYZEstimate& msg)
+  void Controller::currentStateCallback(const XYZEstimate& msg)
   {
     current_state_.header = msg.header;
     current_state_.twist.twist.linear.x = msg.xy_plus.x_dot;
@@ -45,7 +47,7 @@ namespace reef_control
     computeCommand();
   }
 
-  void Controller::poseCallback(const geometry_msgs::PoseStamped& msg)
+  void Controller::poseCallback(const PoseStamped& msg)
   {
     current_state_.pose.pose.position.x = msg.pose.position.x;
     current_state_.pose.pose.position.y = msg.pose.position.y;
@@ -53,27 +55,22 @@ namespace reef_control
 
   }
 
-  void Controller::statusCallback(const rosflight_msgs::Status &msg)
+  void Controller::statusCallback(const Status &msg)
   {
     armed_ = msg.armed;
     initialized_ = armed_;
   }
 
-  void Controller::isflyingCallback(const std_msgs::Bool &msg)
+  void Controller::isflyingCallback(const Bool &msg)
   {
     is_flying_ = msg.data;
     initialized_ = is_flying_ && armed_;
   }
 
-  void Controller::RCInCallback(const rosflight_msgs::RCRaw &msg)
-  {
-
-  }
-
   void Controller::computeCommand()
   {
     // Time calculation
-    dt = (current_state_.header.stamp - time_of_previous_control_).toSec();
+    dt = durationSec(current_state_.header.stamp, time_of_previous_control_);
     time_of_previous_control_ = current_state_.header.stamp;
     if(dt <= 0.0000001)
     {
@@ -87,24 +84,7 @@ namespace reef_control
     theta_desired = -desired_state_.acceleration.x;
     thrust = -desired_state_.acceleration.z;
 
-    /*
-    accel_out = Eigen::Vector3d(desired_state_.acceleration.x, desired_state_.acceleration.y, desired_state_.acceleration.z );
-    total_accel = sqrt( pow(accel_out.x(),2) + pow(accel_out.y(),2) + pow((1 - accel_out.z()),2) );
-    thrust = total_accel * hover_throttle_ ;
-
-    if(thrust > 0.001)
-    {
-      phi_desired = asin(accel_out.y() / total_accel);
-      theta_desired = -1.0 * asin(accel_out.x() / total_accel);
-    }
-    else
-    {
-        phi_desired = 0;
-        theta_desired = 0;
-    }
-    */
-
-    command.mode = rosflight_msgs::Command::MODE_ROLL_PITCH_YAWRATE_THROTTLE;
+    command.mode = Command::MODE_ROLL_PITCH_YAWRATE_THROTTLE;
     command.F = std::min(std::max(thrust, 0.0), 1.0);
     if(!desired_state_.attitude_valid && !desired_state_.altitude_only) {
       command.ignore = 0x00;
@@ -121,7 +101,8 @@ namespace reef_control
       command.z = desired_state_.attitude.yaw;
     }
 
-    command_publisher_.publish(command);
+    ++numCommands;
+    if (command_publisher_) command_publisher_(command);
   }
 
 } //namespace

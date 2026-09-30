@@ -8,7 +8,7 @@
 #define SIMPLE_PID_H
 
 #include <cmath>
-#include <ros/ros.h> // included temporarily for debug statements
+// ROS 2 port (P06): the ROS include is removed (unused); the math is unchanged.
 
 namespace reef_control
 {
@@ -96,6 +96,18 @@ public:
   {
       integrator_ = 0.0;
   }
+
+  // Introspection for the fidelity comparison (P06 port; read only).
+  double kp() const { return kp_; }
+  double ki() const { return ki_; }
+  double kd() const { return kd_; }
+  double tau() const { return tau_; }
+  double max() const { return max_; }
+  double min() const { return min_; }
+  double integrator() const { return integrator_; }
+  double differentiator() const { return differentiator_; }
+  double lastError() const { return last_error_; }
+  double lastState() const { return last_state_; }
 
 protected:
   double kp_;  //!< the proportional gain

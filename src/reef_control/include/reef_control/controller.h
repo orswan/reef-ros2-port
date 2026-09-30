@@ -1,22 +1,23 @@
 #ifndef CONTROLLER_H
 #define CONTROLLER_H
 
-#include <ros/ros.h>
-
-#include <rosflight_msgs/Command.h>
-#include <rosflight_msgs/Status.h>
-#include <rosflight_msgs/RCRaw.h>
+// ROS 2 port (P06) of reef_control 12237b76: the Controller base without
+// ROS. Messages are the plain structs of messages.hpp (same member paths and
+// field types); publishers are replaced by sinks set by the node
+// (control_node.hpp); parameters come in ControllerParameters, validated
+// before construction. Statement order and arithmetic are the original's.
+// See docs/CONTROL_CHAIN.md.
 
 #include <math.h>
 #include <eigen3/Eigen/Core>
 
-#include <reef_msgs/XYZEstimate.h>
-#include <reef_msgs/DesiredState.h>
-#include <geometry_msgs/PoseStamped.h>
-#include <std_msgs/Bool.h>
-#include <nav_msgs/Odometry.h>
+#include <algorithm>
+#include <functional>
+#include <string>
 
-#include <simple_pid.h>
+#include "reef_control/gains.hpp"
+#include "reef_control/messages.hpp"
+#include "reef_control/simple_pid.h"
 
 
 namespace reef_control
@@ -24,58 +25,60 @@ namespace reef_control
   class Controller
   {
   public:
-    Controller();
-    ~Controller(){}
+    explicit Controller(const ControllerParameters& params);
+    virtual ~Controller(){}
 
     bool initialized_;
-    ros::NodeHandle nh_;
-    ros::NodeHandle nh_private_;
+
+    // Inputs: the original subscriber callbacks (desired_state, xyz_estimate,
+    // pose_stamped, is_flying, status). rc_raw had an empty callback.
+    void currentStateCallback(const XYZEstimate& msg);
+    void desiredStateCallback(const DesiredState& msg);
+    void poseCallback(const PoseStamped& msg);
+    void isflyingCallback(const Bool& msg);
+    void statusCallback(const Status &msg);
+
+    // Output: the original command publisher.
+    std::function<void(const Command&)> command_publisher_;
+
+    // Introspection (read only).
+    long commandCount() const { return numCommands; }
+    bool armed() const { return armed_; }
+    bool isFlying() const { return is_flying_; }
+    const Odometry& currentState() const { return current_state_; }
+    const DesiredState& desiredState() const { return desired_state_; }
+    const Command& lastCommand() const { return command; }
+    const Stamp& timeOfPreviousControl() const { return time_of_previous_control_; }
+    double lastDt() const { return dt; }
+    double phiDesired() const { return phi_desired; }
+    double thetaDesired() const { return theta_desired; }
+    double thrustDesired() const { return thrust; }
+    double maxRoll() const { return max_roll_; }
+    double maxPitch() const { return max_pitch_; }
+    double maxYawRate() const { return max_yaw_rate_; }
 
    private:
     bool is_flying_;                       // Set by is_flying callback
     bool armed_;
-    bool xy_control_flag;
 
-    nav_msgs::Odometry current_state_;
-    reef_msgs::DesiredState desired_state_;
+    Odometry current_state_;
+    DesiredState desired_state_;
 
-    ros::Publisher command_publisher_;
+    Stamp time_of_previous_control_;
+    Command command;
 
-    ros::Subscriber status_subscriber_;
-    ros::Subscriber current_state_subcriber_;
-    ros::Subscriber desired_state_subcriber_;
-    ros::Subscriber is_flying_subcriber_;
-    ros::Subscriber pose_subcriber_;
-    ros::Subscriber rc_in_subcriber_;
-
-    ros::Time time_of_previous_control_;
-    rosflight_msgs::Command command;
-
-    double mass_;
-    double gravity_;
     double max_roll_, max_pitch_, max_yaw_rate_;
-    double max_thrust_, min_thrust_;
-    double hover_throttle_;
-    double max_u_, max_v_, max_w_;
     double dt;
-    double total_accel;
     double thrust;
     double phi_desired;
     double theta_desired;
+    long numCommands = 0;
 
-    Eigen::Vector3d accel_out;
-
-    void currentStateCallback(const reef_msgs::XYZEstimate& msg);
-    void desiredStateCallback(const reef_msgs::DesiredState& msg);
-    void poseCallback(const geometry_msgs::PoseStamped& msg);
-    void isflyingCallback(const std_msgs::Bool& msg);
-    void statusCallback(const rosflight_msgs::Status &msg);
-    void RCInCallback(const rosflight_msgs::RCRaw &msg);
     void computeCommand();  // Computes and sends command message
 
     // Virtual Function
-    virtual void computeCommand(const nav_msgs::Odometry current_state,
-                  reef_msgs::DesiredState& desired_state,
+    virtual void computeCommand(const Odometry current_state,
+                  DesiredState& desired_state,
                   double dt) = 0;
 
   };

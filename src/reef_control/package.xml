@@ -1,0 +1,38 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>reef_control</name>
+  <version>2.0.0</version>
+  <description>
+    ROS 2 port (P06) of the UF REEF cascaded PID controller (reef_control
+    12237b76): altitude, climb rate, horizontal velocity, position lookup
+    table, and heading, producing roll/pitch/yaw-rate/throttle commands.
+    Faithful to the legacy math (docs/CONTROL_CHAIN.md). Includes a dry-run
+    command sink; no hardware output.
+  </description>
+  <maintainer email="orswan@stanford.edu">orswan</maintainer>
+  <license>MIT</license>
+  <author>UF REEF Autonomous Vehicles Lab (original ROS 1 package)</author>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>eigen3_cmake_module</buildtool_depend>
+  <buildtool_export_depend>eigen3_cmake_module</buildtool_export_depend>
+  <depend>eigen</depend>
+  <depend>reef_msgs</depend>
+  <depend>rclcpp</depend>
+  <depend>builtin_interfaces</depend>
+  <depend>geometry_msgs</depend>
+  <depend>rosflight_msgs</depend>
+  <depend>std_msgs</depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <test_depend>ament_cmake_gtest</test_depend>
+  <test_depend>ament_cmake_pytest</test_depend>
+  <test_depend>python3-pytest</test_depend>
+  <test_depend>rclpy</test_depend>
+  <test_depend>launch_testing</test_depend>
+  <test_depend>launch_testing_ament_cmake</test_depend>
+  <test_depend>launch_testing_ros</test_depend>
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

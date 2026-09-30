@@ -30,6 +30,8 @@ find_package(rclcpp REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/DeltaToVel.msg"
+  "msg/DesiredState.msg"
+  "msg/DesiredVector.msg"
   "msg/XYDebugEstimate.msg"
   "msg/XYEstimate.msg"
   "msg/XYZDebugEstimate.msg"
