@@ -221,6 +221,8 @@ fault behaviour is `reef_check.sh faults` (§5).
 | Golden anchor | port vs the committed P02 golden, all fields, same tolerance |
 | Wrapper equivalence | the same events through the node's callbacks as ROS 2 messages: node state = core state; published messages carry exactly that state (now including XY) |
 | Negative | port vs simulation revision on `s09` must exceed the tolerance; the port with correction C1 enabled must differ from the reference on `s07` |
+| Published messages (added after R1, 2026-09-30) | on every stream, the messages the node publishes (`xyz_estimate` and the `xyz_debug_estimate` sent with it) are bit-identical to what the original published, recorded by the reference harness (A6). Parity runs pin `correction_c1_clear_xy_flag` to false (master semantics) |
+| Correction C1, the default since R1 | on every stream, the port's default output equals the independent step-wise model with C1 (independent.py; tolerance as in §4), and that model equals the original with C1 off |
 
 ### Frame conversions (independent checks)
 
@@ -235,7 +237,7 @@ fault behaviour is `reef_check.sh faults` (§5).
 |---|---|
 | Baseline | D1 preserved (parity above); the core counts XY fusions per accepted observation and the node reports it |
 | ROS layer | never adds fusions: fusion counts through the node = core counts on every stream |
-| C1 (opt-in, NOT APPROVED, default off) | with C1 on: no observation is fused twice (an IMU step fuses exactly when a new observation arrived since the previous step, then clears the flag) on s06/s07/h fixtures; observations superseded by a newer one before the next IMU step are never fused (last one wins, as in master) and are counted; with C1 off: parity unchanged |
+| C1 (**approved at R1, default on**; off = master) | with C1 on: no observation is fused twice (an IMU step fuses exactly when a new observation arrived since the previous step, then clears the flag) on s06/s07/h fixtures; observations superseded by a newer one before the next IMU step are never fused (last one wins, as in master) and are counted; with C1 off: parity unchanged |
 
 ### ROS 2 wrapper, QoS, executor, replay isolation
 
@@ -328,7 +330,7 @@ passes only when that behaviour is observed (never merely "no crash").
 
 | Case | Specified behaviour (limit) |
 |---|---|
-| F1 velocity dropout (fixture h05) | **amended 2026-09-30, see note.** Baseline (C1 off): as master, the last observation is re-fused at every IMU step during the dropout (D1): re-fusions counted > 0 and the velocity variance does not grow (characterization, asserted). With C1 on: no fusion during the dropout, velocity variance grows monotonically. Both: the first observation after the dropout is accepted |
+| F1 velocity dropout (fixture h05) | **amended 2026-09-30 twice, see notes.** Default configuration (C1 on, approved at R1): no fusion during the dropout, velocity variance grows monotonically. Legacy master (C1 off, characterization, asserted): the last observation is re-fused at every IMU step during the dropout (D1) and the velocity variance does not grow. Both: the first observation after the dropout is accepted |
 | F2 outlier observation | rejected by the gate (maha² > limit); state and flags unchanged by it |
 | F3 duplicate observation | processed as master (parity); fusion count through the node = core |
 | F4 out-of-order measurement stamps | no effect beyond arrival order (measurement stamps unused, as in master; parity) |
@@ -338,7 +340,7 @@ passes only when that behaviour is observed (never merely "no crash").
 | F8 resets | reset service and backward time jump reset (node tests); landing transition resets both filters (parity v01/h-series) |
 | F9 parameter failures | node exits 1 naming the parameter, before publishing |
 | F10 replay isolation | foreign `/clock` or foreign `/x3/imu` in the replay domain: replay refuses (exit 2) |
-| F11 simulated velocity dropout (offline replay of the simulation run with the velocity stream removed for 5 s) | outputs finite; horizontal error ≤ 0.10 m/s RMS from 1 s after the dropout ends. **Amended:** variance growth during the dropout is required with C1 on; with C1 off the D1 re-fusion is reported (count, error during the dropout) |
+| F11 simulated velocity dropout (offline replay of the simulation run with the velocity stream removed for 5 s) | default configuration (C1 on): outputs finite; horizontal variance grows during the dropout; horizontal error ≤ 0.10 m/s RMS from 1 s after the dropout ends (limit unchanged). Legacy master (C1 off, characterization): D1 re-fusion during the dropout and the lock-out after it are reproduced and reported |
 | F12 missing IMU stream (offline replay without IMU) | no estimates; the analysis fails (exit 1) |
 | Replay determinism | two offline replays bit-identical; ROS replay nondeterminism (delivery order) documented |
 
@@ -350,6 +352,14 @@ step (legacy defect D1), which the USER decided to preserve until R1. The
 requirement now applies with correction C1 enabled, and the baseline's D1
 behaviour is asserted as a characterization, as the P02 characterization
 cases do. Recorded for R1 as evidence for C1.
+
+Note after R1 (2026-09-30): the USER approved correction C1 after the R1
+self-review, and it is now the port's default. F1 and F11 are therefore
+judged on the default configuration; the legacy (C1 off) runs remain as
+characterizations that must still reproduce master's D1 behaviour. F11's
+error limit is unchanged; the approved correction, not a changed limit, makes
+it pass. Criteria for published messages and for C1 against the independent
+model were added (stricter, §4d).
 
 ### `control` (P06–P07)
 

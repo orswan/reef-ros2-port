@@ -78,10 +78,10 @@ with this file, this file wins.
   source or algorithm decision (the reason is stored in `golden/index.json`).
 - Legacy defects (D1–D10) stay in the reference. Corrections (C1–C6) need
   explicit approval and are separate, documented deviations with their own
-  tests. USER decision (2026-09-30): C1–C6 are deferred to the independent
-  review R1; until then the port must reproduce master exactly (C6, the
-  takeoff detector, was added by the USER after P04; the simulation keeps
-  the IMU vibration assumption instead).
+  tests. USER decisions: C1–C6 were deferred to R1 so that the port first
+  reproduced master exactly; after R1 (2026-09-30) C1 is approved and on by
+  default, C2–C6 remain deferred, and the simulation keeps the IMU vibration
+  assumption.
 - Port tolerances are fixed in ACCEPTANCE.md §4; do not loosen them to make a
   port pass.
 
@@ -102,8 +102,13 @@ with this file, this file wins.
   `baseline/tools/check_port.py` (via `reef_check.sh baseline`) after any
   change to `src/reef_estimator` or `reef_msgs` helpers. Physical plausibility
   is `reef_check.sh estimator`; fault behaviour is `reef_check.sh faults`.
-- Correction C1 stays opt-in (`correction_c1_clear_xy_flag`, default false)
-  until R1 decides; never change the default to make a faults case pass.
+- Correction C1 was approved at R1 and is on by default
+  (`correction_c1_clear_xy_flag`); parity with master is always checked with
+  it off, and the default output against the independent model with C1.
+  C2–C6 stay deferred; each needs its own decision, commit, and tests.
+- Messages must carry the state at the original's publish point (before the
+  takeoff check; R1 finding 1); `check_port.py` compares them with what the
+  original published.
 - Keep the estimator state on the executor thread. Callbacks that other
   threads may run (clock-jump handlers, time sources) only set flags.
 - Simulation inputs to REEF that come from truth (the attitude and the

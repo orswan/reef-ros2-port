@@ -1,6 +1,6 @@
 # Estimator baseline decision (P02)
 
-Status: **decided. Corrections C1–C6 deferred to R1 by the user (2026-09-30).**
+Status: **decided. R1 (2026-09-30): C1 approved and on by default; C2–C6 deferred.**
 Date 2026-09-30. Evidence: `scripts/reef_check.sh baseline` (section 10). The
 reference harness is described in [baseline/README.md](../baseline/README.md).
 
@@ -11,7 +11,7 @@ reference harness is described in [baseline/README.md](../baseline/README.md).
 | **Selected baseline** | `reef_estimator` **master `e4179f48c3f26e22bd1366b71ee1e117ce2f5f7f`** (2021-03-08), with `reef_msgs` `7fb63ff93269040316b71d346dbc32919da1f63d` |
 | Retained comparison reference | simulation branch `95987b5118b624208910d9e51424300022e1f512` (2019-11-22), runnable in the same harness |
 | What "baseline" means | The ROS 2 port must reproduce this revision's behaviour for identical ordered inputs and initialization, within the tolerances in section 8. |
-| Approved algorithmic deviations | **none** in P02 (section 7) |
+| Approved algorithmic deviations | none in P02. **C1 approved by the USER after R1 (2026-09-30)**, on by default in the port (`correction_c1_clear_xy_flag`); false reproduces master exactly (section 7) |
 | Characterized legacy defects | D1–D10 (section 6). Each is kept in the reference, and each has a regression that asserts it |
 | Candidate corrections | C1–C6 (section 7). **USER decision 2026-09-30: all deferred to the independent review R1**, so that the initial ROS 2 port reproduces master exactly. If R1 approves any, each is added afterwards as a separately documented, separately tested deviation. None is blended in silently |
 
@@ -247,7 +247,14 @@ error returns to 0.015 m/s RMS.
 **Must be preserved for fidelity:** everything in section 4, including D1–D9
 (D10 concerns invalid input only; see above) and the float32 conversions (they affect gating decisions exactly).
 
-**Correction candidates (NOT approved).** USER decision, 2026-09-30: "We will
+**R1 decisions (USER, 2026-09-30, after a Claude self-review of `49f7073`,
+STATUS §5f):** C1 approved and on by default; C2–C5 deferred; the IMU
+vibration assumption stays; C6 not decided (deferred). R1 finding 1 (the
+node published after the takeoff check, master before it) was a port defect,
+fixed: messages carry the state at master's publish point, and the published
+messages are now compared with what the original published (harness A6).
+
+**Correction candidates (before R1).** USER decision, 2026-09-30: "We will
 defer all algorithm corrections (C1-C5) to the independent review (R1) to
 guarantee our initial ROS 2 port is a bit-exact match of the legacy master
 branch." P03–P05 therefore implement none of them; the port is scored against
@@ -258,7 +265,7 @@ golden variant:
 
 | ID | Candidate | Evidence it matters | Evaluation needed |
 |---|---|---|---|
-| C1 | Clear the XY flag after a partial update (restores the pre-`e4179f4` behaviour). **Implemented opt-in in P05** (default off) | `s07`; P05 faults F1/F11: with D1 the filter locks out after a velocity dropout | fidelity golden for "master + C1"; estimator quality on X3 data (P05: error after a dropout 0.015 vs 0.51 m/s) |
+| C1 | Clear the XY flag after a partial update (restores the pre-`e4179f4` behaviour). **APPROVED at R1 (USER, 2026-09-30); default on.** Verified against the independent step-wise model with C1 on all 50 streams; off reproduces master bit for bit | `s07`; P05 faults F1/F11: with D1 the filter locks out after a velocity dropout | fidelity golden for "master + C1"; estimator quality on X3 data (P05: error after a dropout 0.015 vs 0.51 m/s) |
 | C2 | Make the XY use of the Z bias consistent with master's Z convention | D2 | quantify the tilt coupling; check sign against the REEF paper |
 | C3 | Use the measured gravity magnitude (or a parameter) instead of 9.81 | `s08` | effect on Z bias convergence |
 | C4 | Allow airborne initialization (for example, skip the gate until the first accepted range) | `s15` | relevant for restarts in flight |
