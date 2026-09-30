@@ -1,8 +1,8 @@
 # REEF ROS 2: project status
 
-Updated 2026-09-30 (P05 complete on its branch). `main` = `b291ca3`, which
-includes P00–P04, all merged by fast-forward at the user's request. P05
-(combined estimator, faults, R1 packet) is on branch `p05-horizontal-estimator`. Section 3 reconciles
+Updated 2026-09-30 (R1 decisions applied). `main` contains P00–P05, all
+merged by fast-forward at the user's request (P05 at `49f7073`), plus the R1
+fixes from branch `r1-fixes` (§5g) once merged. Section 3 reconciles
 [docs/handoff/](handoff/) (conversation-derived history) with the repository
 and the recorded evidence.
 
@@ -15,12 +15,13 @@ project by the implementer, with logs or manifests in the repository tree.
 
 | Branch | Head | Contents | Merged to `main`? |
 |---|---|---|---|
-| `main` | `b291ca3` | starter, checker fixes, dev container, P00–P04 | — |
+| `main` | see `git log -1 main` | starter, checker fixes, dev container, P00–P05, R1 fixes | — |
 | `feature/x3-sim-dataset`, `p00-status-and-wrappers` | merged | P01, P00 | yes (fast-forward, 2026-09-30) |
 | `p02-baseline` | `04c9b19` | P02: reference harness, fixtures, independent check, baseline decision, `reef_check.sh baseline` | yes (fast-forward, 2026-09-30) |
 | `p03-msgs-interfaces` | `65bd779` | P03: `reef_msgs`, vendored `rosflight_msgs`, parameter contract, interface contract | yes (fast-forward, 2026-09-30; USER: `interfaces` passed in the dev container) |
 | `p04-vertical-estimator` | `b291ca3` | P04: vertical estimator | yes (fast-forward, 2026-09-30; USER: `estimator` passed in the dev container) |
-| `p05-horizontal-estimator` | this work | P05: combined estimator, opt-in C1, horizontal fixtures, `baseline`/`estimator`/`faults` targets, R1 packet | no |
+| `p05-horizontal-estimator` | `49f7073` | P05: combined estimator, opt-in C1, horizontal fixtures, `baseline`/`estimator`/`faults` targets, R1 packet | yes (fast-forward, 2026-09-30; USER: checks behaved as expected in the dev container) |
+| `r1-fixes` | this work | R1 decisions: finding 1 (publish point), C1 default, published-message parity, doc fixes | yes, at the user's request (fast-forward) |
 
 No Git remote, pull request, or tag exists; the repository is local. Upstream
 references are pinned in [MIGRATION.md §2](MIGRATION.md): `reef_estimator`
@@ -76,8 +77,8 @@ wrapper boundary ([INTERFACES.md §1](INTERFACES.md#1-command-interface)).
 | P02 baseline decision and reference tests | done, merged. USER: `reef_check.sh baseline` passed in the dev container. Corrections C1–C5 **deferred to R1** (USER, 2026-09-30); the initial port must match master exactly | `reef_check.sh baseline`; [BASELINE_DECISION.md](BASELINE_DECISION.md), [reviews/P02.md](reviews/P02.md) |
 | P03 messages, helpers, ROS 2 interfaces | done, merged (USER: dev-container `interfaces` PASS) | [reviews/P03.md](reviews/P03.md) |
 | P04 vertical estimator and ROS 2 wrapper | done, merged (USER: dev-container `estimator` PASS) | [reviews/P04.md](reviews/P04.md) |
-| P05 combined estimator, faults | **done on `p05-horizontal-estimator`**; `faults` fails F11 (legacy D1, by design until R1) | `reef_check.sh baseline|estimator|faults`; [ACCEPTANCE.md §4d, §5](ACCEPTANCE.md), [reviews/P05.md](reviews/P05.md) |
-| R1 independent review | packet ready: [reviews/R1_packet.md](reviews/R1_packet.md). **A Claude self-review was run at `49f7073` (§5f): SELF-REVIEW, not independent confirmation.** C1–C6 are still undecided (USER) | decisions C1–C6 |
+| P05 combined estimator, faults | done, merged (`49f7073`). F11 failed until R1 (legacy D1); passes with C1, the default since R1 | `reef_check.sh baseline|estimator|faults`; [ACCEPTANCE.md §4d, §5](ACCEPTANCE.md), [reviews/P05.md](reviews/P05.md) |
+| R1 independent review | **SELF-REVIEW at `49f7073` (§5f)**, not independent confirmation. USER decisions (2026-09-30): fix finding 1; approve C1 (default on); defer C2–C6; keep the vibration assumption; fix the stale docs (finding 5). Applied on `r1-fixes` (§5g) | [reviews/R1.md](reviews/R1.md) |
 | P06–P07 controller, REEF closed loop | not started | |
 | P08 RGB-D | not started | |
 | P09 simulation release | not started | |
@@ -226,11 +227,32 @@ Findings (not fixed):
    range ≥ 0.25 m test. Gazebo's default gravity (9.8) against REEF's 9.81 is
    the likely source of the ≈ 0.01 m/s² z bias (D3).
 
-Recommendations, for the USER to decide: C1 approve; C6 revise before P07 (or
+USER decisions on these findings are recorded in §5g and
+[reviews/R1.md](reviews/R1.md). Reviewer's recommendations: C1 approve; C6 revise before P07 (or
 make the vibration depend on thrust); C4 decide before P07; C2, C3, and C5
 defer (small effect on the declared simulation inputs); keep the vibration
 assumption, labelled, until C6 is decided. Still needed: a genuinely
 independent R1 (a different model or a human), and a decision on finding 1.
+
+## 5g. R1 fixes (original container, 2026-09-30, branch `r1-fixes`)
+
+USER decisions after the §5f self-review: fix finding 1; approve C1 as the
+default; defer C2–C6; keep the 1.0 m/s² vibration assumption; fix the stale
+docs of finding 5. Evidence: [reviews/R1.md](reviews/R1.md). [V] All checks
+below ran at `527df13` (code and criteria committed; docs pending).
+
+| Command | Exit | Result |
+|---|---|---|
+| colcon test `reef_estimator` | 0 | 75/75, including `EstimateIsTakenBeforeTheTakeoffCheck` |
+| `baseline/tools/check_port.py` | 0 | PASS 253/253, 1005 s: parity 50/50 (C1 off), wrapper 50/50, **published messages 50/50 bit-identical to the original's** (harness A6), **c1 50/50** (independent model = original with C1 off; port default = model with C1) |
+| `scripts/reef_check.sh faults` | 0 | **PASS 36/36**, 379 s. F11 default (C1 on): 0 fusions during the dropout, P_vx 1.2e−4 → 2.5, error after 0.015 m/s RMS (limit 0.10). F11 legacy (C1 off, characterization): 1249 re-fusions, locked out, 0.515 m/s |
+| `scripts/reef_check.sh interfaces` | 0 | PASS, 120 s |
+| `scripts/reef_check.sh estimator` | 0 | PASS 6/6, 442 s: altitude RMSE 6.7 mm, ż 0.037, vx 0.0108, vy 0.0111 m/s (now with C1 on) |
+| `scripts/reef_check.sh baseline` | 0 | PASS, 1654 s: P02 reference 36/36, port parity 253/253 |
+
+Skipped: `regress_x3_scenario.sh` (no `reef_sim` or X3 script changed);
+shellcheck (no shell script changed). Nothing was run in `reef_ros2_dev`
+by the implementer (H8).
 
 ## 6. Open items and known limits
 
@@ -259,8 +281,12 @@ independent R1 (a different model or a human), and a decision on finding 1.
     bit-identical to master; the takeoff detector itself is correction
     candidate **C6** for R1 (BASELINE_DECISION.md §7).
 13. (resolved in P05) Horizontal filter ported.
-16. **F11 fails with the approved baseline** (D1 lock-out). R1 decision on
-    C1 (opt-in implementation ready, default off).
+16. (resolved at R1) F11 failed with master's D1 lock-out; C1 is approved
+    and on by default. `correction_c1_clear_xy_flag: false` restores master.
+19. R1 findings 3, 4 and 6 (NaN or non-positive velocity covariance, PSD
+    checks on covariance parameters, vibration on the ground) are open; they
+    belong with C2–C6 decisions. A genuinely independent R1 (a different
+    model or a human) is still recommended before flight work.
 17. ROS 2 params-file merge silently drops a type-changing override
     (INTERFACES §3.6); keep override files type-consistent.
 18. No ROS 2 producers exist for mocap velocity or RGB-D velocity
@@ -292,6 +318,9 @@ independent R1 (a different model or a human), and a decision on finding 1.
   `scripts/reef_check.sh faults` (expect **FAIL 35/36**, only F11 baseline).
   Then decide whether to merge `p05-horizontal-estimator` and start R1 with
   [reviews/R1_packet.md](reviews/R1_packet.md).
+- **H8 (R1 fixes, dev container):** `scripts/reef_check.sh faults` (expect
+  PASS 36/36, F11 included) and `scripts/reef_check.sh baseline` (expect
+  PASS, about 28 min); optionally `estimator`.
 - **H3:** open the three plots and `manifest.yaml` of a recent
   `recordings/x3_*` run, and check them against
   [X3_SCENARIO.md](X3_SCENARIO.md). (`feature/x3-sim-dataset` is already
@@ -299,6 +328,6 @@ independent R1 (a different model or a human), and a decision on finding 1.
 
 ## 8. Next milestone
 
-**R1**: independent review with [reviews/R1_packet.md](reviews/R1_packet.md):
-confirm parity and the approved deviations, and decide C1–C6 (C1 has the
-strongest evidence: F11). Then P06–P07 (controller and REEF-in-the-loop).
+**P06**: controller port and command interface (system integration),
+followed by P07 (REEF in the loop). See the plan presented with the R1
+fixes and [handoff/REEF_COMPLETION_PROMPTS.md](handoff/REEF_COMPLETION_PROMPTS.md).

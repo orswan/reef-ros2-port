@@ -1,7 +1,7 @@
 # Interfaces
 
 Current contracts for the project's command line, simulation topics, and
-(planned) REEF estimator. **Implemented** means exercised by a check in this
+the REEF estimator node. **Implemented** means exercised by a check in this
 repository; **PLANNED** or **NOT DEFINED** means no ROS 2 implementation exists.
 
 ## 1. Command interface
@@ -17,6 +17,7 @@ scripts/reef_check.sh sim-data [--gui] [--regress]
 scripts/reef_check.sh baseline [--floor]
 scripts/reef_check.sh interfaces
 scripts/reef_check.sh estimator
+scripts/reef_check.sh faults
 scripts/reef_demo.sh help
 scripts/reef_demo.sh stock [--gui]
 scripts/reef_demo.sh replay recordings/<run> [--rate R]
@@ -26,11 +27,11 @@ scripts/reef_demo.sh estimator --replay recordings/<run> [--rate R]
 ```
 
 Not yet implemented (each says NOT IMPLEMENTED and exits 2):
-`reef_check.sh faults|control|vision|release` and
-`reef_demo.sh closed-loop|vision`. `reef_check.sh estimator` and
-`reef_demo.sh estimator` cover the **vertical** filter only; horizontal
-coverage is reported as NOT IMPLEMENTED (milestone P05) and never counted. All demo modes are **simulation
-only**; no mode can reach hardware.
+`reef_check.sh control|vision|release` and `reef_demo.sh closed-loop|vision`.
+`reef_check.sh faults` runs F1–F12 (ACCEPTANCE.md §5). `reef_check.sh
+estimator` and `reef_demo.sh estimator` cover the complete estimator
+(vertical and horizontal). All demo modes are **simulation only**; no mode
+can reach hardware.
 
 ### Exit status (wrapper boundary)
 
@@ -99,9 +100,10 @@ This is the contract for the ROS 2 `reef_estimator` node
 messages, the parameter contract, and the configuration files; P04
 implemented the node with the vertical filter, and P05 added the horizontal
 filter: the node now runs the complete estimator of master. Behaviour is
-that of master `e4179f48` ([BASELINE_DECISION.md §4](BASELINE_DECISION.md#4-specification-of-the-baseline-master-e4179f48));
-corrections C1–C6 are deferred to R1. Differences from ROS 1 are limited to
-middleware and are listed in §3.9.
+that of master `e4179f48` ([BASELINE_DECISION.md §4](BASELINE_DECISION.md#4-specification-of-the-baseline-master-e4179f48))
+plus correction **C1**, approved at R1 and on by default
+(`correction_c1_clear_xy_flag`; false restores master exactly). C2–C5 and C6
+remain deferred. All other differences from ROS 1 are middleware (§3.9).
 
 ### 3.1 What REEF estimates, and what it does not
 
@@ -144,6 +146,7 @@ Output fields (see the comments in `src/reef_msgs/msg/*.msg`):
 | Field | Meaning |
 |---|---|
 | `header.stamp` | stamp of the IMU message that triggered the step (sensor time; sim time in simulation) |
+| all estimate fields | the values at the original's `publishEstimates()` call, **before** the takeoff/landing check of the same IMU step (BASELINE_DECISION §4.5 step 8). On a takeoff or landing step the filter changes after the message is built (R1 finding 1, fixed; checked against what the original published) |
 | `header.frame_id` | **empty**: the message mixes two frames (NED vertical, body-level horizontal) |
 | `node_id` | not set (0) |
 | `xy_plus.x_dot`, `y_dot` | horizontal velocity, body-level frame [m/s], after the update of this step |
@@ -252,7 +255,7 @@ Defaults are the legacy code defaults; shipped values are in
 | `enable_xy`, `enable_z` | bool | true | landing reset and updates of the horizontal / vertical filter (propagation always runs) |
 | `enable_mocap_xy`, `enable_rgbd`, `enable_mocap_z`, `enable_sonar` | bool | true | subscriptions and selection (§3.5) |
 | `enable_partial_update` | bool | true | β-weighted partial updates instead of full updates |
-| `correction_c1_clear_xy_flag` (P05) | bool | false | correction candidate C1, **NOT APPROVED** (R1): clear the XY flag after a partial update so each observation is fused once; false reproduces master (D1) |
+| `correction_c1_clear_xy_flag` (P05; default changed at R1) | bool | **true** | correction C1, **approved at R1** (USER, 2026-09-30): clear the XY flag after a partial update so each observation is fused once; false reproduces master exactly (legacy D1: stale re-fusion, lock-out after a velocity dropout) |
 | `enable_mocap_switch` | bool | false | RC switch (§3.5) |
 | `mocap_override_channel` | integer | 4 | 0–7 (descriptor range); a double such as `6.0` is rejected (roscpp silently used the default) |
 | `enable_measurements` | bool | true | runtime-settable RGB-D switch |
@@ -281,10 +284,11 @@ estimate, which uses message stamps only.
 
 ### 3.7 Health, initialization, and reset
 
-There is no health topic (none in ROS 1; a diagnostics output may be
-proposed after R1). Observable behaviour, as in master, plus two ROS 2
-additions (reset service, backward-jump reset) that never run unless
-triggered:
+Health is reported on the `diagnostics` topic (§3.3, added in P05; none in
+ROS 1): callback timing, estimate and gate counts, stamp anomalies, and XY
+observation accounting, with level WARN when more than 1 % of callbacks
+exceed 2 ms. Observable behaviour, as in master, plus two ROS 2 additions
+(reset service, backward-jump reset) that never run unless triggered:
 
 | Condition | Behaviour |
 |---|---|
@@ -368,6 +372,7 @@ would add locking without benefit.
 | ROS 1 `rosflight_msgs` (`44e5f37e`) | upstream ROS 2 `rosflight_msgs` v2.0.1, vendored unmodified; same `RCRaw` layout |
 | callback queue with one spinner | single-threaded executor, one mutually exclusive group |
 | (P04) horizontal fields NaN | estimated since P05 |
-| (P05) no diagnostics | `diagnostics` topic (timing, observation accounting); correction C1 available opt-in (off) |
+| (P05) no diagnostics | `diagnostics` topic (timing, observation accounting) |
+| D1: an XY observation re-fused at every IMU step after a partial update | **R1: correction C1 on by default** (algorithmic change, approved; false restores master) |
 | (P04) no reset | `~/reset` service; reset on a backward ROS time jump |
 | (P04) range/mocap rejection logged at every message | throttled to 1 Hz; stamp anomalies logged (throttled) and counted |
