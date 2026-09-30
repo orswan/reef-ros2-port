@@ -153,7 +153,8 @@ the loop. Inputs: `/x3/imu` converted FLU → FRD, attitude from **truth**
 master).
 
 **Scenario assumption (added 2026-09-30, before any simulation result was
-scored; limits unchanged):** the IMU gets 1.0 m/s² per-axis white "rotor
+scored; limits unchanged; kept by the USER on 2026-09-30, with the detector
+itself listed as correction candidate C6):** the IMU gets 1.0 m/s² per-axis white "rotor
 vibration" (`imu_noise.vibration_std`). The original takeoff detector needs
 accelerometer-magnitude variance ≥ 0.5 (m/s²)², which vibration supplied on
 the REEF hardware. An offline replay of an existing vibration-free P01

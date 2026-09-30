@@ -183,12 +183,10 @@ container's own tree (a few minutes).
     `reef_check.sh interfaces` reports a missing package there.
 11. Hardware note for P10+: a MAVLink unused-channel value (`UINT16_MAX`)
     reads as "RC switch on" (INTERFACES.md §3.5).
-12. **IMU vibration assumption** (USER/R1): the simulation runs need 1.0 m/s²
-    of per-axis "rotor vibration" on the IMU, or the original takeoff
-    detector never fires and ż stays pinned at 0 (characterized). The value
-    was chosen to exceed the detector's threshold, not measured. Decide
-    whether to keep it, measure a realistic level, or treat takeoff detection
-    as a correction candidate for R1.
+12. **IMU vibration assumption: kept** (USER, 2026-09-30). The simulation
+    runs keep 1.0 m/s² of per-axis vibration so the ported estimator stays
+    bit-identical to master; the takeoff detector itself is correction
+    candidate **C6** for R1 (BASELINE_DECISION.md §7).
 13. Horizontal filter not ported (P05): horizontal output fields are NaN.
 14. The `reef_estimator` history was imported with `docs/Partial_Update.pdf`
     removed (rewritten commits; the imported tip `dd21f7a6` equals
@@ -207,12 +205,8 @@ container's own tree (a few minutes).
   container; C1–C5 deferred to R1.
 - **H5 (P03):** done. USER: `reef_check.sh interfaces` passed in the dev
   container after the build-tree fix.
-- **H6 (P04, dev container):** `scripts/reef_check.sh estimator` (expect PASS
-  6/6 plus one N/A line for horizontal, about 15 min with a first build).
-  Then look at the three plots in the printed `x3_reef/analysis_reef/`
-  directory, and decide on open item 12 (vibration assumption) and whether to
-  merge `p04-vertical-estimator`. Read INTERFACES.md §3 (the node
-  contract) and decide whether to merge `p03-msgs-interfaces`.
+- **H6 (P04):** done. USER: `reef_check.sh estimator` passed in the dev
+  container; vibration assumption kept; takeoff detector added as C6.
 - **H3:** open the three plots and `manifest.yaml` of a recent
   `recordings/x3_*` run, and check them against
   [X3_SCENARIO.md](X3_SCENARIO.md). (`feature/x3-sim-dataset` is already
@@ -223,4 +217,4 @@ container's own tree (a few minutes).
 **P05**: port the horizontal filter (XY EKF, mocap/RGB-D velocity updates,
 D1 preserved), extend the fidelity check to the XY fields of the same 40
 streams, and add replay/fault cases. R1 (independent review, including
-C1–C5 and the vibration assumption) follows P05.
+C1–C6) follows P05.

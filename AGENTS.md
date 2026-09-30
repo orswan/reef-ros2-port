@@ -76,10 +76,12 @@ with this file, this file wins.
 - Never use port output as its own reference. Golden files change only via
   `check_baseline.py --update-golden "<reason>"`, and only with an explained
   source or algorithm decision (the reason is stored in `golden/index.json`).
-- Legacy defects (D1–D10) stay in the reference. Corrections (C1–C5) need
+- Legacy defects (D1–D10) stay in the reference. Corrections (C1–C6) need
   explicit approval and are separate, documented deviations with their own
-  tests. USER decision (2026-09-30): C1–C5 are deferred to the independent
-  review R1; until then the port must reproduce master exactly.
+  tests. USER decision (2026-09-30): C1–C6 are deferred to the independent
+  review R1; until then the port must reproduce master exactly (C6, the
+  takeoff detector, was added by the USER after P04; the simulation keeps
+  the IMU vibration assumption instead).
 - Port tolerances are fixed in ACCEPTANCE.md §4; do not loosen them to make a
   port pass.
 

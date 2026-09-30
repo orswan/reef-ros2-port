@@ -101,7 +101,7 @@ implemented the node with the **vertical** filter. The horizontal filter is
 not ported yet: its inputs are not subscribed and its output fields are
 **NaN** (§3.3). Everything marked "horizontal" below is PLANNED (P05). Behaviour is
 that of master `e4179f48` ([BASELINE_DECISION.md §4](BASELINE_DECISION.md#4-specification-of-the-baseline-master-e4179f48));
-corrections C1–C5 are deferred to R1. Differences from ROS 1 are limited to
+corrections C1–C6 are deferred to R1. Differences from ROS 1 are limited to
 middleware and are listed in §3.9.
 
 ### 3.1 What REEF estimates, and what it does not

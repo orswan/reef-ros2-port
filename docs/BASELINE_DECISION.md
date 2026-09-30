@@ -1,6 +1,6 @@
 # Estimator baseline decision (P02)
 
-Status: **decided. Corrections C1–C5 deferred to R1 by the user (2026-09-30).**
+Status: **decided. Corrections C1–C6 deferred to R1 by the user (2026-09-30).**
 Date 2026-09-30. Evidence: `scripts/reef_check.sh baseline` (section 10). The
 reference harness is described in [baseline/README.md](../baseline/README.md).
 
@@ -13,7 +13,7 @@ reference harness is described in [baseline/README.md](../baseline/README.md).
 | What "baseline" means | The ROS 2 port must reproduce this revision's behaviour for identical ordered inputs and initialization, within the tolerances in section 8. |
 | Approved algorithmic deviations | **none** in P02 (section 7) |
 | Characterized legacy defects | D1–D10 (section 6). Each is kept in the reference, and each has a regression that asserts it |
-| Candidate corrections | C1–C5 (section 7). **USER decision 2026-09-30: all deferred to the independent review R1**, so that the initial ROS 2 port reproduces master exactly. If R1 approves any, each is added afterwards as a separately documented, separately tested deviation. None is blended in silently |
+| Candidate corrections | C1–C6 (section 7). **USER decision 2026-09-30: all deferred to the independent review R1**, so that the initial ROS 2 port reproduces master exactly. If R1 approves any, each is added afterwards as a separately documented, separately tested deviation. None is blended in silently |
 
 ## 2. What the two revisions actually are
 
@@ -250,6 +250,7 @@ golden variant:
 | C3 | Use the measured gravity magnitude (or a parameter) instead of 9.81 | `s08` | effect on Z bias convergence |
 | C4 | Allow airborne initialization (for example, skip the gate until the first accepted range) | `s15` | relevant for restarts in flight |
 | C5 | Tilt-compensate the range (the source's own TODO) | `s05` | the X3 range data is a slant range |
+| C6 | Revise takeoff detection: the accelerometer-magnitude variance threshold (0.5 (m/s²)² over 20 samples, `ACC_TAKEOFF_VARIANCE`) only fires with strong vibration. Added by the USER 2026-09-30 | P04 characterization: on the vibration-free simulated IMU takeoff is never declared and the landing reset pins ż at 0; the simulation runs keep a 1.0 m/s² vibration assumption instead | detector behaviour on measured or modelled vibration; effect on landing detection |
 
 ## 8. Numerical tolerances (fixed before any port exists)
 
@@ -300,7 +301,7 @@ needs `--update-golden "<reason>"`, and the reason is stored).
 
 - **Which exact configuration flew.** The hardware bundle pins master, but
   the parameter files used on each vehicle are not known.
-- **Corrections C1–C5** are deferred to R1 (USER, 2026-09-30). The port
+- **Corrections C1–C6** are deferred to R1 (USER, 2026-09-30). The port
   targets master as is.
 - **Partial-update paper.** The formula is checked against the code and the
   cited paper's structure, not against a full reading of
