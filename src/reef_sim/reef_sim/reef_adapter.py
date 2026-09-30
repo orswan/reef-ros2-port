@@ -1,9 +1,13 @@
-"""Adapter from the X3 simulation topics to the REEF estimator inputs (P04).
+"""Adapter from the X3 simulation topics to the REEF estimator inputs (P04/P05).
+
+Live nodes: x3_imu_adapter (C++, reef_x3_adapter: the IMU path below) and
+this reef_adapter (velocity observations, labels). The offline replay uses
+the Python functions of this module for both.
 
     /x3/imu (FLU specific force, no orientation)  +  /x3/truth/odom (TRUTH)
         -> /x3/reef/imu/data   sensor_msgs/Imu, body FRD, orientation of FRD in NED
-    /x3/range (idealized, derived from truth)
-        -> /x3/reef/sonar      sensor_msgs/Range, unchanged
+    /x3/range (idealized, derived from truth) is read by the estimator directly
+        (remapped; unchanged, since P05; earlier /x3/reef/sonar)
     /x3/truth/odom (TRUTH)
         -> /x3/reef/mocap_velocity/body_level_frame   geometry_msgs/TwistWithCovarianceStamped:
            IDEALIZED simulated velocity observation (P05): the truth velocity in
@@ -190,41 +194,36 @@ class Adapter:
 
 
 def main(args=None):
+    """Live node: simulated velocity observations and the input labels.
+
+    Since P05 the latency-critical IMU conversion runs in C++
+    (reef_x3_adapter/x3_imu_adapter, same algorithm as Adapter above, which the
+    offline replay still uses), and the estimator reads /x3/range directly.
+    """
     import rclpy
+    from geometry_msgs.msg import TwistWithCovarianceStamped
     from nav_msgs.msg import Odometry
     from rclpy.node import Node
     from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
-    from geometry_msgs.msg import TwistWithCovarianceStamped
-    from sensor_msgs.msg import Imu, Range
     from std_msgs.msg import String
 
     class ReefAdapter(Node):
         def __init__(self):
             super().__init__('reef_adapter')
-            self.adapter = Adapter()
-            self.imu_pub = self.create_publisher(Imu, '/x3/reef/imu/data', 50)
-            self.range_pub = self.create_publisher(Range, '/x3/reef/sonar', 10)
-            latched = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
-                                 durability=DurabilityPolicy.TRANSIENT_LOCAL)
             self.vel_std = float(self.declare_parameter('velocity_noise_std', VELOCITY_NOISE_STD).value)
             self.vel_seed = int(self.declare_parameter('velocity_seed', VELOCITY_SEED).value)
             self.vel_pub = self.create_publisher(
                 TwistWithCovarianceStamped, '/x3/reef/mocap_velocity/body_level_frame', 50)
+            latched = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
+                                 durability=DurabilityPolicy.TRANSIENT_LOCAL)
             self.label_pub = self.create_publisher(String, '/x3/reef/input_labels', latched)
             self.label_pub.publish(String(data=LABEL))
-            self.create_subscription(Imu, '/x3/imu', self.on_imu, 50)
             self.create_subscription(Odometry, '/x3/truth/odom', self.on_truth, 50)
-            self.create_subscription(Range, '/x3/range', self.range_pub.publish, 10)
             self.get_logger().warn(LABEL)
-
-        @staticmethod
-        def ns(stamp):
-            return stamp.sec * 1_000_000_000 + stamp.nanosec
 
         def on_truth(self, m):
             o, v = m.pose.pose.orientation, m.twist.twist.linear
-            t = self.ns(m.header.stamp)
-            self.emit(self.adapter.on_truth(t, (o.w, o.x, o.y, o.z)))
+            t = m.header.stamp.sec * 1_000_000_000 + m.header.stamp.nanosec
             vx, vy, var = velocity_observation(t, (o.w, o.x, o.y, o.z), (v.x, v.y, v.z),
                                                self.vel_std, self.vel_seed)
             tw = TwistWithCovarianceStamped()
@@ -233,25 +232,6 @@ def main(args=None):
             tw.twist.twist.linear.x, tw.twist.twist.linear.y = vx, vy
             tw.twist.covariance[0] = tw.twist.covariance[7] = var
             self.vel_pub.publish(tw)
-
-        def on_imu(self, m):
-            self.emit(self.adapter.on_imu(self.ns(m.header.stamp), m))
-
-        def emit(self, items):
-            for _, m, q in items:
-                out = Imu()
-                out.header.stamp = m.header.stamp
-                out.header.frame_id = 'x3/base_link_frd'
-                a, w = m.linear_acceleration, m.angular_velocity
-                out.linear_acceleration.x, out.linear_acceleration.y, out.linear_acceleration.z = \
-                    flu_to_frd((a.x, a.y, a.z))
-                out.angular_velocity.x, out.angular_velocity.y, out.angular_velocity.z = \
-                    flu_to_frd((w.x, w.y, w.z))
-                out.linear_acceleration_covariance = m.linear_acceleration_covariance
-                out.angular_velocity_covariance = m.angular_velocity_covariance
-                out.orientation.w, out.orientation.x, out.orientation.y, out.orientation.z = q
-                out.orientation_covariance[0] = 0.0   # idealized: truth (see input_labels)
-                self.imu_pub.publish(out)
 
     rclpy.init(args=args)
     node = ReefAdapter()

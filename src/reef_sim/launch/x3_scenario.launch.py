@@ -36,7 +36,7 @@ from launch_ros.substitutions import FindPackageShare
 
 RECORDED_TOPICS = ['/clock', '/x3/truth/odom', '/x3/imu', '/x3/range',
                    '/x3/cmd_vel', '/x3/scenario/phase']
-REEF_TOPICS = ['/x3/reef/imu/data', '/x3/reef/sonar', '/x3/reef/mocap_velocity/body_level_frame',
+REEF_TOPICS = ['/x3/reef/imu/data', '/x3/reef/mocap_velocity/body_level_frame',
                '/x3/reef/xyz_estimate', '/x3/reef/xyz_debug_estimate', '/x3/reef/is_flying_reef',
                '/x3/reef/input_labels', '/x3/reef/diagnostics']
 REEF_REQUIRED = ['/x3/reef/imu/data', '/x3/reef/mocap_velocity/body_level_frame', '/x3/reef/xyz_estimate']
@@ -97,10 +97,12 @@ def generate_launch_description():
         Node(package='reef_sim', executable='range_sensor', name='range_sensor', output='screen',
              parameters=[params_file, sim_time], condition=IfCondition(enable_range)),
         # REEF: adapter (IDEALIZED attitude from truth) and the ported estimator.
+        Node(package='reef_x3_adapter', executable='x3_imu_adapter', name='x3_imu_adapter', output='screen',
+             parameters=[sim_time], condition=IfCondition(estimator_on)),
         Node(package='reef_sim', executable='reef_adapter', name='reef_adapter', output='screen',
              parameters=[sim_time], condition=IfCondition(estimator_on)),
         Node(package='reef_estimator', executable='reef_estimator_node', name='reef_estimator',
-             namespace='/x3/reef', output='screen', condition=IfCondition(estimator_on),
+             namespace='/x3/reef', output='screen', remappings=[('sonar', '/x3/range')], condition=IfCondition(estimator_on),
              parameters=[PathJoinSubstitution([reef_config, 'estimator_master.yaml']),
                          PathJoinSubstitution([reef_config, 'simulation.yaml']), sim_time]),
         runner,

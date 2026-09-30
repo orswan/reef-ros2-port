@@ -27,6 +27,7 @@
   <exec_depend>rosidl_runtime_py</exec_depend>
   <exec_depend>reef_estimator</exec_depend>
   <exec_depend>reef_msgs</exec_depend>
+  <exec_depend>reef_x3_adapter</exec_depend>
   <exec_depend>python3-numpy</exec_depend>
   <exec_depend>python3-matplotlib</exec_depend>
   <exec_depend>python3-yaml</exec_depend>

@@ -22,7 +22,7 @@ from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
 PLAYED = ['/clock', '/x3/truth/odom', '/x3/imu', '/x3/range', '/x3/scenario/phase']
-REEF_INPUTS = ['/x3/reef/imu/data', '/x3/reef/sonar', '/x3/reef/mocap_velocity/body_level_frame']
+REEF_INPUTS = ['/x3/reef/imu/data', '/x3/reef/mocap_velocity/body_level_frame']
 RECORDED = PLAYED[1:] + REEF_INPUTS + ['/x3/reef/xyz_estimate', '/x3/reef/xyz_debug_estimate',
                                        '/x3/reef/is_flying_reef', '/x3/reef/input_labels', '/x3/reef/diagnostics']
 
@@ -38,10 +38,12 @@ def generate_launch_description():
         DeclareLaunchArgument('bag'),
         DeclareLaunchArgument('output_dir'),
         DeclareLaunchArgument('rate', default_value='1.0'),
+        Node(package='reef_x3_adapter', executable='x3_imu_adapter', name='x3_imu_adapter', output='screen',
+             parameters=[sim_time]),
         Node(package='reef_sim', executable='reef_adapter', name='reef_adapter', output='screen',
              parameters=[sim_time]),
         Node(package='reef_estimator', executable='reef_estimator_node', name='reef_estimator',
-             namespace='/x3/reef', output='screen',
+             namespace='/x3/reef', output='screen', remappings=[('sonar', '/x3/range')],
              parameters=[PathJoinSubstitution([reef_config, 'estimator_master.yaml']),
                          PathJoinSubstitution([reef_config, 'simulation.yaml']), sim_time]),
         ExecuteProcess(

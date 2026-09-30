@@ -120,7 +120,7 @@ if [[ "$headless" == false ]]; then
 fi
 gui_seen=0
 [[ "$enable_range" == true ]] && required+=("range_sensor")
-[[ "$estimator" == true ]] && required+=("reef_estimator_node" "reef_adapter")
+[[ "$estimator" == true ]] && required+=("reef_estimator_node" "reef_adapter" "x3_imu_adapter")
 
 # --- cleanup and signals
 launch_pid="" sid="" pending=""

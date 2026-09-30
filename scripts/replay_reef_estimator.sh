@@ -10,7 +10,7 @@
 # unrelated clock or sensor stream: before playback no publisher may exist in
 # the domain for /clock, for any played topic, or for any REEF input topic;
 # during playback each played topic has exactly one publisher, the bag player,
-# and each REEF input exactly one, the adapter (recorded in sources.json). No
+# and each REEF input exactly one, its adapter (recorded in sources.json). No
 # Gazebo is started. For a deterministic replay without any ROS graph use
 # `ros2 run reef_sim x3_reef_offline RUN_DIR`.
 #
@@ -59,7 +59,7 @@ export GZ_PARTITION="reef_replay_$token"   # no Gazebo here; lets sim_env_matche
 duration="$(python3 -c 'import sys,yaml; print(int(yaml.safe_load(open(sys.argv[1]))["rosbag2_bagfile_information"]["duration"]["nanoseconds"]/1e9))' "$run/bag/metadata.yaml")"
 
 played=(/clock /x3/truth/odom /x3/imu /x3/range /x3/scenario/phase)
-reef_inputs=(/x3/reef/imu/data /x3/reef/sonar /x3/reef/mocap_velocity/body_level_frame)
+reef_inputs=(/x3/reef/imu/data /x3/reef/mocap_velocity/body_level_frame)
 pre="$(python3 "$REEF_ROOT/scripts/topic_sources.py" --wait 2 "${played[@]}" "${reef_inputs[@]}")"
 python3 -c 'import json,sys; d=json.loads(sys.argv[1]); sys.exit(0 if not any(d.values()) else 1)' "$pre" \
   || fail 2 "domain $ROS_DOMAIN_ID already has publishers of replay inputs: $pre (choose another REEF_REPLAY_DOMAIN)"
@@ -99,7 +99,8 @@ import json, sys
 d, n = json.loads(sys.argv[1]), int(sys.argv[2])
 topics = list(d)
 ok = all(len(d[t]) == 1 and d[t][0].split('/')[-1].startswith('rosbag2_player') for t in topics[:n] if t != '/x3/scenario/phase') \
-    and all(d[t] == ['/reef_adapter'] for t in topics[n:])
+    and d['/x3/reef/imu/data'] == ['/x3_imu_adapter'] \
+    and d['/x3/reef/mocap_velocity/body_level_frame'] == ['/reef_adapter']
 sys.exit(0 if ok else 1)
 PY
 say "sources during playback: $during"
