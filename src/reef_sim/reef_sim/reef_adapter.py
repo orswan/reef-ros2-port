@@ -127,7 +127,7 @@ MAX_EXTRAPOLATION_NS = 20_000_000
 class TruthInterpolator:
     """Truth attitude samples (t_ns, q_ENU<-FLU as w, x, y, z), interpolated on request."""
 
-    def __init__(self, keep=400):
+    def __init__(self, keep=16):   # 160 ms of truth at 100 Hz is plenty for IMU interpolation
         self.samples = deque(maxlen=keep)
 
     def add(self, t_ns, q_wxyz):
@@ -154,15 +154,15 @@ class TruthInterpolator:
             if t_ns - t1 > MAX_EXTRAPOLATION_NS:
                 return ned_frd_from_enu_flu(q1)
             return ned_frd_from_enu_flu(slerp(q0, q1, (t_ns - t0) / (t1 - t0)))
-        prev = self.samples[0]
-        for cur in self.samples:
-            if cur[0] >= t_ns:
-                if cur[0] == t_ns or cur is prev:
+        # search from the newest sample (IMU stamps are near the latest truth)
+        for k in range(len(self.samples) - 1, 0, -1):
+            prev, cur = self.samples[k - 1], self.samples[k]
+            if prev[0] <= t_ns <= cur[0]:
+                if t_ns == cur[0]:
                     return ned_frd_from_enu_flu(cur[1])
                 s = (t_ns - prev[0]) / (cur[0] - prev[0])
                 return ned_frd_from_enu_flu(slerp(prev[1], cur[1], s))
-            prev = cur
-        return None
+        return ned_frd_from_enu_flu(self.samples[0][1])   # t_ns == oldest stamp
 
 
 class Adapter:
