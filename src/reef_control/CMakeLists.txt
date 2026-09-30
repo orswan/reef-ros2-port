@@ -26,7 +26,8 @@ find_package(std_msgs REQUIRED)
 
 # ROS-independent core. -ffp-contract=off: no FMA contraction regardless of
 # -march, so results stay bit-identical to the reference harness build.
-add_library(reef_control_core SHARED src/simple_pid.cpp src/controller.cpp src/PID.cpp src/gains.cpp)
+add_library(reef_control_core SHARED src/simple_pid.cpp src/controller.cpp src/PID.cpp src/gains.cpp
+  src/firmware_mux.cpp)
 target_include_directories(reef_control_core PUBLIC
   "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
   "$<INSTALL_INTERFACE:include/${PROJECT_NAME}>")
@@ -45,9 +46,13 @@ target_link_libraries(reef_control_node reef_control_ros)
 add_executable(reef_control_event_replay tools/event_replay.cpp)
 target_link_libraries(reef_control_event_replay reef_control_ros)
 
+# Dry-run command sink (no hardware output).
+add_executable(reef_control_sink src/command_sink.cpp)
+target_link_libraries(reef_control_sink reef_control_core rclcpp::rclcpp ${rosflight_msgs_TARGETS})
+
 install(DIRECTORY include/ DESTINATION include/${PROJECT_NAME})
-install(TARGETS reef_control_node reef_control_event_replay DESTINATION lib/${PROJECT_NAME})
-install(DIRECTORY cfg config DESTINATION share/${PROJECT_NAME})
+install(TARGETS reef_control_node reef_control_event_replay reef_control_sink DESTINATION lib/${PROJECT_NAME})
+install(DIRECTORY cfg config launch DESTINATION share/${PROJECT_NAME})
 install(TARGETS reef_control_core reef_control_ros
   EXPORT export_${PROJECT_NAME}
   ARCHIVE DESTINATION lib
@@ -56,5 +61,17 @@ install(TARGETS reef_control_core reef_control_ros
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
 ament_export_dependencies(eigen3_cmake_module Eigen3 reef_msgs rclcpp builtin_interfaces
   geometry_msgs rosflight_msgs std_msgs)
+
+if(BUILD_TESTING)
+  find_package(ament_cmake_gtest REQUIRED)
+  find_package(ament_cmake_pytest REQUIRED)
+  ament_add_gtest(test_core test/test_core.cpp)
+  target_link_libraries(test_core reef_control_core)
+  ament_add_gtest(test_control_node test/test_control_node.cpp TIMEOUT 120)
+  target_link_libraries(test_control_node reef_control_ros)
+  ament_add_pytest_test(test_legacy_params test/test_legacy_params.py)
+  find_package(launch_testing_ament_cmake REQUIRED)
+  add_launch_test(test/test_node_process.py TIMEOUT 180)
+endif()
 
 ament_package()

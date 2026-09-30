@@ -48,7 +48,7 @@ def ros2_type(msg, legacy_type):
     if legacy_type == 'Header':
         return 'std_msgs/Header'
     base, _, size = legacy_type.partition('[')
-    base = {'float64': 'double'}.get(base, base)
+    base = {'float64': 'double', 'bool': 'boolean'}.get(base, base)
     if base in LEGACY:
         base = f'reef_msgs/{base}'
     return f'{base}[{size}' if size else base
