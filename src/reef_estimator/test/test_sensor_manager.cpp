@@ -3,6 +3,7 @@
 #include <gtest/gtest.h>
 
 #include <chrono>
+#include <map>
 #include <cmath>
 #include <memory>
 #include <string>
@@ -76,13 +77,13 @@ bool contains(const std::string & s, const std::string & part) {return s.find(pa
 
 }  // namespace
 
-TEST_F(Node, SimulationConfigurationSubscribesOnlyVerticalInputs)
+TEST_F(Node, SimulationConfigurationSubscribesToTheSimulatedInputs)
 {
   auto n = make({kMaster, kSim}, {}, "/sim_cfg");
   EXPECT_EQ(n->count_subscribers("/sim_cfg/imu/data"), 1u);
   EXPECT_EQ(n->count_subscribers("/sim_cfg/sonar"), 1u);
   EXPECT_EQ(n->count_subscribers("/sim_cfg/rc_raw"), 0u);                     // switch disabled
-  EXPECT_EQ(n->count_subscribers("/sim_cfg/mocap_velocity/body_level_frame"), 0u);  // horizontal
+  EXPECT_EQ(n->count_subscribers("/sim_cfg/mocap_velocity/body_level_frame"), 1u);  // idealized velocity
   EXPECT_EQ(n->count_subscribers("/sim_cfg/rgbd_velocity_body_frame"), 0u);
   EXPECT_EQ(n->count_subscribers("/sim_cfg/mocap_ned"), 0u);   // disabled in simulation.yaml
 }
@@ -110,7 +111,7 @@ TEST_F(Node, QoSMatchesTheContract)
   }
 }
 
-TEST_F(Node, OutputsCarryTheImuStampAndNaNHorizontalFields)
+TEST_F(Node, OutputsCarryTheImuStampAndTheCoreState)
 {
   auto n = make({kMaster, kSim});
   for (int k = 0; k < 20; k++) {n->imuCallback(imu(k));}
@@ -121,15 +122,39 @@ TEST_F(Node, OutputsCarryTheImuStampAndNaNHorizontalFields)
   EXPECT_EQ(m.header.stamp, imu(20).header.stamp);
   EXPECT_TRUE(m.header.frame_id.empty());
   EXPECT_EQ(m.node_id, 0u);
-  EXPECT_TRUE(std::isnan(m.xy_plus.x_dot));
-  EXPECT_TRUE(std::isnan(m.xy_plus.y_dot));
+  EXPECT_EQ(m.xy_plus.x_dot, n->core().xyFilter().xHat(0, 0));
+  EXPECT_EQ(m.xy_plus.y_dot, n->core().xyFilter().xHat(1, 0));
   EXPECT_EQ(m.z_plus.z, n->core().zFilter().xHat(0, 0));
   ASSERT_TRUE(n->lastDebugEstimate());   // debug_mode is true in the master file
   const auto & d = *n->lastDebugEstimate();
-  EXPECT_TRUE(std::isnan(d.xy_plus.pitch_bias));
-  EXPECT_TRUE(std::isnan(d.xy_minus.sigma_plus[5]));
+  EXPECT_EQ(d.xy_plus.pitch_bias, n->core().xyFilter().xHat(2, 0));
+  EXPECT_EQ(d.xy_minus.sigma_plus[5], d.xy_minus.ya_bias + 3 * std::sqrt(n->core().xyMinusState().P(5, 5)));
   EXPECT_EQ(d.z_plus.p[4], n->core().zFilter().P(1, 1));
   EXPECT_EQ(d.z_plus.truth[0], 0.0);
+}
+
+TEST_F(Node, DiagnosticsReportTimingAndObservationAccounting)
+{
+  auto n = make({kMaster, kSim}, {}, "/diag");
+  auto helper = rclcpp::Node::make_shared("diag_listener", "/diag");
+  std::vector<diagnostic_msgs::msg::DiagnosticArray> got;
+  auto sub = helper->create_subscription<diagnostic_msgs::msg::DiagnosticArray>(
+    "/diag/diagnostics", 10, [&](const diagnostic_msgs::msg::DiagnosticArray & m) {got.push_back(m);});
+  rclcpp::executors::SingleThreadedExecutor exec;
+  exec.add_node(n);
+  exec.add_node(helper);
+  const auto end = std::chrono::steady_clock::now() + 5s;
+  while (sub->get_publisher_count() < 1 && std::chrono::steady_clock::now() < end) {exec.spin_some(20ms);}
+  for (int k = 0; k < 260; k++) {n->imuCallback(imu(k));}
+  const auto end2 = std::chrono::steady_clock::now() + 5s;
+  while (got.empty() && std::chrono::steady_clock::now() < end2) {exec.spin_some(20ms);}
+  ASSERT_FALSE(got.empty());
+  std::map<std::string, std::string> v;
+  for (const auto & kvp : got.back().status.at(0).values) {v[kvp.key] = kvp.value;}
+  EXPECT_EQ(v["callbacks_total"], "249");   // published inside the 250th IMU callback
+  EXPECT_EQ(v["correction_c1"], "false");
+  EXPECT_TRUE(v.count("window_callback_us_p99"));
+  EXPECT_TRUE(v.count("xy_fusions"));
 }
 
 TEST_F(Node, StampAnomaliesAreCountedButProcessed)
@@ -165,11 +190,12 @@ TEST_F(Node, ResetMakesTheNodeBehaveLikeAFreshOne)
   ASSERT_EQ(after.size(), fresh.size());
   ASSERT_GT(after.size(), 100u);
   for (std::size_t i = 0; i < after.size(); i++) {
-    // exact equality of every field (the horizontal fields are NaN in both)
+    // exact equality of every field
     EXPECT_EQ(after[i].header, fresh[i].header) << i;
     EXPECT_EQ(after[i].z_plus.z, fresh[i].z_plus.z) << i;
     EXPECT_EQ(after[i].z_plus.z_dot, fresh[i].z_plus.z_dot) << i;
-    EXPECT_TRUE(std::isnan(after[i].xy_plus.x_dot) && std::isnan(fresh[i].xy_plus.x_dot)) << i;
+    EXPECT_EQ(after[i].xy_plus.x_dot, fresh[i].xy_plus.x_dot) << i;
+    EXPECT_EQ(after[i].xy_plus.y_dot, fresh[i].xy_plus.y_dot) << i;
   }
 }
 

@@ -6,7 +6,7 @@
   <description>
     ROS 2 port of the UF REEF estimator (altitude, vertical velocity,
     horizontal body-level velocity, and biases; not a full pose).
-    P04: the vertical filter and its ROS 2 node.
+    The vertical and horizontal filters (P04/P05) and the ROS 2 node.
   </description>
   <maintainer email="orswan@stanford.edu">orswan</maintainer>
   <license>MIT</license>
@@ -20,6 +20,7 @@
   <depend>reef_msgs</depend>
   <depend>rclcpp</depend>
   <depend>builtin_interfaces</depend>
+  <depend>diagnostic_msgs</depend>
   <depend>geometry_msgs</depend>
   <depend>rosflight_msgs</depend>
   <depend>sensor_msgs</depend>

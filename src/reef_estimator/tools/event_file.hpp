@@ -17,7 +17,7 @@
 #include <vector>
 
 #include "reef_estimator/parameters.hpp"
-#include "reef_estimator/vertical_estimator.h"
+#include "reef_estimator/xyz_estimator.h"
 #include "reef_msgs/matrix_operation.h"
 
 namespace reef_estimator::tools
@@ -61,7 +61,9 @@ inline EstimatorParameters load_params(const std::string & path)
     {"enable_mocap_z", &p.enable_mocap_z}, {"enable_sonar", &p.enable_sonar},
     {"enable_partial_update", &p.enable_partial_update},
     {"enable_mocap_switch", &p.enable_mocap_switch},
-    {"enable_measurements", &p.enable_measurements}};
+    {"enable_measurements", &p.enable_measurements},
+    // not in the original files; lets tests run the port with correction C1
+    {"correction_c1_clear_xy_flag", &p.correction_c1}};
   std::map<std::string, double *> doubles{
     {"mahalanobis_d_sonar", &p.mahalanobis_d_sonar},
     {"mahalanobis_d_rgbd_velocity", &p.mahalanobis_d_rgbd_velocity},
@@ -174,6 +176,18 @@ inline MocapPoseSample mocap_pose_sample(const Event & e)
   MocapPoseSample s;
   s.stamp = stamp_of(e.t_ns);
   s.z = e.f.at(0);
+  return s;
+}
+
+// mocap_twist / rgbd: vx vy cov_xx cov_yy (harness: covariance[0], [7]).
+inline TwistSample twist_sample(const Event & e)
+{
+  TwistSample s;
+  s.stamp = stamp_of(e.t_ns);
+  s.vx = e.f.at(0);
+  s.vy = e.f.at(1);
+  s.cov_xx = e.f.at(2);
+  s.cov_yy = e.f.at(3);
   return s;
 }
 

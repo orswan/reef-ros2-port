@@ -1,7 +1,9 @@
 #include "reef_estimator/sensor_manager.h"
 
+#include <algorithm>
 #include <chrono>
 #include <functional>
+#include <string>
 
 #include "reef_estimator/ros_conversions.hpp"
 #include "reef_estimator/ros_parameters.hpp"
@@ -22,6 +24,22 @@ namespace reef_estimator
             o.qos_overriding_options = rclcpp::QosOverridingOptions::with_default_policies();
             return o;
         }
+
+        // Records the wall time of one callback when it goes out of scope.
+        struct CallbackTimer
+        {
+            std::function<void(std::chrono::steady_clock::time_point)> done;
+            std::chrono::steady_clock::time_point t0 = std::chrono::steady_clock::now();
+            ~CallbackTimer() { done(t0); }
+        };
+
+        diagnostic_msgs::msg::KeyValue kv(const std::string& k, const std::string& v)
+        {
+            diagnostic_msgs::msg::KeyValue x;
+            x.key = k;
+            x.value = v;
+            return x;
+        }
     }
 
     SensorManager::SensorManager(const rclcpp::NodeOptions& options) : rclcpp::Node("reef_estimator", options)
@@ -30,6 +48,9 @@ namespace reef_estimator
         for (const auto& w : warnings(params_))
             RCLCPP_WARN(get_logger(), "%s", w.c_str());
         makeEstimator();
+        if (params_.correction_c1)
+            RCLCPP_WARN(get_logger(), "Correction C1 ENABLED (NOT APPROVED): each XY observation is fused once; "
+                        "results differ from master");
 
         //Mocap override RC channel parameter
         if (params_.enable_mocap_switch) {
@@ -38,11 +59,12 @@ namespace reef_estimator
                 [this](const rosflight_msgs::msg::RCRaw& m) { rcRawCallback(m); }, overridable());
         }
 
-        if (params_.enable_mocap_xy || params_.enable_rgbd)
+        if (params_.enable_mocap_xy)
         {
-            RCLCPP_WARN(get_logger(), "Horizontal filter not ported yet (P04): '%s' and '%s' are not subscribed; "
-                        "horizontal output fields are NaN", params_.mocap_twist_topic.c_str(),
-                        params_.rgbd_twist_topic.c_str());
+            mocap_twist_subscriber_ = create_subscription<geometry_msgs::msg::TwistWithCovarianceStamped>(
+                params_.mocap_twist_topic, inputQoS(1),
+                [this](const geometry_msgs::msg::TwistWithCovarianceStamped& m) { mocapTwistCallback(m); },
+                overridable());
         }
 
         if (params_.enable_mocap_z)
@@ -50,6 +72,12 @@ namespace reef_estimator
             mocap_pose_subscriber_ = create_subscription<geometry_msgs::msg::PoseStamped>(
                 params_.mocap_pose_topic, inputQoS(1),
                 [this](const geometry_msgs::msg::PoseStamped& m) { mocapPoseCallback(m); }, overridable());
+        }
+
+        if (params_.enable_rgbd) {
+            rgbd_twist_subscriber_ = create_subscription<reef_msgs::msg::DeltaToVel>(
+                params_.rgbd_twist_topic, inputQoS(1),
+                [this](const reef_msgs::msg::DeltaToVel& m) { rgbdTwistCallback(m); }, overridable());
         }
 
         if (params_.enable_sonar)
@@ -66,6 +94,9 @@ namespace reef_estimator
             debug_state_publisher_ = create_publisher<reef_msgs::msg::XYZDebugEstimate>("xyz_debug_estimate", latchedQoS());
         }
         is_flying_publisher_ = create_publisher<std_msgs::msg::Bool>("is_flying_reef", latchedQoS());
+        // Callback timing and observation accounting (not in ROS 1).
+        diagnostics_publisher_ = create_publisher<diagnostic_msgs::msg::DiagnosticArray>("diagnostics", 10);
+        callback_us_.reserve(512);
 
         reset_service_ = create_service<std_srvs::srv::Trigger>("~/reset",
             [this](const std::shared_ptr<std_srvs::srv::Trigger::Request>,
@@ -95,7 +126,7 @@ namespace reef_estimator
 
     void SensorManager::makeEstimator()
     {
-        xyzEst = std::make_unique<VerticalEstimator>(params_);
+        xyzEst = std::make_unique<XYZEstimator>(params_);
         xyzEst->log = [this](LogLevel level, const std::string& text) {
             switch (level) {
                 case LogLevel::Error: RCLCPP_ERROR(get_logger(), "%s", text.c_str()); break;
@@ -108,6 +139,57 @@ namespace reef_estimator
                         RCLCPP_INFO(get_logger(), "%s", text.c_str());
             }
         };
+    }
+
+    void SensorManager::recordCallback(std::chrono::steady_clock::time_point t0)
+    {
+        const double us = std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - t0).count();
+        callback_us_.push_back(us);
+        callbacks_total_++;
+        if (us > 2000.0) callbacks_over_2ms_++;
+        callback_us_max_ = std::max(callback_us_max_, us);
+    }
+
+    // Window statistics since the last message plus run totals. p99 of all
+    // callbacks <= 2 ms is equivalent to callbacks_over_2ms <= 1 % of callbacks.
+    void SensorManager::publishDiagnostics()
+    {
+        std::vector<double> w = callback_us_;
+        callback_us_.clear();
+        auto pct = [&w](double q) {
+            if (w.empty()) return 0.0;
+            const auto k = static_cast<size_t>(q * static_cast<double>(w.size() - 1));
+            std::nth_element(w.begin(), w.begin() + static_cast<long>(k), w.end());
+            return w[k];
+        };
+        diagnostic_msgs::msg::DiagnosticArray a;
+        a.header.stamp = now();
+        diagnostic_msgs::msg::DiagnosticStatus st;
+        st.name = "reef_estimator";
+        st.level = callbacks_over_2ms_ * 100 > callbacks_total_ ? diagnostic_msgs::msg::DiagnosticStatus::WARN
+                                                                : diagnostic_msgs::msg::DiagnosticStatus::OK;
+        st.message = "callback timing and observation accounting";
+        const double p50 = pct(0.5), p99 = pct(0.99);
+        const double wmax = w.empty() ? 0.0 : *std::max_element(w.begin(), w.end());
+        st.values = {
+            kv("window_callbacks", std::to_string(w.size())),
+            kv("window_callback_us_p50", std::to_string(p50)),
+            kv("window_callback_us_p99", std::to_string(p99)),
+            kv("window_callback_us_max", std::to_string(wmax)),
+            kv("callbacks_total", std::to_string(callbacks_total_)),
+            kv("callbacks_over_2ms", std::to_string(callbacks_over_2ms_)),
+            kv("callback_us_max", std::to_string(callback_us_max_)),
+            kv("estimates", std::to_string(xyzEst->estimateCount())),
+            kv("stamp_anomalies", std::to_string(stamp_anomalies_)),
+            kv("z_gates", std::to_string(xyzEst->zGateCount())),
+            kv("xy_gates", std::to_string(xyzEst->xyGateCount())),
+            kv("xy_observations_accepted", std::to_string(xyzEst->xyObservationsAccepted())),
+            kv("xy_fusions", std::to_string(xyzEst->xyFusions())),
+            kv("rgbd_ignored_by_enable_measurements", std::to_string(rgbd_ignored_)),
+            kv("correction_c1", xyzEst->correctionC1() ? "true" : "false"),
+        };
+        a.status.push_back(st);
+        diagnostics_publisher_->publish(a);
     }
 
     void SensorManager::publishFlying(bool flying)
@@ -135,7 +217,12 @@ namespace reef_estimator
 
     void SensorManager::imuCallback(const sensor_msgs::msg::Imu& msg)
     {
+        CallbackTimer timer{[this](auto t0) { recordCallback(t0); }};
         applyPendingReset();
+        if (++imu_callbacks_since_diag_ >= 250) {
+            imu_callbacks_since_diag_ = 0;
+            publishDiagnostics();
+        }
         //Pass the imu message to estimator.
         const ImuSample s = fromMsg(msg);
         // Diagnostics only: the estimator processes anomalous stamps exactly
@@ -166,18 +253,41 @@ namespace reef_estimator
     }
 
     void SensorManager::rcRawCallback(const rosflight_msgs::msg::RCRaw& msg) {
+        CallbackTimer timer{[this](auto t0) { recordCallback(t0); }};
         applyPendingReset();
         xyzEst->rcRawUpdate(fromMsg(msg));
     }
 
     void SensorManager::mocapPoseCallback(const geometry_msgs::msg::PoseStamped& msg)
     {
+        CallbackTimer timer{[this](auto t0) { recordCallback(t0); }};
         applyPendingReset();
         xyzEst->mocapUpdate(fromMsg(msg));
     }
 
+    void SensorManager::mocapTwistCallback(const geometry_msgs::msg::TwistWithCovarianceStamped& msg)
+    {
+        CallbackTimer timer{[this](auto t0) { recordCallback(t0); }};
+        applyPendingReset();
+        xyzEst->mocapUpdate(fromMsg(msg));
+    }
+
+    void SensorManager::rgbdTwistCallback(const reef_msgs::msg::DeltaToVel& msg)
+    {
+        CallbackTimer timer{[this](auto t0) { recordCallback(t0); }};
+        applyPendingReset();
+        // Read at every message, as SensorManager did (runtime parameter).
+        if (get_parameter("enable_measurements").as_bool()) {
+            xyzEst->rgbdUpdate(fromMsg(msg));
+        } else {
+            rgbd_ignored_++;
+            RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000, "You stopped the measurements! Why?? ");
+        }
+    }
+
 void SensorManager::altimeterCallback(const sensor_msgs::msg::Range& msg)
 {
+    CallbackTimer timer{[this](auto t0) { recordCallback(t0); }};
     applyPendingReset();
     xyzEst->sensorUpdate(fromMsg(msg));
 

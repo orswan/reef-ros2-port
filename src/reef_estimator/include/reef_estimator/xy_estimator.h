@@ -5,8 +5,8 @@
 #ifndef REEF_ESTIMATOR_XY_ESTIMATOR_H
 #define REEF_ESTIMATOR_XY_ESTIMATOR_H
 
-#include "estimator.h"
-#include "../../reef_msgs/include/reef_msgs/dynamics.h"
+#include "reef_estimator/estimator.h"
+#include "reef_msgs/dynamics.h"
 
 namespace reef_estimator
 {

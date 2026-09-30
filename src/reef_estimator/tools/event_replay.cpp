@@ -1,6 +1,6 @@
 // Event-replay driver for the fidelity comparison (P04).
 //   reef_estimator_event_replay PARAMS EVENTS OUT.csv [--mode core|node]
-// core (default): events go straight to the ROS-free VerticalEstimator.
+// core (default): events go straight to the ROS-free XYZEstimator.
 // node: each event becomes a ROS 2 message (builtin_interfaces stamp,
 //   float32 range, ...) delivered to an in-process SensorManager node through
 //   its callbacks; the node gets the parameters as ROS parameters. The CSV
@@ -9,8 +9,8 @@
 // Reads the P02 harness formats and feeds each event to the ported vertical
 // estimator in file order, with the ROS 1 node's subscription rules, then
 // writes the vertical state after every event using the harness column names.
-// Horizontal events (mocap_twist, rgbd) are counted as delivered when the
-// original would have subscribed, but the vertical filter never uses them.
+// rgbd events are applied only if enable_measurements is true (SensorManager
+// read that parameter at every RGB-D message).
 #include <cstdio>
 #include <fstream>
 #include <iomanip>
@@ -47,6 +47,7 @@ std::vector<rclcpp::Parameter> as_ros_parameters(const reef_estimator::Estimator
     {"enable_mocap_switch", p.enable_mocap_switch},
     {"mocap_override_channel", static_cast<int64_t>(p.mocap_override_channel)},
     {"enable_measurements", p.enable_measurements},
+    {"correction_c1_clear_xy_flag", p.correction_c1},
     {"mahalanobis_d_sonar", p.mahalanobis_d_sonar},
     {"mahalanobis_d_rgbd_velocity", p.mahalanobis_d_rgbd_velocity},
     {"mahalanobis_d_mocap_z", p.mahalanobis_d_mocap_z},
@@ -83,35 +84,39 @@ int main(int argc, char ** argv)
   int status = 0;
   try {
     const EstimatorParameters params = tools::load_params(argv[1]);
-    std::unique_ptr<VerticalEstimator> core;
+    std::unique_ptr<XYZEstimator> core;
     std::shared_ptr<SensorManager> node;
     if (node_mode) {
       node = std::make_shared<SensorManager>(
         rclcpp::NodeOptions().parameter_overrides(as_ros_parameters(params)));
     } else {
-      core = std::make_unique<VerticalEstimator>(params);
+      core = std::make_unique<XYZEstimator>(params);
     }
-    auto est = [&]() -> const VerticalEstimator & {return node ? node->core() : *core;};
+    auto est = [&]() -> const XYZEstimator & {return node ? node->core() : *core;};
     const auto events = tools::load_events(argv[2]);
 
     std::ofstream out(argv[3]);
     out << std::setprecision(std::numeric_limits<double>::max_digits10);
-    out << "idx,type,t_ns,z_flag_before,z,zdot,zbias";
+    out << "idx,type,t_ns,z_flag_before,xy_flag_before,z,zdot,zbias";
     for (int i = 0; i < 3; ++i) {for (int j = 0; j < 3; ++j) {out << ",zP" << i << j;}}
-    out << ",z_meas,zR,u,z_dt,g_init,acc_init,takeoff,z_flag,n_prop,maha2,z_gate,"
-      "use_mocap_z,n_published,delivered";
+    out << ",vx,vy,pitch_bias,roll_bias,ax_bias,ay_bias";
+    for (int i = 0; i < 6; ++i) {for (int j = 0; j < 6; ++j) {out << ",xyP" << i << j;}}
+    out << ",z_meas,zR,xy_meas0,xy_meas1,xyR00,xyR11,u,z_dt,xy_dt,g_init,acc_init,takeoff,z_flag,xy_flag,"
+      "n_prop,maha2,z_gate,xy_gate,use_mocap_xy,use_mocap_z,n_published,delivered,xy_accepted,xy_fusions";
     if (node_mode) {
-      out << ",msg_published,msg_stamp_ns,msg_z,msg_zdot,msg_x_dot_isnan,dbg_bias,dbg_u";
+      out << ",msg_published,msg_stamp_ns,msg_z,msg_zdot,msg_x_dot,msg_y_dot,dbg_bias,dbg_u";
       for (int k = 0; k < 9; ++k) {out << ",dbg_p" << k;}
-      out << ",dbg_minus_z";
+      out << ",dbg_minus_z,dbg_pitch_bias,dbg_roll_bias,dbg_xa_bias,dbg_ya_bias,dbg_xy_sigma_plus0,dbg_minus_x_dot";
     }
     out << "\n";
 
     long idx = 0;
     for (const auto & ev : events) {
-      const VerticalEstimator & e0 = est();
+      const XYZEstimator & e0 = est();
       const bool z_before = e0.pendingZMeasurement();
+      const bool xy_before = e0.pendingXYMeasurement();
       const long gates_before = e0.zGateCount();
+      const long xy_gates_before = e0.xyGateCount();
       const long published_before = node ? node->publishedCount() : 0;
       bool delivered = true;
       if (ev.type == "imu" || ev.type == "imu_nan") {
@@ -156,26 +161,53 @@ int main(int argc, char ** argv)
         } else if (delivered) {
           core->rcRawUpdate(tools::rc_sample(ev));
         }
-      } else if (ev.type == "mocap_twist") {
-        delivered = params.enable_mocap_xy;
-      } else if (ev.type == "rgbd") {
-        delivered = params.enable_rgbd;
+      } else if (ev.type == "mocap_twist" || ev.type == "rgbd") {
+        const bool mocap = ev.type == "mocap_twist";
+        delivered = mocap ? e0.subscribesMocapTwist() : e0.subscribesRgbd();
+        if (delivered && node) {
+          geometry_msgs::msg::TwistWithCovarianceStamped tw;
+          tw.header.stamp = ros_time(ev.t_ns);
+          tw.twist.twist.linear.x = ev.f.at(0);
+          tw.twist.twist.linear.y = ev.f.at(1);
+          tw.twist.covariance[0] = ev.f.at(2);
+          tw.twist.covariance[7] = ev.f.at(3);
+          if (mocap) {
+            node->mocapTwistCallback(tw);
+          } else {
+            reef_msgs::msg::DeltaToVel d;
+            d.header = tw.header;
+            d.vel = tw;
+            node->rgbdTwistCallback(d);
+          }
+        } else if (delivered) {
+          if (mocap) {
+            core->mocapUpdate(tools::twist_sample(ev));
+          } else if (params.enable_measurements) {
+            core->rgbdUpdate(tools::twist_sample(ev));
+          }
+        }
       } else {
         throw std::runtime_error("unknown event type '" + ev.type + "'");
       }
-      const VerticalEstimator & e = est();
+      const XYZEstimator & e = est();
       const ZEstimator & z = e.zFilter();
-      out << idx++ << ',' << ev.type << ',' << ev.t_ns << ',' << z_before;
+      const XYEstimator & xy = e.xyFilter();
+      out << idx++ << ',' << ev.type << ',' << ev.t_ns << ',' << z_before << ',' << xy_before;
       for (int i = 0; i < 3; ++i) {put(out, z.xHat(i, 0));}
       for (int i = 0; i < 3; ++i) {for (int j = 0; j < 3; ++j) {put(out, z.P(i, j));}}
-      put(out, z.z(0)); put(out, z.R(0, 0)); put(out, z.u(0)); put(out, z.dt);
+      for (int i = 0; i < 6; ++i) {put(out, xy.xHat(i, 0));}
+      for (int i = 0; i < 6; ++i) {for (int j = 0; j < 6; ++j) {put(out, xy.P(i, j));}}
+      put(out, z.z(0)); put(out, z.R(0, 0));
+      put(out, xy.z(0)); put(out, xy.z(1)); put(out, xy.R(0, 0)); put(out, xy.R(1, 1));
+      put(out, z.u(0)); put(out, z.dt); put(out, xy.dt);
       put(out, e.accelerometerInitialized() ? e.initialGravity() :
         std::numeric_limits<double>::quiet_NaN());
       out << ',' << e.accelerometerInitialized() << ',' << e.isFlying() << ','
-          << e.pendingZMeasurement() << ',' << e.propagationCount();
+          << e.pendingZMeasurement() << ',' << e.pendingXYMeasurement() << ',' << e.propagationCount();
       put(out, e.lastMahalanobisSquared());
-      out << ',' << (e.zGateCount() != gates_before) << ',' << e.usingMocapZ() << ','
-          << e.estimateCount() << ',' << delivered;
+      out << ',' << (e.zGateCount() != gates_before) << ',' << (e.xyGateCount() != xy_gates_before) << ','
+          << e.usingMocapXY() << ',' << e.usingMocapZ() << ','
+          << e.estimateCount() << ',' << delivered << ',' << e.xyObservationsAccepted() << ',' << e.xyFusions();
       if (node) {
         const bool published = node->publishedCount() != published_before;
         const double nan = std::numeric_limits<double>::quiet_NaN();
@@ -184,18 +216,21 @@ int main(int argc, char ** argv)
           const auto & m = *node->lastEstimate();
           out << ',' << (static_cast<long long>(m.header.stamp.sec) * 1000000000LL + m.header.stamp.nanosec);
           put(out, m.z_plus.z); put(out, m.z_plus.z_dot);
-          out << ',' << std::isnan(m.xy_plus.x_dot);
+          put(out, m.xy_plus.x_dot); put(out, m.xy_plus.y_dot);
           if (node->lastDebugEstimate()) {
             const auto & d = *node->lastDebugEstimate();
             put(out, d.z_plus.bias); put(out, d.z_plus.u);
             for (double v : d.z_plus.p) {put(out, v);}
             put(out, d.z_minus.z);
+            put(out, d.xy_plus.pitch_bias); put(out, d.xy_plus.roll_bias);
+            put(out, d.xy_plus.xa_bias); put(out, d.xy_plus.ya_bias);
+            put(out, d.xy_plus.sigma_plus[0]); put(out, d.xy_minus.x_dot);
           } else {
-            for (int k = 0; k < 12; ++k) {put(out, nan);}
+            for (int k = 0; k < 18; ++k) {put(out, nan);}
           }
         } else {
           out << ",-1";
-          for (int k = 0; k < 15; ++k) {put(out, nan);}
+          for (int k = 0; k < 22; ++k) {put(out, nan);}
         }
       }
       out << '\n';

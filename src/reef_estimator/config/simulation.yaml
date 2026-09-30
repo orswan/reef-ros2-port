@@ -4,13 +4,15 @@
 # original launch files did:
 # - no RC transmitter: the RC mocap switch is disabled, so reef_estimator
 #   does not subscribe to rc_raw and the selection never changes;
-# - no motion capture and no RGB-D: those inputs are disabled;
-# - the range sensor is the altitude measurement.
+# - velocity: IDEALIZED simulated body-level velocity observations (derived
+#   from truth by reef_sim/reef_adapter, labelled) on the mocap-velocity input
+#   (P05). They are not RGB-D odometry; RGB-D stays disabled;
+# - no motion-capture altitude: the range sensor is the altitude measurement.
 # debug_mode stays true (from the master file) for the covariance plots.
 /**:
   ros__parameters:
     enable_mocap_switch: false
-    enable_mocap_xy: false
+    enable_mocap_xy: true
     enable_rgbd: false
     enable_mocap_z: false
     enable_sonar: true

@@ -1,4 +1,4 @@
-// VerticalEstimator unit behaviour without ROS. Fidelity against the
+// XYZEstimator unit behaviour without ROS. Fidelity against the
 // original is checked separately (baseline/tools/check_vertical.py); these
 // tests pin the documented behaviour of individual steps.
 #include <gtest/gtest.h>
@@ -6,7 +6,7 @@
 #include <cmath>
 #include <limits>
 
-#include "reef_estimator/vertical_estimator.h"
+#include "reef_estimator/xyz_estimator.h"
 
 using namespace reef_estimator;
 
@@ -53,7 +53,7 @@ RangeSample range(long long t_ns, float r, float max_range = 7.65f)
 constexpr long long T0 = 1000000000LL, DT = 2000000LL;
 
 // Feeds n level IMU samples starting at index k0; returns the next index.
-int feed(VerticalEstimator & e, int k0, int n)
+int feed(XYZEstimator & e, int k0, int n)
 {
   for (int k = k0; k < k0 + n; k++) {e.sensorUpdate(level(T0 + k * DT));}
   return k0 + n;
@@ -63,7 +63,7 @@ int feed(VerticalEstimator & e, int k0, int n)
 
 TEST(VerticalCore, StartsAtInitialStateWithNominalDt)
 {
-  VerticalEstimator e(master());
+  XYZEstimator e(master());
   const ZEstimator & z = e.zFilter();
   EXPECT_EQ(z.xHat(0, 0), -0.25);
   EXPECT_EQ(z.P(0, 0), 0.025);
@@ -76,7 +76,7 @@ TEST(VerticalCore, StartsAtInitialStateWithNominalDt)
 
 TEST(VerticalCore, TwentySamplesInitializeThenEveryImuProducesAnEstimate)
 {
-  VerticalEstimator e(master());
+  XYZEstimator e(master());
   for (int k = 0; k < 20; k++) {EXPECT_FALSE(e.sensorUpdate(level(T0 + k * DT))) << k;}
   EXPECT_TRUE(e.accelerometerInitialized());
   EXPECT_EQ(e.initialGravity(), 9.81);   // hard-coded in the original (C3)
@@ -97,7 +97,7 @@ TEST(VerticalCore, DtUsesTheRos1SecondsFormula)
 
 TEST(VerticalCore, NanSampleIsDroppedAndTheNextDtSpansTheGap)
 {
-  VerticalEstimator e(master());
+  XYZEstimator e(master());
   int k = feed(e, 0, 25);
   ImuSample bad = level(T0 + k * DT);
   bad.ax = std::numeric_limits<double>::quiet_NaN();
@@ -109,7 +109,7 @@ TEST(VerticalCore, NanSampleIsDroppedAndTheNextDtSpansTheGap)
 
 TEST(VerticalCore, RangeAboveMaxOrNanIsIgnoredWithoutAGate)
 {
-  VerticalEstimator e(master());
+  XYZEstimator e(master());
   feed(e, 0, 25);
   e.sensorUpdate(range(T0, 8.0f));
   e.sensorUpdate(range(T0, std::numeric_limits<float>::quiet_NaN()));
@@ -119,7 +119,7 @@ TEST(VerticalCore, RangeAboveMaxOrNanIsIgnoredWithoutAGate)
 
 TEST(VerticalCore, AcceptedRangeIsStoredNegatedAndFusedAtTheNextImu)
 {
-  VerticalEstimator e(master());
+  XYZEstimator e(master());
   int k = feed(e, 0, 25);
   e.sensorUpdate(range(T0 + k * DT, 0.3f));
   EXPECT_EQ(e.zGateCount(), 1);
@@ -131,7 +131,7 @@ TEST(VerticalCore, AcceptedRangeIsStoredNegatedAndFusedAtTheNextImu)
 
 TEST(VerticalCore, OutlierIsRejectedByTheGate)
 {
-  VerticalEstimator e(master());
+  XYZEstimator e(master());
   int k = feed(e, 0, 25);
   e.sensorUpdate(range(T0 + k * DT, 5.0f));
   EXPECT_EQ(e.zGateCount(), 1);
@@ -143,7 +143,7 @@ TEST(VerticalCore, DisabledZKeepsTheMeasurementPending)
 {
   EstimatorParameters p = master();
   p.enable_z = false;
-  VerticalEstimator e(p);
+  XYZEstimator e(p);
   int k = feed(e, 0, 25);
   e.sensorUpdate(range(T0 + k * DT, 0.3f));
   feed(e, k, 5);
@@ -152,7 +152,7 @@ TEST(VerticalCore, DisabledZKeepsTheMeasurementPending)
 
 TEST(VerticalCore, LandingResetRestoresCovarianceEveryTenPropagations)
 {
-  VerticalEstimator e(master());
+  XYZEstimator e(master());
   feed(e, 0, 20);
   feed(e, 20, 9);
   EXPECT_EQ(e.propagationCount(), 9);
@@ -164,7 +164,7 @@ TEST(VerticalCore, LandingResetRestoresCovarianceEveryTenPropagations)
 
 TEST(VerticalCore, TakeoffNeedsAccelVarianceAndAltitude)
 {
-  VerticalEstimator e(master());
+  XYZEstimator e(master());
   int k = feed(e, 0, 20);
   for (int n = 0; n < 60; n++, k++) {
     if (n % 10 == 0) {e.sensorUpdate(range(T0 + k * DT, 0.3f));}
@@ -181,7 +181,7 @@ TEST(VerticalCore, RcSwitchSelectsMocapZOnlyWhenEnabled)
   p.enable_mocap_switch = true;
   p.enable_mocap_z = true;
   p.mocap_override_channel = 6;
-  VerticalEstimator e(p);
+  XYZEstimator e(p);
   EXPECT_TRUE(e.subscribesRc());
   EXPECT_FALSE(e.usingMocapZ());   // sonar enabled: mocap z starts off
   RcSample rc;
@@ -200,7 +200,7 @@ TEST(VerticalCore, MocapZIsIgnoredUnlessSelected)
 {
   EstimatorParameters p = master();
   p.enable_mocap_z = true;   // sonar also enabled: mocap not selected
-  VerticalEstimator e(p);
+  XYZEstimator e(p);
   feed(e, 0, 25);
   MocapPoseSample m;
   m.z = -0.3;

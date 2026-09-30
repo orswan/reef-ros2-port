@@ -1,11 +1,10 @@
-// ROS 2 message <-> core conversions for the vertical estimator (P04).
+// ROS 2 message <-> core conversions for the REEF estimator (P04/P05).
 //
 // Inputs keep the field types of the original messages: sensor_msgs/Range is
 // float32 in ROS 2 as in ROS 1, and stamps are converted with ROS 1's
 // ros::Time::toSec() formula inside the core (INTERFACES.md section 3.4).
 //
-// Outputs: the horizontal filter is not ported, so every horizontal field of
-// xyz_estimate / xyz_debug_estimate is NaN ("not estimated"), never zero.
+// Outputs are filled as XYZEstimator::saveMinusState/publishEstimates did.
 #ifndef REEF_ESTIMATOR__ROS_CONVERSIONS_HPP_
 #define REEF_ESTIMATOR__ROS_CONVERSIONS_HPP_
 
@@ -14,13 +13,15 @@
 
 #include <builtin_interfaces/msg/time.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
+#include <geometry_msgs/msg/twist_with_covariance_stamped.hpp>
+#include <reef_msgs/msg/delta_to_vel.hpp>
 #include <reef_msgs/msg/xyz_debug_estimate.hpp>
 #include <reef_msgs/msg/xyz_estimate.hpp>
 #include <rosflight_msgs/msg/rc_raw.hpp>
 #include <sensor_msgs/msg/imu.hpp>
 #include <sensor_msgs/msg/range.hpp>
 
-#include "reef_estimator/vertical_estimator.h"
+#include "reef_estimator/xyz_estimator.h"
 #include "reef_msgs/matrix_operation.h"
 
 namespace reef_estimator
@@ -73,6 +74,24 @@ inline MocapPoseSample fromMsg(const geometry_msgs::msg::PoseStamped & m)
   return s;
 }
 
+// Mocap velocity: body-level linear x/y and covariance[0], [7].
+inline TwistSample fromMsg(const geometry_msgs::msg::TwistWithCovarianceStamped & m)
+{
+  TwistSample s;
+  s.stamp = toStamp(m.header.stamp);
+  s.vx = m.twist.twist.linear.x;
+  s.vy = m.twist.twist.linear.y;
+  s.cov_xx = m.twist.covariance[0];
+  s.cov_yy = m.twist.covariance[7];
+  return s;
+}
+
+// RGB-D velocity: the vel field of DeltaToVel (other fields unused).
+inline TwistSample fromMsg(const reef_msgs::msg::DeltaToVel & m)
+{
+  return fromMsg(m.vel);
+}
+
 inline RcSample fromMsg(const rosflight_msgs::msg::RCRaw & m)
 {
   RcSample s;
@@ -81,12 +100,34 @@ inline RcSample fromMsg(const rosflight_msgs::msg::RCRaw & m)
   return s;
 }
 
-inline void fillHorizontalUnavailable(reef_msgs::msg::XYDebugEstimate & xy)
+// XYDebugEstimate block as in XYZEstimator::saveMinusState/publishEstimates.
+inline void fillXY(reef_msgs::msg::XYDebugEstimate & out, const XYState & s)
 {
-  const double nan = std::numeric_limits<double>::quiet_NaN();
-  xy.x_dot = xy.y_dot = xy.pitch_bias = xy.roll_bias = xy.xa_bias = xy.ya_bias = nan;
-  xy.sigma_plus.fill(nan);
-  xy.sigma_minus.fill(nan);
+  out.x_dot = s.x(0);
+  out.y_dot = s.x(1);
+  out.pitch_bias = s.x(2);
+  out.roll_bias = s.x(3);
+  out.xa_bias = s.x(4);
+  out.ya_bias = s.x(5);
+  Eigen::MatrixXd xySigma = Eigen::MatrixXd(6, 1);
+  xySigma(0) = 3 * sqrt(s.P(0, 0));
+  xySigma(1) = 3 * sqrt(s.P(1, 1));
+  xySigma(2) = 3 * sqrt(s.P(2, 2));
+  xySigma(3) = 3 * sqrt(s.P(3, 3));
+  xySigma(4) = 3 * sqrt(s.P(4, 4));
+  xySigma(5) = 3 * sqrt(s.P(5, 5));
+  out.sigma_plus[0] = out.x_dot + xySigma(0);
+  out.sigma_minus[0] = out.x_dot - xySigma(0);
+  out.sigma_plus[1] = out.y_dot + xySigma(1);
+  out.sigma_minus[1] = out.y_dot - xySigma(1);
+  out.sigma_plus[2] = out.pitch_bias + xySigma(2);
+  out.sigma_minus[2] = out.pitch_bias - xySigma(2);
+  out.sigma_plus[3] = out.roll_bias + xySigma(3);
+  out.sigma_minus[3] = out.roll_bias - xySigma(3);
+  out.sigma_plus[4] = out.xa_bias + xySigma(4);
+  out.sigma_minus[4] = out.xa_bias - xySigma(4);
+  out.sigma_plus[5] = out.ya_bias + xySigma(5);
+  out.sigma_minus[5] = out.ya_bias - xySigma(5);
 }
 
 // ZDebugEstimate block as in XYZEstimator::saveMinusState/publishEstimates.
@@ -109,25 +150,25 @@ inline void fillZ(reef_msgs::msg::ZDebugEstimate & out, const ZState & s)
   out.sigma_minus[2] = out.bias - zSigma(2);
 }
 
-inline reef_msgs::msg::XYZEstimate toEstimateMsg(const VerticalEstimator & e)
+inline reef_msgs::msg::XYZEstimate toEstimateMsg(const XYZEstimator & e)
 {
   reef_msgs::msg::XYZEstimate m;
   m.header.stamp = toTime(e.stamp());
-  const double nan = std::numeric_limits<double>::quiet_NaN();
-  m.xy_plus.x_dot = nan;
-  m.xy_plus.y_dot = nan;
+  const XYState xy = e.xyPlusState();
+  m.xy_plus.x_dot = xy.x(0);
+  m.xy_plus.y_dot = xy.x(1);
   const ZState z = e.plusState();
   m.z_plus.z = z.z;
   m.z_plus.z_dot = z.z_dot;
   return m;
 }
 
-inline reef_msgs::msg::XYZDebugEstimate toDebugMsg(const VerticalEstimator & e)
+inline reef_msgs::msg::XYZDebugEstimate toDebugMsg(const XYZEstimator & e)
 {
   reef_msgs::msg::XYZDebugEstimate m;
   m.header.stamp = toTime(e.stamp());
-  fillHorizontalUnavailable(m.xy_minus);
-  fillHorizontalUnavailable(m.xy_plus);
+  fillXY(m.xy_minus, e.xyMinusState());
+  fillXY(m.xy_plus, e.xyPlusState());
   fillZ(m.z_minus, e.minusState());
   fillZ(m.z_plus, e.plusState());
   return m;

@@ -1,0 +1,42 @@
+{
+  "param_set_for_scenario": {
+    "h01_yaw30_tilt_mocap": "default",
+    "h02_yaw_m135_pitch12": "default",
+    "h03_yaw90_mocap_outliers": "default",
+    "h04_mocap_duplicates_out_of_order": "default",
+    "h05_mocap_dropout": "default",
+    "h06_rc_switch_both_ways": "rc_switch",
+    "h07_rgbd_full_update_cov": "rgbd_full_update",
+    "h08_landing_xy_reset": "default",
+    "h09_xy_disabled": "xy_disabled",
+    "h10_rgbd_measurements_off": "rgbd_off"
+  },
+  "files": {
+    "h01_yaw30_tilt_mocap.events": "c0b6d2058767543e0d869666f1efc681ceb99b95ef5cf4bcc9e2b87592c229b9",
+    "h01_yaw30_tilt_mocap.truth.csv": "0d8b3fb8d23438dadc0a08e5000d667c484107f98dd6cd30f84dc6ee268c42a4",
+    "h02_yaw_m135_pitch12.events": "510c09e53b8115756c7085506853514c022fe5a113f0d9a22271652e446bb13e",
+    "h02_yaw_m135_pitch12.truth.csv": "0170304896425e701bd60e54209e01f903c2071f91293320d43e4cbb752fb6ab",
+    "h03_yaw90_mocap_outliers.events": "024c54a992441975781f8b982aec11b23281ba441426124435231d894e11013e",
+    "h03_yaw90_mocap_outliers.truth.csv": "91b6095550f665ae0e375999bb2bae3b6ae44df7f21f7ef94fec743e664a9da6",
+    "h04_mocap_duplicates_out_of_order.events": "764be0a180729827b319ba1bb9fd8be081baf1817ed80c298ec153387cad5ef6",
+    "h04_mocap_duplicates_out_of_order.truth.csv": "91b6095550f665ae0e375999bb2bae3b6ae44df7f21f7ef94fec743e664a9da6",
+    "h05_mocap_dropout.events": "791db59a6c709fd53e2e46148efa3e0a560779b535842bc1f22befe01d15048d",
+    "h05_mocap_dropout.truth.csv": "91b6095550f665ae0e375999bb2bae3b6ae44df7f21f7ef94fec743e664a9da6",
+    "h06_rc_switch_both_ways.events": "55cbc913cbf1975ec0b90e7d8c3d09f5ada8f7ae650c08b73eb96304b7055b47",
+    "h06_rc_switch_both_ways.truth.csv": "91b6095550f665ae0e375999bb2bae3b6ae44df7f21f7ef94fec743e664a9da6",
+    "h07_rgbd_full_update_cov.events": "6157d12054d30aea04295451028271a13353fd4ddfb50e6e9ac07d443a9c18d8",
+    "h07_rgbd_full_update_cov.truth.csv": "91b6095550f665ae0e375999bb2bae3b6ae44df7f21f7ef94fec743e664a9da6",
+    "h08_landing_xy_reset.events": "14f50446089ac9c5c3a699f53965273a6b91079642f621d531b46d1c38eab4e9",
+    "h08_landing_xy_reset.truth.csv": "47381d70e6462b1b741e8402d4bd67810ef268de7df84370465a735deff502e9",
+    "h09_xy_disabled.events": "f56beb48250d1c97ec5b59aa1953276b0bc6ea2c25495027814689a997bb5fda",
+    "h09_xy_disabled.truth.csv": "91b6095550f665ae0e375999bb2bae3b6ae44df7f21f7ef94fec743e664a9da6",
+    "h10_rgbd_measurements_off.events": "8b3ecea3eb0eec1d4068b8dd22447937088f006dfcc6525c54656af650dee187",
+    "h10_rgbd_measurements_off.truth.csv": "91b6095550f665ae0e375999bb2bae3b6ae44df7f21f7ef94fec743e664a9da6",
+    "params/common_default_master.params": "2b3f32b56985ff1460401269dfacb1921eb4b06a556ff668a5050a63acac6691",
+    "params/common_rc_switch_master.params": "ea4ecf01d627d5e20bab77820b28c5a03d65f72263de59243cd5dd858d3e4cd2",
+    "params/common_rgbd_full_update_master.params": "2bbd811a19cdf10e3814f589f75c445c7e9f8fd906191ded1d18a7b48df0071d",
+    "params/common_rgbd_off_master.params": "e064bd24486ca0862597a751591520734a36e5d9228e1f91bcf3b574228b60dc",
+    "params/common_xy_disabled_master.params": "1f66747db28b04ca1c1469af6c2d6841542897ef3c60854000023453b4a1277b"
+  },
+  "reason": "P05 initial horizontal fixtures h01-h10"
+}

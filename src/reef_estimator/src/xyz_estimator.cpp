@@ -1,14 +1,15 @@
 //
 // Created by humberto on 6/4/18.
 //
-// ROS 2 port (P04): vertical part of XYZEstimator and the RC switch of
+// ROS 2 port (P04 vertical, P05 combined): XYZEstimator and the RC switch of
 // SensorManager (reef_estimator master e4179f48). Statement order, types
-// (including the float32 range and mocap-z gate arguments), and Eigen
+// (including the float32 range, mocap-z gate, and z-bias arguments), and Eigen
 // expressions are kept from the original so that results are identical.
-// Removed: the horizontal filter and its updates, ROS parameters (see
-// parameters.hpp), publishers (see sensor_manager.cpp).
+// Removed: ROS parameters (see parameters.hpp) and publishers (see
+// sensor_manager.cpp). Added: observation counters, and correction C1
+// (opt-in, NOT APPROVED, default off; BASELINE_DECISION.md section 7).
 
-#include "reef_estimator/vertical_estimator.h"
+#include "reef_estimator/xyz_estimator.h"
 
 #include <cmath>
 #include <limits>
@@ -18,7 +19,7 @@
 
 namespace reef_estimator
 {
-    VerticalEstimator::VerticalEstimator(const EstimatorParameters& params) :
+    XYZEstimator::XYZEstimator(const EstimatorParameters& params) :
     numberOfPropagations(0),
     accInitialized(false),
     accInitSampleCount(0),
@@ -31,9 +32,15 @@ namespace reef_estimator
     numAccSamples(0),
     accMean(0),
     accVariance(0),
+    newRgbdMeasurement(false),
     newSonarMeasurement(false)
     {
         debug_mode_ = params.debug_mode;
+        correction_c1 = params.correction_c1;
+        if (correction_c1) {
+            report(LogLevel::Warn, "Correction C1 enabled (NOT APPROVED): XY flag cleared after a partial update");
+        }
+        enableXY = params.enable_xy;
         enableZ = params.enable_z;
 
         //Mocap override settings
@@ -49,14 +56,25 @@ namespace reef_estimator
         mocapOverrideChannel = params.mocap_override_channel;
 
         mahalanobis_distance_sonar = params.mahalanobis_d_sonar;
+        mahalanobis_distance_rgbd_xy_ = params.mahalanobis_d_rgbd_velocity;
         mahalanobis_distance_mocap_z = params.mahalanobis_d_mocap_z;
+        mahalanobis_distance_mocap_xy_ = params.mahalanobis_d_mocap_velocity;
         enable_partial_update = params.enable_partial_update;
 
         // Initialize dt
         dt = params.estimator_dt;
-        zEst.dt = dt;
+        xyEst.dt = zEst.dt = dt;
 
         //Initialize estimators with parameters (validated by validate())
+        xyEst.xHat0 = params.xy_x0;
+        xyEst.P0 = params.xy_P0;
+        xyEst.Q = params.xy_Q;
+        xyEst.R0 = params.xy_R0;
+        xyEst.betaVector = params.xy_beta;
+        xyEst.Q *= (xyEst.dt*xyEst.dt);
+
+        xyEst.initialize();//Initialize P,R and beta.
+
         zEst.xHat0 = params.z_x0;
         zEst.P0 = params.z_P0;
         zEst.P0forFlying = params.z_P0_flying;
@@ -78,13 +96,13 @@ namespace reef_estimator
         for (double& s : accSamples) s = 0;
     }
 
-    void VerticalEstimator::report(LogLevel level, const std::string& text) const
+    void XYZEstimator::report(LogLevel level, const std::string& text) const
     {
         if (log) log(level, text);
     }
 
 /** This function is used to calculate the mean accelerometer bias . */
-    void VerticalEstimator::initializeAcc(const ImuSample& imu)
+    void XYZEstimator::initializeAcc(const ImuSample& imu)
     {
         //Sum ACC_SAMPLE_SIZE accelerometer readings
         accSampleAverage(0) += imu.ax;
@@ -108,7 +126,7 @@ namespace reef_estimator
         }
     }
 /** Sensor update for the IMU. */
-    bool VerticalEstimator::sensorUpdate(const ImuSample& imu)
+    bool XYZEstimator::sensorUpdate(const ImuSample& imu)
     {
         //Save the stamp. This is very important for good book-keeping.
         stamp_ = imu.stamp;
@@ -125,6 +143,7 @@ namespace reef_estimator
             return false;
         }
         // Compute new DT and pass it to estimators.
+        xyEst.dt = imu.stamp.toSec() - last_time_stamp;
         zEst.dt = imu.stamp.toSec() - last_time_stamp;
         last_time_stamp = imu.stamp.toSec();
 
@@ -147,6 +166,7 @@ namespace reef_estimator
         zEst.u(0) = accelxyz_in_NED_frame(2) + initialAccMagnitude; //We need to take avg from csv file to get a better g.
 
         //Finally propagate.
+        xyEst.nonlinearPropagation(C_NED_to_body_frame, initialAccMagnitude, accelxyz_in_body_frame, zEst.xHat(2));
         zEst.updateLinearModel();
         zEst.propagate();
 
@@ -165,12 +185,29 @@ namespace reef_estimator
         //Reset the z estimator to its landing state every 10 propagations
         if (!takeoffState && numberOfPropagations >= 10)
         {
+            if (enableXY)
+                xyEst.resetLandingState();
+            
             if (enableZ)
                 zEst.resetLandingState();
 
             //Reset number of propagations
             numberOfPropagations = 0;
         }
+
+        if (enableXY && newRgbdMeasurement) {
+            if(enable_partial_update) {
+                xyEst.partialUpdate();
+                numXYFusions++;
+                if (correction_c1)
+                    newRgbdMeasurement = false;   // C1 (NOT APPROVED): fuse each observation once
+            }
+                else{
+                    xyEst.update();
+                    numXYFusions++;
+                    newRgbdMeasurement = false;
+                }
+            }
 
         if (enableZ && newSonarMeasurement) {
             //TODO adjust estimator to perform partialUpdate on z as well.
@@ -187,8 +224,24 @@ namespace reef_estimator
         return true;
     }
 
+    void XYZEstimator::rgbdUpdate(const TwistSample& twist_msg)
+    {
+        if (!useMocapXY)
+        {
+            if (chi2AcceptRgbd(twist_msg))
+            {
+                xyEst.R(0, 0) = twist_msg.cov_xx;
+                xyEst.R(1, 1) = twist_msg.cov_yy;
+                xyEst.z(0) = twist_msg.vx;
+                xyEst.z(1) = twist_msg.vy;
+                newRgbdMeasurement = true;
+                numXYAccepted++;
+            }
+        }
+    }
+
     //Sonar update
-    void VerticalEstimator::sensorUpdate(const RangeSample& range_msg)
+    void XYZEstimator::sensorUpdate(const RangeSample& range_msg)
     {
         if (!useMocapZ)
         {
@@ -203,8 +256,26 @@ namespace reef_estimator
         }
     }
 
+    //Mocap XY update
+    void XYZEstimator::mocapUpdate(const TwistSample& twist_msg)
+    {
+        if (useMocapXY)
+        {
+            if (chi2AcceptMocapXY(twist_msg))
+            {
+                //z is the measurement.
+                xyEst.R(0, 0) = twist_msg.cov_xx;
+                xyEst.R(1, 1) = twist_msg.cov_yy;
+                xyEst.z(0) = twist_msg.vx;
+                xyEst.z(1) = twist_msg.vy;
+                newRgbdMeasurement = true;
+                numXYAccepted++;
+            }
+        }
+    }
+
     //Mocap Z update
-    void VerticalEstimator::mocapUpdate(const MocapPoseSample& pose_msg)
+    void XYZEstimator::mocapUpdate(const MocapPoseSample& pose_msg)
     {
 
         if (useMocapZ)
@@ -218,7 +289,7 @@ namespace reef_estimator
     }
 
     // SensorManager::rcRawCallback
-    void VerticalEstimator::rcRawUpdate(const RcSample& msg) {
+    void XYZEstimator::rcRawUpdate(const RcSample& msg) {
         //Check for toggled mocap RC switch
         if (!mocapSwitchOn && msg.values[mocapOverrideChannel] > 1500)
         {
@@ -254,7 +325,7 @@ namespace reef_estimator
         }
     }
 
-    bool VerticalEstimator::chi2Accept(float range_measurement)
+    bool XYZEstimator::chi2Accept(float range_measurement)
     {
         numZGates++;
         //Compute Mahalanobis distance.
@@ -282,7 +353,34 @@ namespace reef_estimator
         }
     }
 
-    bool VerticalEstimator::chi2AcceptMocapZ(float z_mocap_ned)
+    bool XYZEstimator::chi2AcceptRgbd(const TwistSample& twist_msg) 
+    {
+        numXYGates++;
+
+        //Compute Mahalanobis distance.
+       measurement << twist_msg.vx, twist_msg.vy;
+       expected_rgbd = xyEst.H * xyEst.xHat;
+
+        Eigen::MatrixXd S(1, 1);
+        S = xyEst.H * xyEst.P * xyEst.H.transpose() + xyEst.R;
+
+        Mahalanobis_D_hat_square(0) = (measurement - expected_rgbd).transpose() * S.inverse() * (measurement - expected_rgbd);
+        Mahalanobis_D_hat(0) = sqrt(Mahalanobis_D_hat_square(0));
+
+        //Value for 99% we need 6.63.
+        //Value for 95% we 3.84
+        if (Mahalanobis_D_hat_square(0) > mahalanobis_distance_rgbd_xy_)
+        {
+            report(LogLevel::Info, "RGBD measurement rejected");
+            return false;
+        } 
+        else 
+        {
+            return true;
+        }
+    }
+
+    bool XYZEstimator::chi2AcceptMocapZ(float z_mocap_ned)
     {
         numZGates++;
         //Compute Mahalanobis distance.
@@ -311,7 +409,36 @@ namespace reef_estimator
         }
     }
 
-    void VerticalEstimator::checkTakeoffState(double accMagnitude)
+    bool XYZEstimator::chi2AcceptMocapXY(const TwistSample& twist_msg) 
+    {
+        numXYGates++;
+        //Compute Mahalanobis distance.
+        Eigen::Vector2d measurement;
+        measurement << twist_msg.vx, twist_msg.vy;
+
+        Eigen::Vector2d expected_rgbd;
+        expected_rgbd = xyEst.H * xyEst.xHat;
+        Eigen::MatrixXd S(1, 1);
+        //        Eigen::Matrix2d mocap_R;
+
+        S = xyEst.H * xyEst.P * xyEst.H.transpose() + xyEst.R;
+        Mahalanobis_D_hat_square(0) = (measurement - expected_rgbd).transpose() * S.inverse() * (measurement - expected_rgbd);
+        Mahalanobis_D_hat(0) = sqrt(Mahalanobis_D_hat_square(0));
+        //Value for 99% we need 6.63.
+        //Value for 95% we 3.84
+        if (Mahalanobis_D_hat_square(0) > mahalanobis_distance_mocap_xy_)
+        {
+            report(LogLevel::Info, "MOCAP XY measurement rejected");
+            return false;
+        } 
+        else 
+        {
+            return true;
+        }
+        
+    }
+
+    void XYZEstimator::checkTakeoffState(double accMagnitude)
     {
         sonarTakeoffState = zEst.z(0) <= -0.25;
 
@@ -370,8 +497,12 @@ namespace reef_estimator
         }
     }
 
-    void VerticalEstimator::saveMinusState()
+    void XYZEstimator::saveMinusState()
     {
+        //XY estimator publisher block------------------------------------------
+        xyMinus.x = xyEst.xHat;
+        xyMinus.P = xyEst.P;
+
         //Z estimator publisher block------------------------------------------
         zMinus.z = zEst.xHat(0, 0);
         zMinus.z_dot = zEst.xHat(1, 0);
@@ -380,7 +511,15 @@ namespace reef_estimator
         zMinus.P = zEst.P;
     }
 
-    ZState VerticalEstimator::plusState() const
+    XYState XYZEstimator::xyPlusState() const
+    {
+        XYState s;
+        s.x = xyEst.xHat;
+        s.P = xyEst.P;
+        return s;
+    }
+
+    ZState XYZEstimator::plusState() const
     {
         ZState s;
         s.z = zEst.xHat(0);

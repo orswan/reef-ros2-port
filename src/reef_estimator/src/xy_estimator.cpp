@@ -1,10 +1,9 @@
 //
 // Created by humberto on 6/7/18.
 //
-#include "ros/ros.h"
-#include "xy_estimator.h"
-#include <eigen3/Eigen/Core>
-#include <iostream>
+#include "reef_estimator/xy_estimator.h"
+#include <Eigen/Core>
+#include <cmath>
 
 namespace reef_estimator
 {

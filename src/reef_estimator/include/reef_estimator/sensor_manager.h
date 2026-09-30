@@ -14,9 +14,8 @@
  *
  * Contact: prashant.ganesh@ufl.edu
  *
- * ROS 2 port (P04): an rclcpp node around the ROS-free VerticalEstimator.
- * Interface contract: docs/INTERFACES.md section 3. The horizontal inputs
- * are not subscribed until the horizontal filter is ported.
+ * ROS 2 port (P04/P05): an rclcpp node around the ROS-free XYZEstimator.
+ * Interface contract: docs/INTERFACES.md section 3.
  */
 
 
@@ -24,10 +23,15 @@
 #define SENSOR_MANAGER_H
 
 #include <atomic>
+#include <chrono>
 #include <memory>
 #include <optional>
+#include <vector>
 
+#include <diagnostic_msgs/msg/diagnostic_array.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
+#include <geometry_msgs/msg/twist_with_covariance_stamped.hpp>
+#include <reef_msgs/msg/delta_to_vel.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <reef_msgs/msg/xyz_debug_estimate.hpp>
 #include <reef_msgs/msg/xyz_estimate.hpp>
@@ -38,7 +42,7 @@
 #include <std_srvs/srv/trigger.hpp>
 
 #include "reef_estimator/parameters.hpp"
-#include "reef_estimator/vertical_estimator.h"
+#include "reef_estimator/xyz_estimator.h"
 
 namespace reef_estimator {
     class SensorManager : public rclcpp::Node {
@@ -52,13 +56,15 @@ namespace reef_estimator {
         void altimeterCallback(const sensor_msgs::msg::Range& msg);
         void rcRawCallback(const rosflight_msgs::msg::RCRaw& msg);
         void mocapPoseCallback(const geometry_msgs::msg::PoseStamped& msg);
+        void mocapTwistCallback(const geometry_msgs::msg::TwistWithCovarianceStamped& msg);
+        void rgbdTwistCallback(const reef_msgs::msg::DeltaToVel& msg);
 
         // Returns the estimator to its startup state (reset service; a backward
         // ROS time jump flags a reset that the next message callback applies).
         void reset(const std::string& reason);
 
         // Introspection for tests.
-        const VerticalEstimator& core() const { return *xyzEst; }
+        const XYZEstimator& core() const { return *xyzEst; }
         const std::optional<reef_msgs::msg::XYZEstimate>& lastEstimate() const { return last_estimate_; }
         const std::optional<reef_msgs::msg::XYZDebugEstimate>& lastDebugEstimate() const { return last_debug_; }
         long publishedCount() const { return published_; }
@@ -67,12 +73,15 @@ namespace reef_estimator {
 
     private:
         EstimatorParameters params_;
-        std::unique_ptr<VerticalEstimator> xyzEst;
+        std::unique_ptr<XYZEstimator> xyzEst;
 
         rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr imu_subscriber_;
         rclcpp::Subscription<sensor_msgs::msg::Range>::SharedPtr altimeter_subscriber_;
         rclcpp::Subscription<rosflight_msgs::msg::RCRaw>::SharedPtr rc_subscriber_;
         rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr mocap_pose_subscriber_;
+        rclcpp::Subscription<geometry_msgs::msg::TwistWithCovarianceStamped>::SharedPtr mocap_twist_subscriber_;
+        rclcpp::Subscription<reef_msgs::msg::DeltaToVel>::SharedPtr rgbd_twist_subscriber_;
+        rclcpp::Publisher<diagnostic_msgs::msg::DiagnosticArray>::SharedPtr diagnostics_publisher_;
 
         rclcpp::Publisher<reef_msgs::msg::XYZEstimate>::SharedPtr state_publisher_;
         rclcpp::Publisher<reef_msgs::msg::XYZDebugEstimate>::SharedPtr debug_state_publisher_;
@@ -88,7 +97,17 @@ namespace reef_estimator {
         std::optional<double> last_imu_stamp_;
         std::atomic<bool> jump_reset_pending_{false};
 
+        // Callback wall-time statistics (diagnostics every 250 IMU callbacks).
+        std::vector<double> callback_us_;
+        long callbacks_total_ = 0;
+        long callbacks_over_2ms_ = 0;
+        double callback_us_max_ = 0;
+        long imu_callbacks_since_diag_ = 0;
+        long rgbd_ignored_ = 0;
+
         void makeEstimator();
+        void recordCallback(std::chrono::steady_clock::time_point t0);
+        void publishDiagnostics();
         void applyPendingReset();
         void publishFlying(bool flying);
     };
