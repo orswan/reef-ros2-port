@@ -189,15 +189,20 @@ compensated, and within one IMU period the last accepted measurement of each
 kind wins. There is no staleness detection: when a measurement stream stops,
 the filter continues on IMU propagation alone.
 
-**Simulation mapping (implemented, P04).** `reef_sim/reef_adapter` publishes
-`/x3/reef/imu/data` (the `/x3/imu` measurement converted FLU → FRD, with the
-**truth** attitude slerped to each IMU stamp, frame `x3/base_link_frd`) and
-`/x3/reef/sonar` (`/x3/range` unchanged, including REP 117 ±inf: master's
+**Simulation mapping (implemented; P05 split).** `reef_x3_adapter/x3_imu_adapter`
+(C++) publishes `/x3/reef/imu/data`: the `/x3/imu` measurement converted
+FLU → FRD, with the **truth** attitude slerped between truth samples (or
+extrapolated ≤ 20 ms from the last two), frame `x3/base_link_frd`.
+`reef_sim/reef_adapter` (Python) publishes the idealized simulated velocity
+observations on `/x3/reef/mocap_velocity/body_level_frame` and
+`/x3/reef/input_labels` (transient local) saying which inputs are idealized.
+The estimator runs in namespace `/x3/reef` and reads `/x3/range` directly
+(`sonar` remapped; values unchanged, including REP 117 ±inf: master's
 `range <= max_range` test drops +inf and NaN, and its χ² gate rejects −inf).
-It publishes `/x3/reef/input_labels` (transient local) saying which inputs
-are idealized. The estimator runs in namespace `/x3/reef`, so its topics are
-`/x3/reef/xyz_estimate` etc. No tilt compensation is applied (as in master;
-C5 deferred). See [X3_SCENARIO.md §11](X3_SCENARIO.md).
+No tilt compensation is applied (as in master; C5 deferred). See
+[X3_SCENARIO.md §11](X3_SCENARIO.md). The IMU path moved to C++ after the
+Python adapter's latency tail (p99 20 ms) failed the estimate-age limit in
+the dev container.
 
 ### 3.5 Measurement selection and the RC switch
 
@@ -335,8 +340,8 @@ apt index]:
 
 | Publisher → subscriber | Publisher QoS | Subscriber QoS | Compatible |
 |---|---|---|---|
-| simulation (`imu_noise`, `range_sensor`, bridge) → `reef_adapter` | reliable, volatile | reliable (rclpy default) | yes |
-| `reef_adapter` → estimator (`imu/data`, `sonar`, mocap velocity) | reliable, volatile, depth 50/10/50 | best effort, volatile, depth 10/1/1 | yes (a best-effort subscriber accepts a reliable publisher) |
+| simulation (`imu_noise`, bridge) → `x3_imu_adapter`, `reef_adapter` | reliable, volatile | reliable (rclcpp/rclpy default) | yes |
+| `x3_imu_adapter` → estimator (`imu/data`); `reef_adapter` → estimator (mocap velocity); `range_sensor` → estimator (`/x3/range`) | reliable, volatile, depth 50/50/10 | best effort, volatile, depth 10/1/1 | yes (a best-effort subscriber accepts a reliable publisher) |
 | estimator → recorder / consumers (`xyz_estimate`, `xyz_debug_estimate`, `is_flying_reef`) | reliable, transient local, depth 1 | any; `ros2 bag record` adapts | yes; late joiners get the last value |
 | `rosbag2_player` → adapter (replay) | as recorded (reliable) | reliable | yes |
 

@@ -701,4 +701,7 @@ horizontal fixtures with nonzero yaw and tilt.
 - [V] The master landing transition resets only the Z filter; the XY reset
   comes from the landing reset at the next IMU step, where a pending
   observation is fused in the same step.
+- [V] The Python adapter's IMU path had a latency tail (p99 20 ms, max
+  50 ms in the dev container) that failed the estimate-age limit there; the
+  IMU path is now C++ (`reef_x3_adapter`).
 

@@ -174,6 +174,17 @@ container's own tree (a few minutes).
 | `scripts/regress_x3_scenario.sh` | 0 | 13/13 |
 | shellcheck -x, mutation checks | — | clean; a transpose mutation fails the frame tests; C1 differs from the reference |
 
+USER, dev container, at `8bac5a5`: `reef_check.sh estimator` **FAIL**. Its
+log (`log/checks/reef_check_estimator_20260930_152027`, shared mount) showed
+a single failed assertion: estimate age p99 22 ms (limit 20 ms). [V] Stage
+breakdown of that run: Python adapter IMU path p99 20 ms, max 50 ms;
+estimator stage p99 4 ms. Fix (`3edbd95`): the IMU path moved to a C++ node
+(`reef_x3_adapter/x3_imu_adapter`), and the estimator reads `/x3/range`
+directly. The limit was not changed. Rerun here after the fix: `estimator`
+PASS 6/6 (age p99 8 ms, adapter stage p99 4 ms), `faults` 35/36 (F11 only),
+`interfaces` PASS, `regress_x3_scenario.sh` 13/13. The dev-container rerun
+is pending (H7).
+
 Nothing in P05 was run inside `reef_ros2_dev` by the implementer.
 
 ## 6. Open items and known limits
@@ -229,8 +240,10 @@ Nothing in P05 was run inside `reef_ros2_dev` by the implementer.
   container after the build-tree fix.
 - **H6 (P04):** done. USER: `reef_check.sh estimator` passed in the dev
   container; vibration assumption kept; takeoff detector added as C6.
-- **H7 (P05, dev container):** `scripts/reef_check.sh baseline` (expect
-  PASS, about 15 min), `scripts/reef_check.sh estimator` (expect PASS), and
+- **H7 (P05, dev container):** rerun after the C++ adapter fix:
+  `scripts/reef_check.sh baseline` (expect PASS, about 15 min; the first
+  run builds `reef_x3_adapter`), `scripts/reef_check.sh estimator` (expect
+  PASS; the first attempt failed on estimate age, §5e), and
   `scripts/reef_check.sh faults` (expect **FAIL 35/36**, only F11 baseline).
   Then decide whether to merge `p05-horizontal-estimator` and start R1 with
   [reviews/R1_packet.md](reviews/R1_packet.md).

@@ -282,7 +282,7 @@ Evidence and commands: [reviews/P05.md](reviews/P05.md), [reviews/R1_packet.md](
 | Bias plausibility | ≤ 0.0066 rad attitude, ≤ 0.011 m/s² accel |
 | Covariance | published Z p: max asymmetry 1.5e−16, min eigenvalue > 0; full Z and XY P in the offline core output checked the same way |
 | Initialization | first estimate at the 21st IMU message; takeoff at 7.77 s (ascend) |
-| Timing | estimate age p99 8–16 ms over the final runs (limit 20 ms; the tail comes from the Python simulation nodes; the estimator stage adds p99 about 4 ms at the 2 ms clock resolution) |
+| Timing | estimate age: dev container at `8bac5a5` **p99 22 ms (FAIL)**, tail from the Python adapter; after moving the IMU adapter to C++ (`3edbd95`) p99 8–10 ms here (limit 20 ms unchanged; the estimator stage adds p99 about 4 ms at the 2 ms clock resolution) |
 | Recorded-stream parity, replays | simulation stream port = original, bit-identical; two offline replays byte-identical; ROS replay metrics equal to live within 0.1 mm / 0.1 mm/s RMSE |
 | Consistency (reported) | 100 % within ±3σ for z, ż, vx, vy (conservative covariances); NEES and effective sample sizes in the report |
 
