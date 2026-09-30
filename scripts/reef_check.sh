@@ -44,7 +44,13 @@ Targets (simulation only; nothing here talks to hardware):
   sim-data [--gui] [--regress]  X3 scenario: flight, recording, analysis
                                 (run_x3_scenario.sh); --regress adds
                                 regress_x3_scenario.sh (13 cases)
-  baseline                      NOT IMPLEMENTED (milestone P02)
+  baseline [--floor]            P02 estimator baseline: build the pinned original
+                                estimator (master e4179f48, sim 95987b51) in the
+                                reference harness, run 15 fixtures x 2 parameter
+                                sets, independent step-wise re-derivation,
+                                covariance invariants, analytic/characterization
+                                checks, golden comparison (about 8 min);
+                                --floor adds -O0/FMA builds (floating-point floor)
   estimator                     NOT IMPLEMENTED (milestones P04-P05)
   faults                        NOT IMPLEMENTED (milestone P05)
   control                       NOT IMPLEMENTED (milestones P06-P07)
@@ -122,26 +128,28 @@ report() {
 target="${1:-}"
 shift || true
 if [[ -z "$target" ]]; then usage; echo; echo "missing target (see above)"; exit 2; fi
-gui=0 regress=0
+gui=0 regress=0 floor=0
 for a in "$@"; do
   case "$a" in
     --gui) gui=1 ;;
     --regress) regress=1 ;;
+    --floor) floor=1 ;;
     *) echo "invalid option '$a' for target '$target'"; usage; exit 2 ;;
   esac
 done
 case "$target" in
   help|-h|--help) usage; exit 0 ;;
-  baseline) not_implemented baseline P02 ;;
   estimator) not_implemented estimator P04-P05 ;;
   faults) not_implemented faults P05 ;;
   control) not_implemented control P06-P07 ;;
   vision) not_implemented vision P08 ;;
   release) not_implemented release P09 ;;
-  env|clock|sim-data) ;;
+  env|clock|sim-data|baseline) ;;
   *) echo "unknown target '$target'"; usage; exit 2 ;;
 esac
-if [[ "$target" == env ]] && (( gui || regress )); then echo "target 'env' takes no options"; exit 2; fi
+if [[ "$target" == env ]] && (( gui || regress || floor )); then echo "target 'env' takes no options"; exit 2; fi
+if [[ "$target" == baseline ]] && (( gui || regress )); then echo "target 'baseline' accepts only --floor"; exit 2; fi
+if [[ "$target" != baseline ]] && (( floor )); then echo "--floor applies only to 'baseline'"; exit 2; fi
 
 logdir="$REEF_ROOT/log/checks/reef_check_${target}_$(date +%Y%m%d_%H%M%S)"
 mkdir -p "$logdir"
@@ -171,6 +179,21 @@ case "$target" in
       [[ -f "$f" ]] && sim_notes+=("$(basename "$f" .log): $(grep -m1 'clock sim time' "$f" | sed 's/.*: *//')")
     done
     (( regress )) && run_step "regress_clock_check.sh (28 cases)" 0 "$logdir/regress.log" "$S/regress_clock_check.sh"
+    ;;
+
+  baseline)
+    B="$REEF_ROOT/baseline"
+    configs+=("$B/provenance.json" "$B/fixtures.lock.json" "$B/golden/index.json" "$B/tools/fixtures.py"
+              "$B/tools/independent.py" "$B/tools/check_baseline.py" "$B/harness/reef_ref_main.cpp")
+    "$B/fetch_sources.sh" >"$logdir/sources_precheck.log" 2>&1 \
+      || blocked "pinned upstream sources unavailable (see ${logdir#"$REEF_ROOT"/}/sources_precheck.log)"
+    args=(); (( floor )) && args=(--floor)
+    run_step "P02 baseline: reference harness, independent, analytic, golden" 0 "$logdir/baseline.log" \
+      python3 "$B/tools/check_baseline.py" "${args[@]}"
+    artifacts+=("$REEF_ROOT/build/baseline/report/summary.md" "$REEF_ROOT/build/baseline/report/results.json"
+                "$REEF_ROOT/build/baseline/out")
+    sim_notes+=("not applicable (fixture time only): $(grep -m1 -oE '[0-9]+ runs, [0-9]+ rows' "$logdir/baseline.log" || echo '?')")
+    grep -E '^(PASS|FAIL): [0-9]+/[0-9]+ assertions' "$logdir/baseline.log" | sed 's/^/     /' || true
     ;;
 
   sim-data)

@@ -31,6 +31,10 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 #   util-linux  setsid/flock (session-based teardown, single supervisor)
 #   curl        noVNC readiness probe
 #   shellcheck  lint for the project's shell scripts
+#   g++, libeigen3-dev, libboost-dev
+#               P02 reference harness: builds the pinned original estimator
+#               sources (present in the base image or as dependencies; listed
+#               because baseline/ depends on them)
 #   python3-matplotlib, python3-numpy
 #               reef_sim bag analysis and plots (otherwise only present via
 #               recommends)
@@ -53,6 +57,9 @@ RUN apt-get update \
         util-linux \
         curl \
         shellcheck \
+        g++ \
+        libeigen3-dev \
+        libboost-dev \
         python3-matplotlib \
         python3-numpy \
         ros-jazzy-rosbag2 \
