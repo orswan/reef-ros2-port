@@ -51,6 +51,11 @@ Targets (simulation only; nothing here talks to hardware):
                                 covariance invariants, analytic/characterization
                                 checks, golden comparison (about 8 min);
                                 --floor adds -O0/FMA builds (floating-point floor)
+  interfaces                    P03 messages, helpers, parameters: vendored
+                                rosflight_msgs pin (+ tampered-copy negative),
+                                legacy reef_msgs helper vectors reproduce,
+                                colcon build + test of src/ with minimum test
+                                counts, baseline golden unchanged (about 5 min)
   estimator                     NOT IMPLEMENTED (milestones P04-P05)
   faults                        NOT IMPLEMENTED (milestone P05)
   control                       NOT IMPLEMENTED (milestones P06-P07)
@@ -144,10 +149,12 @@ case "$target" in
   control) not_implemented control P06-P07 ;;
   vision) not_implemented vision P08 ;;
   release) not_implemented release P09 ;;
-  env|clock|sim-data|baseline) ;;
+  env|clock|sim-data|baseline|interfaces) ;;
   *) echo "unknown target '$target'"; usage; exit 2 ;;
 esac
-if [[ "$target" == env ]] && (( gui || regress || floor )); then echo "target 'env' takes no options"; exit 2; fi
+if [[ "$target" == env || "$target" == interfaces ]] && (( gui || regress || floor )); then
+  echo "target '$target' takes no options"; exit 2
+fi
 if [[ "$target" == baseline ]] && (( gui || regress )); then echo "target 'baseline' accepts only --floor"; exit 2; fi
 if [[ "$target" != baseline ]] && (( floor )); then echo "--floor applies only to 'baseline'"; exit 2; fi
 
@@ -194,6 +201,31 @@ case "$target" in
                 "$REEF_ROOT/build/baseline/out")
     sim_notes+=("not applicable (fixture time only): $(grep -m1 -oE '[0-9]+ runs, [0-9]+ rows' "$logdir/baseline.log" || echo '?')")
     grep -E '^(PASS|FAIL): [0-9]+/[0-9]+ assertions' "$logdir/baseline.log" | sed 's/^/     /' || true
+    ;;
+
+  interfaces)
+    V="$REEF_ROOT/src/third_party/rosflight_ros_pkgs"
+    configs+=("$V/UPSTREAM.json" "$REEF_ROOT/src/reef_msgs/test/data/legacy_helper_vectors.txt"
+              "$REEF_ROOT/src/reef_estimator/config/estimator_master.yaml"
+              "$REEF_ROOT/src/reef_estimator/config/simulation.yaml")
+    "$REEF_ROOT/baseline/fetch_sources.sh" >"$logdir/sources_precheck.log" 2>&1 \
+      || blocked "pinned upstream sources unavailable (see ${logdir#"$REEF_ROOT"/}/sources_precheck.log)"
+    run_step "rosflight_msgs is byte-identical to upstream v2.0.1" 0 "$logdir/vendor.log" \
+      python3 "$S/check_vendor.py"
+    cp -a "$V" "$logdir/tampered_vendor"
+    printf ' ' >> "$logdir/tampered_vendor/rosflight_msgs/msg/RCRaw.msg"
+    run_step "negative: a one-byte change to RCRaw.msg is detected" 1 "$logdir/vendor_negative.log" \
+      python3 "$S/check_vendor.py" --dir "$logdir/tampered_vendor"
+    run_step "legacy reef_msgs helper vectors reproduce" 0 "$logdir/helper_vectors.log" \
+      "$REEF_ROOT/baseline/helper_vectors.sh"
+    run_step "colcon build + test (package set, minimum test counts)" 0 "$logdir/colcon.log" \
+      python3 "$S/check_colcon.py"
+    run_step "baseline golden and fixture lock unchanged since P02" 0 "$logdir/golden.log" \
+      git -C "$REEF_ROOT" diff --exit-code --stat 04c9b19 -- baseline/golden baseline/fixtures.lock.json
+    grep -E '^(reef_|rosflight_)[a-z_]* +files=|^check_colcon:' "$logdir/colcon.log" | sed 's/^/     /' || true
+    artifacts+=("$REEF_ROOT/build/reef_msgs/test_results" "$REEF_ROOT/build/reef_estimator/test_results"
+                "$REEF_ROOT/build/reef_sim/pytest.xml")
+    sim_notes+=("not applicable (unit tests only)")
     ;;
 
   sim-data)
