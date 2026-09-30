@@ -35,6 +35,9 @@ setup(
             'imu_noise = reef_sim.imu_noise:main',
             'scenario_runner = reef_sim.scenario_runner:main',
             'analyze_x3_bag = reef_sim.analyze:main',
+            'reef_adapter = reef_sim.reef_adapter:main',
+            'x3_reef_offline = reef_sim.reef_offline:main',
+            'analyze_reef_vertical = reef_sim.analyze_reef:main',
         ],
     },
 )

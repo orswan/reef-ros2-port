@@ -38,6 +38,9 @@ class ScenarioRunner(Node):
         self.result_file = p('result_file', '').value
         self.require_range = p('require_range', True).value
         self.record_topics = list(p('record_topics', ['']).value)
+        # Extra streams that must have exactly one publisher before the flight
+        # starts (the REEF adapter and estimator in --estimator runs).
+        self.required_extra = [t for t in p('required_extra', ['']).value if t]
         names = list(p('phase_names', ['']).value)
         cols = {k: list(p(f'phase_{k}', [0.0]).value)
                 for k in ('durations', 'vx', 'vy', 'vz', 'yaw_rate')}
@@ -68,7 +71,8 @@ class ScenarioRunner(Node):
         return True
 
     def startup(self):
-        required = list(REQUIRED_PUBLISHED) + (['/x3/range'] if self.require_range else [])
+        required = list(REQUIRED_PUBLISHED) + (['/x3/range'] if self.require_range else []) \
+            + self.required_extra
         if not self.spin_until(lambda: self.now_s() > 0 and self.truth is not None, self.startup_timeout):
             return 3, 'no sim clock or truth odometry within startup timeout'
         ok = self.spin_until(lambda: all(self.count_publishers(t) >= 1 for t in required), 20.0)

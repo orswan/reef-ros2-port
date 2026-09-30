@@ -2,6 +2,11 @@
 # Fly the bounded X3 scenario, record it, and analyze the recording.
 #   scripts/run_x3_scenario.sh            # headless
 #   scripts/run_x3_scenario.sh --gui      # also show Gazebo on the browser desktop (:99)
+#   scripts/run_x3_scenario.sh --estimator  # also run the REEF adapter and ported
+#       estimator (vertical filter) beside the truth-fed controller, with the
+#       IMU vibration overlay (config/x3_reef_overlay.yaml), and score it
+#       (analysis_reef/). REEF is not in the control loop. Builds in the
+#       per-environment tree (scripts/colcon_tree.py).
 # Output: recordings/x3_<time>_<id>/ (manifest.yaml, x3_scenario.yaml, bag/,
 # scenario_result.json, launch.log, analysis/). Recordings are ignored by Git.
 #
@@ -28,10 +33,12 @@ reef_setup_env
 
 headless=true
 analyze=1
+estimator=false
 for arg in "$@"; do
   case "$arg" in
     --gui) headless=false ;;
     --no-analysis) analyze=0 ;;
+    --estimator) estimator=true ;;
     *) echo "unknown argument: $arg" >&2; exit 2 ;;
   esac
 done
@@ -41,15 +48,29 @@ fail() { echo "FAIL $2"; exit "$1"; }
 say() { echo "== $*"; }
 
 # --- build the package (quick; --symlink-install keeps sources live)
-say "building reef_sim"
 mkdir -p "$REEF_ROOT/log"
-if ! (cd "$REEF_ROOT" && colcon build --base-paths src --symlink-install --packages-select reef_sim \
-      >"$REEF_ROOT/log/reef_sim_build.log" 2>&1); then
-  tail -n 20 "$REEF_ROOT/log/reef_sim_build.log"; fail 2 "colcon build failed"
+if [[ "$estimator" == true ]]; then
+  # C++ packages: private tree per environment (the shared build/ may hold
+  # another container's CMake cache).
+  tree="$(python3 "$REEF_ROOT/scripts/colcon_tree.py")"
+  say "building reef_sim and the REEF estimator in ${tree#"$REEF_ROOT"/}"
+  if ! (cd "$REEF_ROOT" && colcon --log-base "$tree/log" build --base-paths src --symlink-install \
+        --build-base "$tree/build" --install-base "$tree/install" --packages-up-to reef_sim \
+        >"$REEF_ROOT/log/reef_sim_build.log" 2>&1); then
+    tail -n 20 "$REEF_ROOT/log/reef_sim_build.log"; fail 2 "colcon build failed"
+  fi
+  install_setup="$tree/install/setup.bash"
+else
+  say "building reef_sim"
+  if ! (cd "$REEF_ROOT" && colcon build --base-paths src --symlink-install --packages-select reef_sim \
+        >"$REEF_ROOT/log/reef_sim_build.log" 2>&1); then
+    tail -n 20 "$REEF_ROOT/log/reef_sim_build.log"; fail 2 "colcon build failed"
+  fi
+  install_setup="$REEF_ROOT/install/setup.bash"
 fi
 set +u
-# shellcheck disable=SC1091
-source "$REEF_ROOT/install/setup.bash"
+# shellcheck disable=SC1090,SC1091
+source "$install_setup"
 set -u
 
 # --- assets: pinned, verified, local (never fetched during a run)
@@ -66,6 +87,10 @@ run_dir="${REEF_X3_OUT:-$REEF_ROOT/recordings/x3_$(date +%Y%m%d_%H%M%S)_$token}"
 mkdir -p "$run_dir"
 [[ -e "$run_dir/bag" ]] && fail 2 "$run_dir/bag already exists"
 cp "$params_src" "$run_dir/x3_scenario.yaml"
+if [[ "$estimator" == true ]]; then
+  python3 "$REEF_ROOT/scripts/x3_merge_params.py" "$run_dir/x3_scenario.yaml" \
+    "$REEF_ROOT/src/reef_sim/config/x3_reef_overlay.yaml" || fail 2 "could not merge the REEF overlay"
+fi
 read -r startup_timeout duration < <(python3 - "$run_dir/x3_scenario.yaml" <<'EOF'
 import sys, yaml
 p = yaml.safe_load(open(sys.argv[1]))
@@ -89,7 +114,8 @@ enable_range=true
 
 python3 "$REEF_ROOT/scripts/x3_manifest.py" start "$run_dir" \
   "asset_verification=$asset_status" "headless=$headless" "ros_domain_id=$ROS_DOMAIN_ID" \
-  "gz_partition=$GZ_PARTITION" "enable_range=$enable_range" "command=scripts/run_x3_scenario.sh $*"
+  "gz_partition=$GZ_PARTITION" "enable_range=$enable_range" "estimator=$estimator" \
+  "command=scripts/run_x3_scenario.sh $*"
 
 # The Gazebo server always runs headless (-s); the GUI, if requested, is a
 # separate optional viewer and not required for a valid recording.
@@ -102,6 +128,7 @@ if [[ "$headless" == false ]]; then
 fi
 gui_seen=0
 [[ "$enable_range" == true ]] && required+=("range_sensor")
+[[ "$estimator" == true ]] && required+=("reef_estimator_node" "reef_adapter")
 
 # --- cleanup and signals
 launch_pid="" sid="" pending=""
@@ -132,7 +159,7 @@ normal_traps
 defer_traps
 sim_start_session "$run_dir/launch.log" ros2 launch reef_sim x3_scenario.launch.py \
   "output_dir:=$run_dir" "params_file:=$run_dir/x3_scenario.yaml" "headless:=$headless" \
-  "enable_range:=$enable_range"
+  "enable_range:=$enable_range" "with_estimator:=$estimator"
 [[ -n "$sid" ]] || { normal_traps; fail 2 "simulation session did not start"; }
 normal_traps
 exit_for_pending
@@ -191,6 +218,11 @@ if (( analyze )); then
   say "analysis"
   ros2 run reef_sim analyze_x3_bag "$run_dir" | tee "$run_dir/analysis.log" || rc=1
   [[ "${PIPESTATUS[0]}" == 0 ]] || rc=1
+  if [[ "$estimator" == true ]]; then
+    say "REEF vertical estimate vs truth (idealized inputs)"
+    ros2 run reef_sim analyze_reef_vertical "$run_dir" | tee "$run_dir/analysis_reef.log" || rc=1
+    [[ "${PIPESTATUS[0]}" == 0 ]] || rc=1
+  fi
 fi
 python3 "$REEF_ROOT/scripts/x3_manifest.py" finish "$run_dir" "exit_status=$rc" \
   "result=$( ((rc == 0)) && echo pass || echo 'analysis failed')" "fuel_files_fetched=$fetched"

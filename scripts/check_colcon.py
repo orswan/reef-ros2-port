@@ -13,13 +13,13 @@
 The project tree is bind-mounted into both containers, whose ROS packages
 differ. A CMake cache configured in one container references libraries that
 may not exist in the other, so this check never uses the shared build/ and
-install/. It builds in build/colcon_check/<env>/, where <env> is a hash of the
-installed package list (dpkg), so each environment has its own tree.
+install/. It builds in build/colcon_env/<env>/ (scripts/colcon_tree.py), where
+<env> is a hash of the installed package list (dpkg), so each environment has
+its own tree.
 
 Expects a sourced ROS 2 environment (reef_check.sh provides it).
 Exit: 0 PASS, 1 FAIL, 2 invalid environment.
 """
-import hashlib
 import os
 import shutil
 import subprocess
@@ -28,6 +28,9 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'scripts'))
+import colcon_tree  # noqa: E402
+
 EXPECTED = {'reef_msgs', 'reef_estimator', 'reef_sim', 'rosflight_msgs'}
 # package -> (minimum test cases, required result-file kinds)
 MINIMUM = {
@@ -38,15 +41,8 @@ MINIMUM = {
 BASE = ['--base-paths', 'src']
 
 
-def environment_id():
-    """Short hash of the installed package list: differs between the containers."""
-    out = subprocess.run(['dpkg-query', '-W', '-f=${Package}\t${Version}\n'],
-                         capture_output=True, text=True, check=True).stdout
-    return hashlib.sha256(''.join(sorted(out.splitlines(True))).encode()).hexdigest()[:12]
-
-
-ENV_ID = environment_id()
-TREE = ROOT / 'build' / 'colcon_check' / ENV_ID
+ENV_ID = colcon_tree.environment_id()
+TREE = colcon_tree.tree()
 BUILD, INSTALL = TREE / 'build', TREE / 'install'
 COLCON = ['colcon', '--log-base', str(TREE / 'log')]
 BASES = ['--build-base', str(BUILD), '--install-base', str(INSTALL)]
