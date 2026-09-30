@@ -1,9 +1,7 @@
 #ifndef REEF_ESTIMATOR_Z_ESTIMATOR_H
 #define REEF_ESTIMATOR_Z_ESTIMATOR_H
 
-#include "estimator.h"
-#include <sensor_msgs/Imu.h>
-#include <sensor_msgs/Range.h>
+#include "reef_estimator/estimator.h"
 
 namespace reef_estimator
 {

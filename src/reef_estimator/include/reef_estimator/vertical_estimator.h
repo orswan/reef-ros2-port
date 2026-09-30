@@ -1,59 +1,122 @@
 //
 // Created by humberto on 6/4/18.
 //
-#ifndef REEF_ESTIMATOR_XYZ_ESTIMATOR_H
-#define REEF_ESTIMATOR_XYZ_ESTIMATOR_H
+// ROS 2 port (P04): the vertical part of XYZEstimator (reef_estimator master
+// e4179f48) plus the z side of SensorManager's RC switch, without ROS. The
+// horizontal filter is not ported yet. Messages are replaced by plain structs
+// that keep the ROS 1 field types (float32 range, sec/nanosec stamps), so the
+// arithmetic is that of the original. See docs/INTERFACES.md section 3.
+#ifndef REEF_ESTIMATOR_VERTICAL_ESTIMATOR_H
+#define REEF_ESTIMATOR_VERTICAL_ESTIMATOR_H
 
-#include <ros/ros.h>
-#include <std_msgs/Bool.h>
-#include <eigen3/Eigen/Core>
-#include <tf2_eigen/tf2_eigen.h>
+#include <Eigen/Core>
 
-//Messages
-#include <geometry_msgs/PoseStamped.h>
-#include <geometry_msgs/TwistStamped.h>
-#include <geometry_msgs/TwistWithCovarianceStamped.h>
-#include <reef_msgs/XYZDebugEstimate.h>
-#include <reef_msgs/XYZEstimate.h>
-#include <reef_msgs/DeltaToVel.h>
+#include <array>
+#include <cstdint>
+#include <functional>
+#include <string>
 
-#include "z_estimator.h"
-#include "xy_estimator.h"
-#include <reef_msgs/matrix_operation.h>
-#include <reef_msgs/dynamics.h>
-
-#include <iostream>
+#include "reef_estimator/parameters.hpp"
+#include "reef_estimator/z_estimator.h"
 
 #define ACC_SAMPLE_SIZE 20
 #define ACC_TAKEOFF_VARIANCE 0.5
-#define SONAR_SAMPLE_SIZE 40
-#define SONAR_TAKEOFF_VARIANCE 0.000002
-#define SONAR_OFFSET 0.010
 
 namespace reef_estimator
 {
-    class XYZEstimator
+    // Message stamp. toSec() is ROS 1's ros::Time::toSec(), which the
+    // original used for dt (clock policy, INTERFACES.md section 3.4).
+    struct Stamp
     {
-    private:
-        ros::NodeHandle private_nh_;
-        ros::NodeHandle nh_;
-        ros::Publisher state_publisher_;
-        ros::Publisher debug_state_publisher_;
-        ros::Publisher is_flying_publisher_;
+        int32_t sec = 0;
+        uint32_t nanosec = 0;
+        double toSec() const { return static_cast<double>(sec) + 1e-9 * static_cast<double>(nanosec); }
+    };
 
-        //Estimator enable/disable variables
-        bool enableXY;
+    struct ImuSample            // sensor_msgs/Imu: specific force (FRD), attitude quaternion
+    {
+        Stamp stamp;
+        double ax = 0, ay = 0, az = 0;
+        double qx = 0, qy = 0, qz = 0, qw = 1;
+    };
+
+    struct RangeSample          // sensor_msgs/Range: float32 fields
+    {
+        Stamp stamp;
+        float range = 0;
+        float max_range = 0;
+    };
+
+    struct MocapPoseSample      // geometry_msgs/PoseStamped: pose.position.z (NED)
+    {
+        Stamp stamp;
+        double z = 0;
+    };
+
+    struct RcSample             // rosflight_msgs/RCRaw
+    {
+        Stamp stamp;
+        std::array<uint16_t, 8> values{};
+    };
+
+    struct ZState               // one ZDebugEstimate worth of state
+    {
+        double z = 0, z_dot = 0, bias = 0, u = 0;
+        Eigen::Matrix3d P = Eigen::Matrix3d::Zero();
+    };
+
+    enum class LogLevel { Info, Warn, Error };
+
+    class VerticalEstimator
+    {
+    public:
+        explicit VerticalEstimator(const EstimatorParameters& params);
+
+        // Returns true when an estimate was produced (the original published
+        // xyz_estimate); false while initializing or for a NaN sample.
+        bool sensorUpdate(const ImuSample& imu);
+        void sensorUpdate(const RangeSample& range_msg);
+        void mocapUpdate(const MocapPoseSample& pose_msg);
+        void rcRawUpdate(const RcSample& msg);
+
+        // Which inputs the original node subscribed to (SensorManager constructor).
+        bool subscribesRange() const { return enableSonar; }
+        bool subscribesMocapPose() const { return enableMocapZ; }
+        bool subscribesRc() const { return enableMocapSwitch; }
+
+        // Latest estimate (valid after sensorUpdate(imu) returned true).
+        Stamp stamp() const { return stamp_; }
+        ZState plusState() const;
+        const ZState& minusState() const { return zMinus; }   // only with debug_mode
+        bool debugMode() const { return debug_mode_; }
+
+        // Takeoff state and its changes (is_flying_reef is published on change).
+        bool isFlying() const { return takeoffState; }
+        // Number of takeoff/landing transitions so far.
+        long takeoffTransitions() const { return numTakeoffTransitions; }
+
+        // Introspection for the fidelity comparison (names as in the harness CSV).
+        const ZEstimator& zFilter() const { return zEst; }
+        bool accelerometerInitialized() const { return accInitialized; }
+        double initialGravity() const { return initialAccMagnitude; }
+        bool pendingZMeasurement() const { return newSonarMeasurement; }
+        int propagationCount() const { return numberOfPropagations; }
+        double lastMahalanobisSquared() const { return Mahalanobis_D_hat_square(0); }
+        long zGateCount() const { return numZGates; }
+        long estimateCount() const { return numEstimates; }
+        bool usingMocapZ() const { return useMocapZ; }
+        bool usingMocapXY() const { return useMocapXY; }
+
+        // Optional log sink (the original used ROS_INFO/WARN/ERROR).
+        std::function<void(LogLevel, const std::string&)> log;
+
+    private:
+        //Estimator enable/disable variables (enable_xy has no effect without
+        //the horizontal filter)
         bool enableZ;
 
         //Instantiate a ZEstimator
         ZEstimator zEst;
-
-        //Instantiate an XYEstimator
-        XYEstimator xyEst;
-
-        //Message holders
-        reef_msgs::XYZEstimate xyzState;
-        reef_msgs::XYZDebugEstimate xyzDebugState;
 
         int numberOfPropagations;
 
@@ -61,25 +124,29 @@ namespace reef_estimator
         bool accInitialized;
         int accInitSampleCount;
         double initialAccMagnitude;
-        geometry_msgs::Vector3 accSampleAverage;
+        Eigen::Vector3d accSampleAverage;
         double last_time_stamp;
         double mahalanobis_distance_sonar;
-        double mahalanobis_distance_rgbd_xy_;
         double mahalanobis_distance_mocap_z;
-        double mahalanobis_distance_mocap_xy_;
         double dt;
         bool enable_partial_update;
-        int sigma_mulitplier;
+        bool debug_mode_;
 
+        //Mocap override settings (SensorManager)
+        bool enableMocapXY, enableMocapZ;
+        bool enableRGBD, enableSonar;
+        bool useMocapXY, useMocapZ;
+        bool enableMocapSwitch;
+        int mocapOverrideChannel;
+        bool mocapSwitchOn;
 
-      //Takeoff detection variables
-        std_msgs::Bool takeoffState;
+        //Takeoff detection variables
+        bool takeoffState;
         bool accTakeoffState, sonarTakeoffState;
-        int numAccSamples, numSonarSamples;
-        double accSamples[ACC_SAMPLE_SIZE], sonarSamples[SONAR_SAMPLE_SIZE];
-        double accMean, accVariance, sonarMean, sonarVariance;
-        bool newRgbdMeasurement, newSonarMeasurement;
-        int rgbdCounter;
+        int numAccSamples;
+        double accSamples[ACC_SAMPLE_SIZE];
+        double accMean, accVariance;
+        bool newSonarMeasurement;
 
         Eigen::Matrix3d C_NED_to_body_frame;
         Eigen::Vector3d accelxyz_in_body_frame ;
@@ -88,45 +155,22 @@ namespace reef_estimator
         Eigen::VectorXd expected_measurement;
         Eigen::Vector3d Mahalanobis_D_hat_square;
         Eigen::Vector3d Mahalanobis_D_hat;
-        Eigen::Vector2d measurement;
-        Eigen::Vector2d expected_rgbd;
 
-        double beta_0;
-        Eigen::MatrixXd xySigma;
-        Eigen::Vector3d zSigma;
-        
+        Stamp stamp_;
+        ZState zMinus;
+        long numZGates = 0;
+        long numEstimates = 0;
+        long numTakeoffTransitions = 0;
+
         void checkTakeoffState(double accMagnitude);
-        void publishEstimates();
         void saveMinusState();
-
-        void initializeAcc(geometry_msgs::Vector3 acc);
+        void initializeAcc(const ImuSample& imu);
         bool chi2Accept(float range_measurement);
-        bool chi2AcceptRgbd(geometry_msgs::TwistWithCovarianceStamped twist_msg);
-
-        bool chi2AcceptMocapXY(geometry_msgs::TwistWithCovarianceStamped twist_msg);
         bool chi2AcceptMocapZ(float z_mocap_ned);
-        
-        bool hypothesisAccept(float range_measurement);
-        float correctRange(float range_measurement);
-
-    public:
-        XYZEstimator();
-        ~XYZEstimator();
-
-        bool enableMocapXY, enableMocapZ;
-        bool enableRGBD, enableSonar;
-        bool useMocapXY, useMocapZ;
-        bool debug_mode_;
-
-        void sensorUpdate(sensor_msgs::Imu imu);
-        void sensorUpdate(sensor_msgs::Range range_msg);
-        void mocapUpdate(geometry_msgs::PoseStamped pose_msg);
-        void mocapUpdate(geometry_msgs::TwistWithCovarianceStamped twist_msg);
-        void rgbdUpdate(reef_msgs::DeltaToVel twist_msg);
-
-        };
+        void report(LogLevel level, const std::string& text) const;
+    };
 
     double getVectorMagnitude(double x, double y, double z);
 }
 
-#endif //REEF_ESTIMATOR_XYZ_ESTIMATOR_H
+#endif //REEF_ESTIMATOR_VERTICAL_ESTIMATOR_H

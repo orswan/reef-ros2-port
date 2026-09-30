@@ -1,8 +1,8 @@
 #ifndef REEF_ESTIMATOR_ESTIMATOR_H
 #define REEF_ESTIMATOR_ESTIMATOR_H
 
-#include <eigen3/Eigen/Core>
-#include <eigen3/Eigen/Dense>
+#include <Eigen/Core>
+#include <Eigen/Dense>
 
 namespace reef_estimator
 {

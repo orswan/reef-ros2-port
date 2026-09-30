@@ -19,8 +19,13 @@ find_package(Eigen3 REQUIRED)
 find_package(reef_msgs REQUIRED)
 find_package(rclcpp REQUIRED)
 
-# ROS-independent core (P03: parameter validation).
-add_library(reef_estimator_core SHARED src/parameters.cpp)
+# ROS-independent core: parameter validation (P03) and the vertical filter
+# (P04). No ROS types or clocks.
+add_library(reef_estimator_core SHARED
+  src/parameters.cpp
+  src/estimator.cpp
+  src/z_estimator.cpp
+  src/vertical_estimator.cpp)
 target_include_directories(reef_estimator_core PUBLIC
   "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
   "$<INSTALL_INTERFACE:include/${PROJECT_NAME}>")
@@ -31,7 +36,12 @@ add_library(reef_estimator_ros SHARED src/ros_parameters.cpp)
 target_link_libraries(reef_estimator_ros PUBLIC
   reef_estimator_core reef_msgs::reef_msgs_parameters rclcpp::rclcpp)
 
+# Event-replay driver for the fidelity comparison with the reference harness.
+add_executable(reef_estimator_event_replay tools/event_replay.cpp)
+target_link_libraries(reef_estimator_event_replay reef_estimator_core)
+
 install(DIRECTORY include/ DESTINATION include/${PROJECT_NAME})
+install(TARGETS reef_estimator_event_replay DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY config DESTINATION share/${PROJECT_NAME})
 install(TARGETS reef_estimator_core reef_estimator_ros
   EXPORT export_${PROJECT_NAME}

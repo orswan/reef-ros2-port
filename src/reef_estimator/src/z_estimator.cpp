@@ -1,6 +1,5 @@
-#include <eigen3/Eigen/Core>
-#include <iostream>
-#include "z_estimator.h"
+#include <Eigen/Core>
+#include "reef_estimator/z_estimator.h"
 
 namespace reef_estimator
 {
