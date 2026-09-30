@@ -1,0 +1,40 @@
+{
+  "param_set_for_scenario": {
+    "v01_descent_landing": "default",
+    "v02_sonar_dropout": "default",
+    "v03_range_invalid": "default",
+    "v04_repeated_range": "default",
+    "v05_imu_duplicate_stamp": "default",
+    "v06_imu_backward_stamp": "default",
+    "v07_imu_gap": "default",
+    "v08_mocap_z_repeated_outlier": "mocap_z",
+    "v09_tilt_descent": "default",
+    "v10_z_disabled": "z_disabled"
+  },
+  "files": {
+    "params/common_default_master.params": "2b3f32b56985ff1460401269dfacb1921eb4b06a556ff668a5050a63acac6691",
+    "params/common_mocap_z_master.params": "e4ad5414bc854697baf981088355880f0c4d6f3289d9641344a1fb4031d0a173",
+    "params/common_z_disabled_master.params": "9d7418da53ef4eaf1bb64da3a1ea7077dd9ac7514e65318ac1273cd1a9a7a9f8",
+    "v01_descent_landing.events": "f14e8ad80dd4c0689cb77362b1b9a09a0645824d38888a29fb579e7e768f2444",
+    "v01_descent_landing.truth.csv": "e150d037bb9a3856047aa8c6f79e432c0c9236426e701f4c2151d7614b670bda",
+    "v02_sonar_dropout.events": "daec523d41ff4a5194be185288c6336744f30cc168b1f5c0880766b6df8dedd4",
+    "v02_sonar_dropout.truth.csv": "d42e9e911fd07ba5d7466e8720808eda1639cd4e088a13bd60e1cdfe2fd950d6",
+    "v03_range_invalid.events": "16c8301982a97bb6f7edde289ae4eba58d51405d18b06f7f2c34553414d668dd",
+    "v03_range_invalid.truth.csv": "2d20edc7ab6518cee682f93ef2f1b3c477aded2eb88a1b247c2ab5d7ce3a2e2a",
+    "v04_repeated_range.events": "3aab4b212f3633310ac87fe337d9a326b233e34da0e3ccdd90222a83e9fa7350",
+    "v04_repeated_range.truth.csv": "29df0ef5180b1a195956651e0fb6417fe8144a1e5cee4e5868e10822f38f1876",
+    "v05_imu_duplicate_stamp.events": "3f10d606199363a8ceee136da69c2a77b40e7070cd1dd1b840e877304125ac6f",
+    "v05_imu_duplicate_stamp.truth.csv": "9e8b90d0bcbf42f75169b38104abbf9e6894664668ea8647bf285e49657078e8",
+    "v06_imu_backward_stamp.events": "61b72eb2e3712e92e63cd5031bd1d81fe4e5d90d151169c80f577e420b7cb5d8",
+    "v06_imu_backward_stamp.truth.csv": "9e8b90d0bcbf42f75169b38104abbf9e6894664668ea8647bf285e49657078e8",
+    "v07_imu_gap.events": "7c3a9e4cd1d5499cab9de05ee789ceac273d947ad1c90f67ce7c798a2a290ed9",
+    "v07_imu_gap.truth.csv": "29df0ef5180b1a195956651e0fb6417fe8144a1e5cee4e5868e10822f38f1876",
+    "v08_mocap_z_repeated_outlier.events": "d56070df2495be34041de151b7a1aec8bf71582c124e735c082648bb15d98e40",
+    "v08_mocap_z_repeated_outlier.truth.csv": "29df0ef5180b1a195956651e0fb6417fe8144a1e5cee4e5868e10822f38f1876",
+    "v09_tilt_descent.events": "bb7a8de290c91d56b4a7d3122cd3819fcb29283ae12bbe679d66e39294da1f33",
+    "v09_tilt_descent.truth.csv": "596d72256971148806a55d5f929b6ae33473ef7475050dc6c471f32202920c80",
+    "v10_z_disabled.events": "721d0eb96f22b892e47507e309336fe4023b4bb191dd009a6f7f53ede3b95982",
+    "v10_z_disabled.truth.csv": "29df0ef5180b1a195956651e0fb6417fe8144a1e5cee4e5868e10822f38f1876"
+  },
+  "reason": "P04 initial vertical fixtures v01-v10"
+}
