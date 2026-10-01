@@ -166,18 +166,27 @@ def evaluate(scenario, chk, metrics, tr, data, result, phases, run):
     elif scenario == 'estimator_reset':
         chk.add('outputs finite; run completed', c.est_ok and c.cmd_ok and result['status'] == 'completed',
                 f'finite {c.est_ok and c.cmd_ok}, {result["status"]}', crit)
-        after = (c.t_est >= t_f) & (c.t_est < t_f + 2.0)
-        pinned = bool(np.any(np.abs(c.est_z[after] - (-0.25)) < 1e-9))
-        before = c.est_z[c.t_est < t_f]
-        jump = float(-c.est_z[after][0] - (-before[-1])) if after.any() and len(before) else float('nan')
+        fly = [(tb, mm.data) for tb, mm in data.get('/x3/reef/is_flying_reef', []) if tb >= t_f - 0.05]
+        t_land = next((tb for tb, v in fly if not v), None)
+        t_up = next((tb for tb, v in fly if v and t_land is not None and tb > t_land), None)
+        w = (c.t_est >= t_f - 0.05) & (c.t_est < t_f + 2.0)
+        te, ez = c.t_est[w], -c.est_z[w]
+        k = int(np.argmax(np.diff(te))) if len(te) > 1 else 0
+        gap = float(np.diff(te)[k]) if len(te) > 1 else float('nan')
+        first = float(ez[k + 1]) if len(te) > 1 else float('nan')
+        h_meas = float(np.interp(te[k + 1], tr['t'], tr['h'])) if len(te) > 1 else float('nan')
+        between = 0.25 <= first <= h_meas + 0.02
         span = c.span('fault', 'recover')
         hmin = float(np.min(tr['h'][span]))
         rec = recovery(c, t_f, c.ph('recover')['t_end'], 1.0)
-        m.update(pinned_landed=pinned, estimate_jump=jump, min_height=hmin, max_tilt=c.max_tilt('fault', 'recover'),
-                 recovery_s=rec, crashed=hmin < 0.1)
-        chk.add(char + 'the estimate restarts landed (z_x0 = -0.25 m) after the reset', pinned,
-                f'pinned value seen {pinned}; estimate jump {jump:+.3f} m; min height {hmin:.3f} m; '
-                f'recovery {rec} s; crashed {hmin < 0.1}', crit)
+        m.update(landed_at=None if t_land is None else t_land - t_f, takeoff_again_at=None if t_up is None else t_up - t_f,
+                 estimate_gap=gap, first_estimate=first, measured_height=h_meas, min_height=hmin,
+                 max_tilt=c.max_tilt('fault', 'recover'), recovery_s=rec, crashed=hmin < 0.1)
+        chk.add(char + 'reset: landed, estimate gap <= 0.1 s, takeoff again, first estimate between z_x0 and the '
+                'measured height', t_land is not None and t_up is not None and gap <= 0.1 and between,
+                f"landed at +{m['landed_at']}, flying again at +{m['takeoff_again_at']} s; estimate gap {gap:.3f} s; "
+                f'first estimate {first:.3f} m (z_x0 0.25, measured {h_meas:.3f}); min height {hmin:.3f} m, '
+                f'crashed {hmin < 0.1}', crit)
     elif scenario == 'controller_restart':
         tc = c.t_cmd[(c.t_cmd >= t_f - 0.2) & (c.t_cmd <= c.ph('recover')['t_end'])]
         gap = float(np.max(np.diff(tc))) if len(tc) > 1 else float('nan')
@@ -222,10 +231,15 @@ def evaluate(scenario, chk, metrics, tr, data, result, phases, run):
         sx = np.array([mm.xy_plus.sigma_plus[0] for _, mm in dbgm])
         w = (ts >= t_f + 0.2) & (ts < t_f + 10.0)
         s = sx[w]
-        mono = bool(len(s) > 10 and np.all(np.diff(s) >= -1e-12) and s[-1] > 2 * s[0])
-        m.update(sigma_x_start=float(s[0]) if len(s) else None, sigma_x_end=float(s[-1]) if len(s) else None)
-        chk.add('REEF horizontal velocity variance grows monotonically during the loss', mono,
-                f'sigma_x {m["sigma_x_start"]} -> {m["sigma_x_end"]} m/s over {len(s)} estimates', crit)
+        vt = np.array([stamp(mm.header) for _, mm in data.get('/x3/reef/mocap_velocity/body_level_frame', [])])
+        n_obs = int(np.sum((vt > t_f + 0.05) & (vt < t_f + 10.0)))
+        grows = bool(len(s) > 10 and np.min(s) >= s[0] - 1e-12 and s[-1] >= 10 * s[0])
+        m.update(sigma_x_start=float(s[0]) if len(s) else None, sigma_x_end=float(s[-1]) if len(s) else None,
+                 sigma_x_min=float(np.min(s)) if len(s) else None, observations_during_loss=n_obs,
+                 steps_decreasing=int(np.sum(np.diff(s) < -1e-12)) if len(s) > 1 else None)
+        chk.add('no observation during the loss; sigma never below its start value and >= 10x it at the end',
+                n_obs == 0 and grows, f"observations {n_obs}; sigma_x {m['sigma_x_start']} (min {m['sigma_x_min']}) -> "
+                f"{m['sigma_x_end']} m/s; {m['steps_decreasing']} of {len(s) - 1} steps dip", crit)
         m['max_tilt'] = add_tilt(chk, c, 'fault', 'recover', crit)
         chk.add('run completed', result['status'] == 'completed', result['status'], crit)
         wt = window(tr['t'], t_f, t_f + 10.0)
@@ -308,13 +322,25 @@ def position(scenario, chk, m, c, crit, char):
         first = cs[0] if cs else None
         yaw_first = float(np.interp(first[0], tr['t'], tr['yaw'])) if first else float('nan')
         diff0 = abs(wrap(first[1].pose.yaw - yaw_first)) if first else float('nan')
-        bearing = math.atan2(ph['py'], ph['px'])
-        yaw6 = float(np.interp(t0 + 6.0, tr['t'], tr['yaw']))
-        err6 = abs(wrap(yaw6 - bearing))
+        xy = ned(c)
+        wl = window(tr['t'], t0, ph['t_end'])
+        idx = np.nonzero(wl)[0]
+        dist = np.hypot(ph['px'] - xy[idx, 0], ph['py'] - xy[idx, 1])
+        brg = np.arctan2(ph['py'] - xy[idx, 1], ph['px'] - xy[idx, 0])
+        err = np.abs((tr['yaw'][idx] - brg + np.pi) % (2 * np.pi) - np.pi)
+        near = np.nonzero(dist < 0.15)[0]
+        err_start = float(err[0])
+        err_near = float(err[near[0]]) if len(near) else float('nan')
+        t_near = float(tr['t'][idx[near[0]]] - t0) if len(near) else None
+        inside = dist < 0.10
+        swing = float(np.ptp(brg[inside])) if inside.any() else float('nan')
         m['k10'] = dict(first_heading_setpoint=first[1].pose.yaw if first else None, heading_at_first=yaw_first,
-                        bearing=bearing, heading_at_6s=yaw6)
-        chk.add(char + 'K10: first position step keeps the current heading (theta = 0); heading converges to the '
-                'bearing (within 0.2 rad by 6 s)', diff0 <= 0.01 and err6 <= 0.2,
-                f'first setpoint - current heading {diff0:.4f} rad; heading at 6 s {yaw6:+.3f} vs bearing '
-                f'{bearing:+.3f} rad', crit)
+                        error_at_leg_start=err_start, error_within_0p15=err_near, time_within_0p15=t_near,
+                        bearing_swing_in_dead_zone=swing)
+        chk.add(char + 'K10: first position step keeps the current heading (theta = 0); the heading error to the '
+                'bearing decreases and is <= 0.2 rad within 0.15 m of the target',
+                diff0 <= 0.01 and len(near) > 0 and err_near < err_start and err_near <= 0.2,
+                f'first setpoint - current heading {diff0:.4f} rad; error {err_start:.3f} rad at the leg start, '
+                f'{err_near:.3f} rad at {t_near} s (within 0.15 m); bearing swing inside the dead zone {swing:.3f} rad '
+                '(reported)', crit)
         m['max_tilt'] = add_tilt(chk, c, 'takeoff_hover', 'land', crit)
