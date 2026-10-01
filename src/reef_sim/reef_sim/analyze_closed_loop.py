@@ -32,15 +32,15 @@ from reef_sim.analyze import Checks, read_bag, rot, stamp
 
 LIM = dict(takeoff_s=15.0, tilt=0.35, h_min=0.25, overshoot=0.4, band=0.15, settle_s=15.0,
            hold_rmse=0.10, vel_rmse=0.15, yaw_rate_err=0.10, sat_frac=0.05, age_p99=0.020,
-           causality=0.30, causality_tol=0.10)
+           causality=0.30, causality_tol=0.10, ground_h=0.05, ground_speed=0.05, ground_tilt=0.1)
 T = np.array([[0, 1, 0], [1, 0, 0], [0, 0, -1]], float)
 B = np.diag([1.0, -1.0, -1.0])
 SENSOR_OFFSET = np.array([0.0, 0.0, -0.055])
 LABEL = ('REEF-controlled X3 with the STAND-IN low-level loop (development tool, not ROSflight); '
          'idealized inputs (truth attitude, idealized range, simulated velocity observations, '
          'IMU vibration assumption). Simulation only.')
-HOVERS = ['takeoff_hover', 'hover_fwd', 'hover_left', 'hover_yaw']
-MOVES = ['forward', 'left', 'yaw']
+HOVERS = ['takeoff_hover', 'hover_fwd', 'hover_left', 'hover_back', 'hover_yaw']
+MOVES = ['forward', 'left', 'back', 'yaw']
 STEPS = [('takeoff_hover', 'takeoff to 1.0 m'), ('climb', '1.0 -> 1.5 m'), ('descend', '1.5 -> 0.6 m')]
 # The controller's subscriptions and their only allowed publishers: the REEF
 # estimate, the setpoint, the stand-in's armed status; is_flying and
@@ -121,21 +121,26 @@ def analyze(run, nominal=None):
     chk.add('takeoff within 15 s of arming (REEF and truth)', ok, json.dumps(metrics['takeoff']),
             'ACCEPTANCE P07 takeoff')
 
-    # Stability over the flight window.
+    # Stability: height from takeoff to the end of descend; tilt and
+    # finiteness through approach and land (ACCEPTANCE P07, amended).
+    t_desc = phases['descend']['t_end']
+    t_land = phases['land']['t_end']
     reach = np.nonzero(after & (tr['h'] >= LIM['h_min']))[0]
     t_fly = float(tr['t'][reach[0]]) if len(reach) else t_end
-    w = window(tr['t'], t_fly, t_end)
+    w = window(tr['t'], t_fly, t_desc)
+    wt = window(tr['t'], t_fly, t_land)
     est = data.get('/x3/reef/xyz_estimate', [])
     cmd = data.get('/x3/reef/command', [])
     dbg = np.array([list(m.data) for _, m in data.get('/x3/fc/debug', [])]).reshape(-1, 24)
     finite = (all(math.isfinite(v) for _, m in est for v in (m.z_plus.z, m.z_plus.z_dot, m.xy_plus.x_dot, m.xy_plus.y_dot))
               and all(math.isfinite(v) for _, m in cmd for v in m.u[:4]) and np.isfinite(dbg[:, 17:21]).all())
-    tilt = float(np.max(np.maximum(np.abs(tr['roll'][w]), np.abs(tr['pitch'][w])))) if w.any() else float('nan')
+    tilt = float(np.max(np.maximum(np.abs(tr['roll'][wt]), np.abs(tr['pitch'][wt])))) if wt.any() else float('nan')
     hmin = float(np.min(tr['h'][w])) if w.any() else float('nan')
     ok = (result['status'] == 'completed' and finite and len(reach) > 0 and tilt <= LIM['tilt'] and hmin >= LIM['h_min'])
     metrics['stability'] = dict(flight_from=t_fly - t_arm, max_tilt=tilt, min_height=hmin, finite=finite,
                                 status=result['status'])
-    chk.add('stability: finite, tilt <= 0.35 rad, height >= 0.25 m after takeoff, run completed', ok,
+    chk.add('stability: finite, tilt <= 0.35 rad (to the end of land), height >= 0.25 m (takeoff to end of '
+            'descend), run completed', ok,
             f'max tilt {tilt:.3f} rad, min height {hmin:.3f} m, finite {finite}, {result["status"]}',
             'ACCEPTANCE P07 stability')
 
@@ -197,12 +202,12 @@ def analyze(run, nominal=None):
     # Saturation, latency, offboard timeouts.
     tc = np.array([stamp(m.header) for _, m in cmd])
     F = np.array([m.u[3] for _, m in cmd])
-    mc = tc >= t_fly
+    mc = (tc >= t_fly) & (tc < t_desc)
     f_sat = float(np.mean((F[mc] <= 0.0) | (F[mc] >= 1.0))) if mc.any() else float('nan')
-    md = dbg[:, 0] >= t_fly
+    md = (dbg[:, 0] >= t_fly) & (dbg[:, 0] < t_desc)
     m_sat = float(np.mean(dbg[md, 21] > 0)) if md.any() else float('nan')
     metrics['saturation'] = dict(throttle_fraction=f_sat, motor_fraction=m_sat)
-    chk.add('saturation after takeoff: throttle at 0/1 <= 5 %, motor clamping <= 5 %',
+    chk.add('saturation, takeoff to end of descend: throttle at 0/1 <= 5 %, motor clamping <= 5 %',
             f_sat <= LIM['sat_frac'] and m_sat <= LIM['sat_frac'],
             f'throttle {100 * f_sat:.1f} %, motors {100 * m_sat:.1f} %', 'ACCEPTANCE P07 saturation')
     ma = dbg[:, 0] >= t_arm
@@ -217,6 +222,38 @@ def analyze(run, nominal=None):
             p99 <= LIM['age_p99'] and new_timeouts == 0,
             f"p50 {metrics['latency']['age_p50']}, p99 {p99:.4f} s, max {metrics['latency']['age_max']}; "
             f'offboard timeouts {new_timeouts}', 'ACCEPTANCE P07 staleness and latency')
+
+    # End state: disarmed, motors stopped, resting on the ground.
+    ph = phases['disarmed']
+    me = window(tr['t'], ph['t_end'] - 1.0, ph['t_end'])
+    de = (dbg[:, 0] >= ph['t_end'] - 1.0) & (dbg[:, 0] < ph['t_end'])
+    speed = np.linalg.norm(np.gradient(tr['pos'], tr['t'], axis=0), axis=1)
+    e_h = float(np.max(tr['h'][me])) if me.any() else float('nan')
+    e_v = float(np.max(speed[me])) if me.any() else float('nan')
+    e_tilt = float(np.max(np.maximum(np.abs(tr['roll'][me]), np.abs(tr['pitch'][me])))) if me.any() else float('nan')
+    e_armed = bool(np.any(dbg[de, 1] > 0)) if de.any() else True
+    e_motor = float(np.max(np.abs(dbg[de, 17:21]))) if de.any() else float('nan')
+    metrics['end_state'] = dict(max_height=e_h, max_speed=e_v, max_tilt=e_tilt, armed=e_armed, max_motor_speed=e_motor,
+                                steps=int(de.sum()))
+    chk.add('end state (last 1 s of disarmed): disarmed, motors 0, on the ground (h <= 0.05 m, speed <= 0.05 m/s, '
+            'tilt <= 0.1 rad)',
+            de.any() and not e_armed and e_motor == 0.0 and e_h <= LIM['ground_h'] and e_v <= LIM['ground_speed']
+            and e_tilt <= LIM['ground_tilt'],
+            f'armed {e_armed}, max motor command {e_motor} rad/s, height {e_h:.3f} m, speed {e_v:.3f} m/s, '
+            f'tilt {e_tilt:.3f} rad ({int(de.sum())} stand-in steps)', 'ACCEPTANCE P07 end state')
+
+    # Return and landing (reported).
+    home = tr['pos'][np.argmin(np.abs(tr['t'] - t_arm)), :2]
+    def dist_at(t):
+        return float(np.linalg.norm(tr['pos'][np.argmin(np.abs(tr['t'] - t)), :2] - home))
+    pl = phases['land']
+    ml = np.nonzero(window(tr['t'], phases['approach']['t_start'], t_end) & (tr['h'] <= 0.02))[0]
+    vz = np.gradient(tr['pos'][:, 2], tr['t'])
+    td = int(ml[0]) if len(ml) else None
+    metrics['return_landing'] = dict(
+        distance_after_hover_back=dist_at(phases['hover_back']['t_end']), distance_at_end=dist_at(t_end),
+        touchdown_after_land_start=None if td is None else float(tr['t'][td] - pl['t_start']),
+        touchdown_vertical_speed=None if td is None else float(np.min(vz[max(td - 10, 0):td + 1])))
 
     metrics['range_bias'] = bias
     if bias and nominal is None:
@@ -310,6 +347,10 @@ def main(argv=None):
         print(f'FAIL cannot analyze {run}: {e!r}')
         return 2
     lines = [LABEL, '']
+    rl = metrics.get('return_landing')
+    if rl:
+        lines.append('REPORTED return and landing: ' + ', '.join(
+            f'{k} {v:.3f}' if isinstance(v, float) else f'{k} {v}' for k, v in rl.items()))
     if not metrics.get('altitude_judged', True):
         lines.append(f"NOTE causality run (range bias {metrics['range_bias']} m): altitude steps and holds "
                      'recorded in results.json, not judged')

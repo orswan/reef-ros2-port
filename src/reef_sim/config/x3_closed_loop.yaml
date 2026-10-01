@@ -8,10 +8,13 @@ closed_loop_runner:
     setpoint_rate_hz: 50.0
     startup_timeout_s: 90.0
     stall_timeout_s: 20.0
-    phase_names:     [settle, takeoff_hover, forward, hover_fwd, left,  hover_left, yaw,  hover_yaw, climb, descend]
-    phase_durations: [5.0,    20.0,          6.0,     6.0,       6.0,   6.0,        6.0,  6.0,       20.0,  20.0]
-    phase_armed:     [false,  true,          true,    true,      true,  true,       true, true,      true,  true]
-    phase_z:         [-1.0,   -1.0,          -1.0,    -1.0,      -1.0,  -1.0,       -1.0, -1.0,      -1.5,  -0.6]
-    phase_vx:        [0.0,    0.0,           0.3,     0.0,       0.0,   0.0,        0.0,  0.0,       0.0,   0.0]
-    phase_vy:        [0.0,    0.0,           0.0,     0.0,       -0.3,  0.0,        0.0,  0.0,       0.0,   0.0]
-    phase_yaw_rate:  [0.0,    0.0,           0.0,     0.0,       0.0,   0.0,        0.3,  0.0,       0.0,   0.0]
+    # back undoes forward and left before the yaw phase (velocity commands are
+    # heading-relative); land asks for z = +0.1 m (below the ground) so the
+    # controller keeps descending; disarmed stops the motors on the ground.
+    phase_names:     [settle, takeoff_hover, forward, hover_fwd, left,  hover_left, back,  hover_back, yaw,  hover_yaw, climb, descend, approach, land,  disarmed]
+    phase_durations: [5.0,    20.0,          6.0,     6.0,       6.0,   6.0,        6.0,   6.0,        6.0,  6.0,       20.0,  20.0,    6.0,      8.0,   4.0]
+    phase_armed:     [false,  true,          true,    true,      true,  true,       true,  true,       true, true,      true,  true,    true,     true,  false]
+    phase_z:         [-1.0,   -1.0,          -1.0,    -1.0,      -1.0,  -1.0,       -1.0,  -1.0,       -1.0, -1.0,      -1.5,  -0.6,    -0.3,     0.1,   0.1]
+    phase_vx:        [0.0,    0.0,           0.3,     0.0,       0.0,   0.0,        -0.3,  0.0,        0.0,  0.0,       0.0,   0.0,     0.0,      0.0,   0.0]
+    phase_vy:        [0.0,    0.0,           0.0,     0.0,       -0.3,  0.0,        0.3,   0.0,        0.0,  0.0,       0.0,   0.0,     0.0,      0.0,   0.0]
+    phase_yaw_rate:  [0.0,    0.0,           0.0,     0.0,       0.0,   0.0,        0.0,   0.0,        0.3,  0.0,       0.0,   0.0,     0.0,      0.0,   0.0]

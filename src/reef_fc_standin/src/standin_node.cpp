@@ -13,10 +13,18 @@
 //      debug        std_msgs/Float64MultiArray, one per step (layout in the label)
 //      label        std_msgs/String, transient local
 // One step per gyro sample once an attitude has arrived. Sim time throughout.
+//
+// Shutdown: Gazebo's motor model keeps the last commanded speeds and the
+// Gazebo server can outlive the ROS nodes by seconds, so on shutdown (SIGINT,
+// SIGTERM, rclcpp::shutdown) the stand-in commands ZERO motor speeds before
+// it exits: if it dies in the air the vehicle drops instead of flying away
+// on frozen motors. This needs the bridge to be alive; a SIGKILLed stand-in
+// sends nothing (docs/CONTROL_CHAIN.md section 7).
 #include <array>
 #include <cmath>
 #include <memory>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include <actuator_msgs/msg/actuators.hpp>
@@ -124,11 +132,32 @@ public:
           if (have_attitude_) {step();}
         });
     status_timer_ = create_wall_timer(std::chrono::milliseconds(100), [this] {publishStatus();});
+    shutdown_handle_ = get_node_base_interface()->get_context()->add_pre_shutdown_callback(
+      [this] {stopMotors();});
     RCLCPP_WARN(get_logger(), "STAND-IN low-level loop (development tool, not ROSflight); attitude from TRUTH");
+  }
+
+  ~StandInNode() override
+  {
+    get_node_base_interface()->get_context()->remove_pre_shutdown_callback(shutdown_handle_);
   }
 
 private:
   int64_t now_ms() {return get_clock()->now().nanoseconds() / 1000000;}
+
+  // Zero motor speeds, a few times, with a short pause so that DDS can
+  // deliver them before the process exits.
+  void stopMotors()
+  {
+    actuator_msgs::msg::Actuators a;
+    a.velocity.assign(4, 0.0);
+    for (int i = 0; i < 5; ++i) {
+      a.header.stamp = get_clock()->now();
+      motor_pub_->publish(a);
+      std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
+    RCLCPP_WARN(get_logger(), "shutdown: commanded zero motor speeds");
+  }
 
   void publishStatus()
   {
@@ -168,6 +197,7 @@ private:
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr attitude_sub_;
   rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr gyro_sub_;
   rclcpp::TimerBase::SharedPtr status_timer_;
+  rclcpp::PreShutdownCallbackHandle shutdown_handle_;
 };
 
 }  // namespace
