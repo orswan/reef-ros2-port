@@ -106,6 +106,9 @@ def analyze(run, nominal=None):
     expected = dict(CONTROLLER_INPUTS)
     if mocap:   # P07b position mode: the idealized mocap pose from the REEF adapter
         expected['/x3/reef/pose_stamped'] = ['/reef_adapter']
+    ctl = params.get('/x3/reef/reef_control_pid', {}).get('ros__parameters', {})
+    if ctl.get('test_hooks'):   # P07b: the labelled test hook (graceful exit) of the controller node
+        expected['/x3/test/fault'] = ['/closed_loop_runner']
     inputs = {tp: pubs for tp, pubs in g.get('controller_inputs', {}).items() if tp != '/parameter_events'}
     ok = inputs == expected
     chk.add('data path: the controller reads only the REEF estimate, the setpoint, and the armed status', ok,

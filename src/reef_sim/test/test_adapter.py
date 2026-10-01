@@ -99,3 +99,17 @@ def test_velocity_noise_is_reproducible():
     b = velocity_observation(123456789, (1.0, 0.0, 0.0, 0.0), (0.3, 0.0, 0.0))
     c = velocity_observation(123456790, (1.0, 0.0, 0.0, 0.0), (0.3, 0.0, 0.0))
     assert a == b and a != c and a[2] == 0.02 ** 2
+
+
+def test_mocap_pose_is_ned_with_frd_attitude():
+    """P07b idealized mocap: ENU (x east, y north, z up) -> NED (north, east,
+    down); a vehicle facing east (ENU yaw 0) has NED heading +pi/2."""
+    import math
+
+    from reef_sim.reef_adapter import mocap_pose
+    (n, e, d), q = mocap_pose((2.0, 3.0, 1.5), (1.0, 0.0, 0.0, 0.0))
+    assert (n, e, d) == (3.0, 2.0, -1.5)
+    w, x, y, z = q
+    yaw = math.atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z))
+    roll = math.atan2(2 * (w * x + y * z), 1 - 2 * (x * x + y * y))
+    assert abs(yaw - math.pi / 2) < 1e-12 and abs(roll) < 1e-12

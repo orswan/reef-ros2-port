@@ -104,10 +104,12 @@ def fall(c, t0):
 
 
 def est_gap(c, t0, t1):
+    """Longest interval without an estimate in [t0 - 0.2, t1], counting the
+    interval from the last estimate to t1 (estimates that never resume)."""
     s = c.t_est[(c.t_est >= t0 - 0.2) & (c.t_est <= t1)]
-    if len(s) < 2:
-        return float('inf') if len(c.t_est[c.t_est > t0]) == 0 else float('nan')
-    return float(np.max(np.diff(s)))
+    if not len(s):
+        return float(t1 - t0)
+    return float(max(np.max(np.diff(s)) if len(s) > 1 else 0.0, t1 - s[-1]))
 
 
 def recovery(c, t0, t_end, target):
@@ -128,7 +130,7 @@ def evaluate(scenario, chk, metrics, tr, data, result, phases, run):
     char = 'CHARACTERIZATION: '
     faults = result.get('faults') or []
     m = metrics.setdefault('scenario', {'name': scenario})
-    if scenario in FAULTS:
+    if scenario in FAULTS and scenario != 'setpoint_stale':   # the stale case injects no fault
         fault_ev = faults[0] if faults else {}
         m['fault_event'] = fault_ev
         t_f = float(fault_ev.get('t_sim', c.ph('fault')['t_start'] if 'fault' in phases else 0.0))

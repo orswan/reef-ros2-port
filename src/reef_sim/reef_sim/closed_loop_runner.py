@@ -189,12 +189,18 @@ class ClosedLoopRunner(Node):
             seconds = float(f.split()[1])
             ok = self.world_control('pause: true')
             t_wall = time.monotonic()
+            # The gz CLI takes about a second; drain the /clock messages that
+            # were already queued before measuring whether sim time stands still.
+            while time.monotonic() - t_wall < 0.5:
+                rclpy.spin_once(self, timeout_sec=0.05)
             frozen = self.now_s()
             while time.monotonic() - t_wall < seconds:
                 rclpy.spin_once(self, timeout_sec=0.05)
             advanced = self.now_s() - frozen
             ok = self.world_control('pause: false') and ok
-            ev.update(ok=ok and advanced < 0.05, detail=f'paused {seconds} s wall; sim time advanced {advanced:.4f} s meanwhile')
+            ev.update(ok=ok and advanced < 0.01,
+                      detail=f'paused {seconds} s wall; sim time advanced {advanced:.4f} s over the last '
+                             f'{seconds - 0.5:.1f} s of it')
         else:
             ev.update(detail='unknown fault')
         self.faults.append(ev)

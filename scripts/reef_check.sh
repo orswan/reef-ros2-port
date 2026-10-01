@@ -68,8 +68,13 @@ Targets (simulation only; nothing here talks to hardware):
                                 bit-identical; ROS replay isolated from foreign
                                 clock/sensor streams (about 12 min)
   faults                        F1-F12 (ACCEPTANCE.md section 5) on fixtures, the
-                                node, replays, and an own simulation run (about
-                                12 min)
+                                node, replays, and an own simulation run; P07b
+                                closed-loop scenarios: estimate dropout (short,
+                                long: crash expected), estimator reset,
+                                controller restart, stale setpoint, range and
+                                velocity loss, pause/resume, stand-in exit
+                                (crash expected), position mode with K9/K10
+                                (about 30 min)
   control                       P06 controller fidelity: colcon build + tests;
                                 the pinned original reef_control in a reference
                                 harness vs the port (core and node) on 20
@@ -315,7 +320,18 @@ PY
       bash -c 'source "$1/install/setup.bash" && exec python3 "$2" --tree "$1" --run "$3"' \
       _ "$tree" "$S/check_faults.py" "$run"
     grep -E '^(PASS|FAIL) \[(F[0-9]+|determinism)\]|^(PASS|FAIL): ' "$logdir/faults.log" | grep -v 'parity and wrapper' | sed 's/^/     /' || true
-    sim_notes+=("fixture time and the simulation run in ${run#"$REEF_ROOT"/}")
+    # P07b: closed-loop fault and position-mode scenarios (stand-in low-level
+    # loop, idealized inputs; crashes are the documented legacy result where
+    # the legacy system has no protection).
+    for sc in dropout_short dropout_long estimator_reset controller_restart setpoint_stale range_loss \
+              velocity_loss pause_resume standin_exit position_square position_face_target; do
+      run_step "closed loop P07b: $sc" 0 "$logdir/cl_$sc.log" \
+        env REEF_X3_OUT="$logdir/cl_$sc" REEF_X3_CL_SCENARIO="$sc" "$S/run_x3_scenario.sh" --closed-loop
+      grep -E '^FAIL |CHARACTERIZATION' "$logdir/cl_$sc.log" | cut -c1-160 | sed 's/^/     /' || true
+      artifacts+=("$logdir/cl_$sc/analysis_closed_loop")
+    done
+    configs+=("$REEF_ROOT/src/reef_sim/config/x3_closed_loop.yaml")
+    sim_notes+=("fixture time, the simulation run in ${run#"$REEF_ROOT"/}, and 11 closed-loop scenario runs (sim time)")
     ;;
 
   control)
