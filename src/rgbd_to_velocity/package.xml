@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>rgbd_to_velocity</name>
+  <version>2.0.0</version>
+  <description>
+    ROS 2 port (P08) of the UF REEF rgbd_to_velocity converter (b7637198):
+    RGB-D odometry (cam_to_init) to body-level velocity (reef_msgs/DeltaToVel)
+    for the REEF estimator. Faithful to the legacy math (docs/VISION.md).
+  </description>
+  <maintainer email="orswan@stanford.edu">orswan</maintainer>
+  <license>TODO</license>
+  <author>UF REEF Autonomous Vehicles Lab (original ROS 1 package)</author>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>eigen3_cmake_module</buildtool_depend>
+  <depend>eigen</depend>
+  <depend>rclcpp</depend>
+  <depend>nav_msgs</depend>
+  <depend>reef_msgs</depend>
+  <test_depend>ament_cmake_gtest</test_depend>
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

@@ -1,0 +1,27 @@
+{
+ "_comment": "SHA-256 of the rgbd_to_velocity fixtures (baseline/rgbd/fixtures.py)",
+ "files": {
+  "p01_missing_extrinsics.events": "f28af315caf8060b0cdd5c5e5d1f056ccdec87455d8da3a4aa29ae74ef067703",
+  "p01_missing_extrinsics.params": "497a2e8333c88941434fb982b42a6f14dc3b1f53863cc6b92276a990fbfa4417",
+  "r01_30hz_exact.events": "bee11ff6e783d1bcdaa6f59c7e7efd91ffbe3401b46c7c4151ed4c005c6121e5",
+  "r01_30hz_exact.params": "e18e25051f8227cc0dd0b4385d5769da1814b8e4f738d827284f7c606a700c26",
+  "r02_rates.events": "f005254394de27a78f88c13763c81098c1d6edba4243a03535525791445e9005",
+  "r02_rates.params": "e18e25051f8227cc0dd0b4385d5769da1814b8e4f738d827284f7c606a700c26",
+  "r03_yaw_motion.events": "f038bfd251ec4171f5f8abce66d2add74df3292154547d7f1986adfce743e991",
+  "r03_yaw_motion.params": "e18e25051f8227cc0dd0b4385d5769da1814b8e4f738d827284f7c606a700c26",
+  "r04_tilt.events": "063e4ce5413e8de9997e372dcf839f3b9641c12c9df1b62a831e1f5451adb7d7",
+  "r04_tilt.params": "e18e25051f8227cc0dd0b4385d5769da1814b8e4f738d827284f7c606a700c26",
+  "r05_alpha_covariance.events": "f038bfd251ec4171f5f8abce66d2add74df3292154547d7f1986adfce743e991",
+  "r05_alpha_covariance.params": "22f90d907861347927007bc05596430e2555c56d70e9cde505ad0b11e9caf050",
+  "r06_stamp_anomalies.events": "3ba43cee978c6adae387b69ef6dffbe3b8c01e074f4cb00e65e13887968a778b",
+  "r06_stamp_anomalies.params": "e18e25051f8227cc0dd0b4385d5769da1814b8e4f738d827284f7c606a700c26",
+  "r07_first_large_stamp.events": "1faf29fab2d80014d9762af5b5a85d93cf708dab2f0710796e7a3dc27f08143e",
+  "r07_first_large_stamp.params": "e18e25051f8227cc0dd0b4385d5769da1814b8e4f738d827284f7c606a700c26",
+  "r08_demo_extrinsics.events": "063e4ce5413e8de9997e372dcf839f3b9641c12c9df1b62a831e1f5451adb7d7",
+  "r08_demo_extrinsics.params": "e7ac8a330c8428c0ba6e55fa00d41f5142adcee8ffb748320855136ce996350c",
+  "r09_nan_position.events": "668ed06466834f630bf1fee8a1c1143a526d0c6f2bca0757aaff94b5687db21b",
+  "r09_nan_position.params": "e18e25051f8227cc0dd0b4385d5769da1814b8e4f738d827284f7c606a700c26",
+  "r10_random_long.events": "ee996a4a1c11380dcc1e61e99216e537de71a53f1d47140d5bc552e6d0781097",
+  "r10_random_long.params": "9b3204c917740839233835f16b31cf2b9623d4cac3057c5db8fdecfe73b49cf0"
+ }
+}

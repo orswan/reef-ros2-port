@@ -13,7 +13,8 @@
 // Adaptations (baseline/README.md): V1 stand-in headers (the estimator
 // harness's roscpp and messages, plus nav_msgs/Odometry); V2 the converter
 // object is constructed in zeroed storage, so members the original reads or
-// prints before setting them are 0.
+// prints before setting them are 0; V3 the published init-frame message is
+// recorded through a record_published overload (rgbd_record.h).
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
@@ -29,6 +30,15 @@ std::map<std::string, ParamValue>& param_store() { static std::map<std::string, 
 std::map<std::string, long>& publish_counts() { static std::map<std::string, long> c; return c; }
 bool& log_enabled() { static bool on = false; return on; }
 }  // namespace ros
+
+namespace {
+reef_msgs::DeltaToVel g_init_msg;   // V3: the init-frame message as published
+}
+namespace reef_msgs {
+void record_published(const std::string& topic, const DeltaToVel& m) {
+  if (topic == "rgbd_to_velocity/init_frame") g_init_msg = m;
+}
+}
 
 namespace {
 
@@ -90,6 +100,12 @@ void write_row(std::ostream& o, long idx, const rgbd_to_velocity::RgbdToVelocity
   put(o, v.vel.twist.covariance[0]); put(o, v.vel.twist.covariance[7]); put(o, v.vel.twist.covariance[14]);
   for (int i = 0; i < 6; ++i) put(o, v.S_upper_bound[i]);
   for (int i = 0; i < 6; ++i) put(o, v.S_lower_bound[i]);
+  const auto& w = g_init_msg;   // V3
+  o << ',' << w.vel.header.stamp.sec << ',' << w.vel.header.stamp.nsec;
+  put(o, w.vel.twist.twist.linear.x); put(o, w.vel.twist.twist.linear.y); put(o, w.vel.twist.twist.linear.z);
+  put(o, w.vel.twist.covariance[0]); put(o, w.vel.twist.covariance[7]); put(o, w.vel.twist.covariance[14]);
+  for (int i = 0; i < 3; ++i) put(o, w.S_upper_bound[i]);
+  for (int i = 0; i < 3; ++i) put(o, w.S_lower_bound[i]);
   o << '\n';
 }
 

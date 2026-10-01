@@ -122,3 +122,9 @@ port's replay tool). Adaptations (the complete list):
   `-fno-lifetime-dse`), so members the original prints or reads before
   setting them are 0. The converter's members are all public; no access
   relaxation is needed.
+- **V3:** `rgbd/rgbd_record.h` is force-included: it declares a
+  `record_published` overload for `reef_msgs::DeltaToVel` (found by
+  argument-dependent lookup from the stand-in `Publisher::publish`, as A6),
+  so the harness records the init-frame message as published. The original
+  reuses one message object for both topics, so the init-frame message
+  carries the previous covariances and bounds (VISION.md Q6).

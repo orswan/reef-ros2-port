@@ -87,7 +87,13 @@ Targets (simulation only; nothing here talks to hardware):
                                 idealized inputs; nominal run scored against the
                                 P07 criteria and a causality run with a range
                                 bias (about 15 min)
-  vision                        NOT IMPLEMENTED (milestone P08)
+  vision                        P08 RGB-D (in progress): colcon build + tests;
+                                rgbd_to_velocity: the pinned original in a
+                                reference harness vs the port (core and node),
+                                independent model, legacy quirks Q1-Q10,
+                                negative control. Camera, odometry, REEF on
+                                vision, degraded and closed-loop cases: N/A
+                                until implemented (about 3 min)
   release                       NOT IMPLEMENTED (milestone P09)
 
 Exit: 0 PASS, 1 FAIL (executed), 2 BLOCKED / NOT IMPLEMENTED / invalid,
@@ -172,12 +178,11 @@ for a in "$@"; do
 done
 case "$target" in
   help|-h|--help) usage; exit 0 ;;
-  vision) not_implemented vision P08 ;;
   release) not_implemented release P09 ;;
-  env|clock|sim-data|baseline|interfaces|estimator|faults|control) ;;
+  env|clock|sim-data|baseline|interfaces|estimator|faults|control|vision) ;;
   *) echo "unknown target '$target'"; usage; exit 2 ;;
 esac
-if [[ "$target" == env || "$target" == interfaces || "$target" == estimator || "$target" == faults || "$target" == control ]] && (( gui || regress || floor )); then
+if [[ "$target" == env || "$target" == interfaces || "$target" == estimator || "$target" == faults || "$target" == control || "$target" == vision ]] && (( gui || regress || floor )); then
   echo "target '$target' takes no options"; exit 2
 fi
 if [[ "$target" == baseline ]] && (( gui || regress )); then echo "target 'baseline' accepts only --floor"; exit 2; fi
@@ -372,6 +377,29 @@ PY
     sim_notes+=("fixture time; estimate stream from ${run#"$REEF_ROOT"/}; closed-loop runs in sim time (stand-in low-level loop, idealized inputs)")
     artifacts+=("$REEF_ROOT/build/baseline/control/check/results.json" "$run/reef_offline/estimates.csv"
                 "$cl/analysis_closed_loop" "$logdir/closed_loop_bias/analysis_closed_loop")
+    ;;
+
+  vision)
+    tree="$(python3 "$S/colcon_tree.py")"
+    V="$REEF_ROOT/baseline/rgbd"
+    configs+=("$V/provenance.json" "$V/fixtures.lock.json" "$V/fixtures.py" "$V/rgbd_model.py" "$V/check_rgbd.py"
+              "$REEF_ROOT/src/rgbd_to_velocity/config/kiwi_camera.yaml")
+    "$REEF_ROOT/baseline/fetch_sources.sh" >"$logdir/sources_precheck.log" 2>&1 \
+      || blocked "pinned upstream sources unavailable (see ${logdir#"$REEF_ROOT"/}/sources_precheck.log)"
+    run_step "colcon build + test (package set, minimum test counts)" 0 "$logdir/colcon.log" \
+      python3 "$S/check_colcon.py"
+    grep -E '^rgbd_to_velocity +files=' "$logdir/colcon.log" | sed 's/^/     /' || true
+    # shellcheck disable=SC2016  # expanded by the inner shell
+    run_step "rgbd_to_velocity: original vs port, model, quirks Q1-Q10" 0 "$logdir/rgbd.log" \
+      bash -c 'source "$1/install/setup.bash" && exec python3 "$2" --port "$1/install/rgbd_to_velocity/lib/rgbd_to_velocity/rgbd_to_velocity_event_replay"' \
+      _ "$tree" "$V/check_rgbd.py"
+    grep -E '^(PASS|FAIL) \[(Q|negative)\]|^(PASS|FAIL): ' "$logdir/rgbd.log" | cut -c1-150 | sed 's/^/     /' || true
+    for part in "camera interface" "replacement odometry vs truth (open loop)" "REEF on vision (open loop)" \
+                "weak texture / depth loss / delayed and missing frames" "closed loop on vision" "performance"; do
+      results+=("N/A|$part|NOT IMPLEMENTED yet (P08 in progress)")
+    done
+    sim_notes+=("fixture time only so far")
+    artifacts+=("$REEF_ROOT/build/baseline/rgbd/check/results.json")
     ;;
 
   sim-data)

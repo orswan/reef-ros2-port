@@ -1,17 +1,21 @@
 //
 // Created by humberto on 5/20/19.
 //
+// ROS 2 port (P08) of rgbd_to_velocity b7637198: ROS plumbing removed (see
+// the header); the conversion is unchanged (VISION.md §2).
 #include <eigen3/Eigen/Core>
-#include "../include/rgbd_to_velocity.h"
-#include <geometry_msgs/Twist.h>
+#include "rgbd_to_velocity/rgbd_to_velocity.h"
 
 namespace rgbd_to_velocity {
     //Constructor
-    RgbdToVelocity::RgbdToVelocity(): private_nh_("~"), nh_("") {
-        pose_subscriber_ = nh_.subscribe("cam_to_init", 1, &RgbdToVelocity::poseCallback, this);
-        velocity_init_frame_publisher_ = nh_.advertise<reef_msgs::DeltaToVel>("rgbd_to_velocity/init_frame", 1, true);
-//    velocity_camera_frame_publisher_ = nh_.advertise<geometry_msgs::TwistWithCovarianceStamped>("mocap_velocity/camera_frame", 1, true);
-        velocity_level_body_publisher_ = nh_.advertise<reef_msgs::DeltaToVel>("rgbd_to_velocity/body_level_frame", 1, true);
+    RgbdToVelocity::RgbdToVelocity(const ConverterParameters& params) {
+        // Subscription and publishers: in the node (rgbd_node.hpp).
+        // Members the original leaves uninitialized until the first accepted
+        // message start at 0, as in the reference harness (adaptation V2).
+        pitch = 0; roll = 0; yaw = 0; DT = 0; beta_0 = 0; current_time_stamp = 0;
+        C_from_init_to_camera_level_frame.setZero(); covariance_matrix_in_init.setZero();
+        covariance_matrix_in_body_level.setZero(); beta.setZero(); estimated_velocity_init.setZero();
+        filtered_velocity_init.setZero(); filtered_velocity_body_leveled_frame.setZero(); current_position_init.setZero();
 
         C_from_camera_level_frame_to_NED_level_frame << 0, 0, 1,
                 -1,0,0,
@@ -26,31 +30,39 @@ namespace rgbd_to_velocity {
         inv_previous_quaternion_init_to_body <<  0,0,0,1;
         counterOfSamples = 0;
 
-        private_nh_.param<double>("alpha", alpha, 1.0);
-        ROS_WARN_STREAM("alpha = ");
-        ROS_WARN_STREAM(alpha);
+        // Parameters (the original read them from the private namespace;
+        // the node validates them first, VISION.md Q10).
+        alpha = params.alpha;
 
-        private_nh_.param<double>("x_vel_covariance", x_vel_covariance, 0.01);
-        ROS_WARN_STREAM("RGBD_x_vel_covariance = ");
-        ROS_WARN_STREAM(x_vel_covariance);
-        private_nh_.param<double>("y_vel_covariance", y_vel_covariance, 0.01 );
-        ROS_WARN_STREAM("RGBD_y_vel_covariance = ");
-        ROS_WARN_STREAM(y_vel_covariance);
+        x_vel_covariance = params.x_vel_covariance;
+        y_vel_covariance = params.y_vel_covariance;
 
 
         quaternion_body_to_camera = Eigen::VectorXd(4);
-        reef_msgs::importMatrixFromParamServer(private_nh_,quaternion_body_to_camera,"body_to_camera_quat");
+        for (int i = 0; i < 4; i++) quaternion_body_to_camera(i) = params.body_to_camera_quat[i];
 
         translation_body_to_camera = Eigen::VectorXd(3);
-        reef_msgs::importMatrixFromParamServer(private_nh_,translation_body_to_camera,"body_to_camera_trans");
+        for (int i = 0; i < 3; i++) translation_body_to_camera(i) = params.body_to_camera_trans[i];
+    }
+
+    std::vector<std::string> parameterErrors(const ConverterParameters& p) {
+        std::vector<std::string> e;
+        if (!std::isfinite(p.alpha)) e.push_back("alpha must be finite");
+        if (!std::isfinite(p.x_vel_covariance) || p.x_vel_covariance < 0) e.push_back("x_vel_covariance must be finite and >= 0");
+        if (!std::isfinite(p.y_vel_covariance) || p.y_vel_covariance < 0) e.push_back("y_vel_covariance must be finite and >= 0");
+        if (p.body_to_camera_quat.size() != 4) e.push_back("body_to_camera_quat needs 4 values (x, y, z, w)");
+        if (p.body_to_camera_trans.size() != 3) e.push_back("body_to_camera_trans needs 3 values");
+        for (double v : p.body_to_camera_quat) if (!std::isfinite(v)) e.push_back("body_to_camera_quat must be finite");
+        for (double v : p.body_to_camera_trans) if (!std::isfinite(v)) e.push_back("body_to_camera_trans must be finite");
+        return e;
     }
 
     //Destructor
     RgbdToVelocity::~RgbdToVelocity() {}
 
-    void RgbdToVelocity::poseCallback(const nav_msgs::OdometryConstPtr& msg) {
+    void RgbdToVelocity::poseCallback(const Odometry& msg) {
 
-        odom_msg = *msg;
+        odom_msg = msg;
 
 //        quat.x() =  odom_msg.pose.pose.orientation.x;
 //        quat.y() =  odom_msg.pose.pose.orientation.y;
@@ -144,7 +156,8 @@ namespace rgbd_to_velocity {
             vel_msg.vel.twist.twist.linear.y = filtered_velocity_init(1);
             vel_msg.vel.twist.twist.linear.z = filtered_velocity_init(2);
 
-            velocity_init_frame_publisher_.publish(vel_msg);
+            ++initFramePublished;
+            if (velocity_init_frame_publisher_) velocity_init_frame_publisher_(vel_msg);
 
             //Publish velocities in camera frame
 //          filtered_velocity_body_leveled_frame = C_body_to_camera_frame * C_init_to_camera_frame * filtered_velocity_init;
@@ -182,7 +195,8 @@ namespace rgbd_to_velocity {
             vel_msg.S_lower_bound[0] = filtered_velocity_body_leveled_frame(0)  - 3*sqrt(x_vel_covariance);
             vel_msg.S_lower_bound[1] = filtered_velocity_body_leveled_frame(1)  - 3*sqrt(y_vel_covariance);
             vel_msg.S_lower_bound[2] = filtered_velocity_body_leveled_frame(2)  - 3*sigmas_level(2);
-            velocity_level_body_publisher_.publish(vel_msg);
+            ++bodyLevelPublished;
+            if (velocity_level_body_publisher_) velocity_level_body_publisher_(vel_msg);
             counterOfSamples = 0;
         }
     }

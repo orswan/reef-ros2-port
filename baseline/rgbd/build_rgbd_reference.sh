@@ -45,7 +45,7 @@ if [[ -n "${REF_MUTATE:-}" ]]; then
 fi
 bin="$out/rgbd_ref${tag:+_$tag}"
 # shellcheck disable=SC2086  # REF_CXXFLAGS is a flag list
-g++ -std=c++17 $flags -fno-lifetime-dse -w \
+g++ -std=c++17 $flags -fno-lifetime-dse -w -include "$B/rgbd/rgbd_record.h" \
   -I "$B/rgbd/shim" -I "$B/harness/shim" -I "$R/include" -I /usr/include/eigen3 \
   "$R/src/rgbd_to_velocity.cpp" "$B/rgbd/rgbd_ref_main.cpp" -o "$bin" || { echo "FAIL compile rgbd reference"; exit 1; }
 echo "OK   built ${bin#"$ROOT"/} (rgbd_to_velocity b7637198, flags: $flags)"

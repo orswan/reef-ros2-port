@@ -79,3 +79,17 @@ S_lo_2
 S_lo_3
 S_lo_4
 S_lo_5
+init_sec
+init_nsec
+init_vx
+init_vy
+init_vz
+init_cov0
+init_cov7
+init_cov14
+init_S_up_0
+init_S_up_1
+init_S_up_2
+init_S_lo_0
+init_S_lo_1
+init_S_lo_2
