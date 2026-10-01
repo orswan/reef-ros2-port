@@ -54,6 +54,20 @@ class IdealRangeSensor(Node):
             f'{self.max_range}] m, noise {self.noise_std} m, seed {self.seed}, {self.rate_hz} Hz')
         if self.bias:
             self.get_logger().warn(f'TEST HOOK: range bias {self.bias} m added to every in-range reading')
+        # TEST HOOK (P07b), off by default: "range_drop <seconds>" on
+        # /x3/test/fault suppresses the range messages of the next <seconds>
+        # of sim time (range loss in flight).
+        self.drop_until_ns = 0
+        if self.declare_parameter('test_hooks', False).value:
+            from std_msgs.msg import String
+            self.create_subscription(String, '/x3/test/fault', self.on_fault, 10)
+            self.get_logger().warn('TEST HOOKS ENABLED (/x3/test/fault)')
+
+    def on_fault(self, m):
+        parts = m.data.split()
+        if len(parts) == 2 and parts[0] == 'range_drop':
+            self.drop_until_ns = self.get_clock().now().nanoseconds + int(float(parts[1]) * 1e9)
+            self.get_logger().warn(f'TEST HOOK: dropping range for {parts[1]} s (sim)')
 
     def on_truth(self, odom):
         t_ns = odom.header.stamp.sec * 1_000_000_000 + odom.header.stamp.nanosec
@@ -64,6 +78,8 @@ class IdealRangeSensor(Node):
         # Keep a fixed sim-time grid even if a sample is late.
         while self.next_ns <= t_ns:
             self.next_ns += self.period_ns
+        if t_ns < self.drop_until_ns:
+            return   # test hook: deliberate range loss
         p, q = odom.pose.pose.position, odom.pose.pose.orientation
         true_range = downward_ray_range(
             (p.x, p.y, p.z), quat_to_matrix(q.x, q.y, q.z, q.w), self.offset)

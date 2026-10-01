@@ -12,6 +12,10 @@
 #include <nav_msgs/msg/odometry.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/imu.hpp>
+#include <std_msgs/msg/string.hpp>
+
+#include <sstream>
+#include <string>
 
 #include "reef_x3_adapter/attitude.hpp"
 
@@ -38,11 +42,27 @@ public:
     imu_sub_ = create_subscription<sensor_msgs::msg::Imu>("/x3/imu", 50,
         [this](const sensor_msgs::msg::Imu & m) {onImu(m);});
     RCLCPP_WARN(get_logger(), "IDEALIZED: /x3/reef/imu/data orientation is the TRUTH attitude (/x3/truth/odom)");
+    if (declare_parameter("test_hooks", false)) {
+      fault_sub_ = create_subscription<std_msgs::msg::String>("/x3/test/fault", rclcpp::QoS(10).reliable(),
+          [this](const std_msgs::msg::String & m) {
+            std::istringstream in(m.data);
+            std::string what;
+            double seconds = 0;
+            if (in >> what >> seconds && what == "imu_drop" && seconds > 0) {
+              drop_until_ns_ = get_clock()->now().nanoseconds() + static_cast<int64_t>(seconds * 1e9);
+              RCLCPP_WARN(get_logger(), "TEST HOOK: dropping IMU for %.3f s (sim)", seconds);
+            }
+          });
+      RCLCPP_WARN(get_logger(), "TEST HOOKS ENABLED (/x3/test/fault)");
+    }
   }
 
 private:
   void onImu(const sensor_msgs::msg::Imu & m)
   {
+    if (ns(m.header.stamp) < drop_until_ns_) {
+      return;   // test hook: deliberate IMU loss
+    }
     const auto q = truth_.at(ns(m.header.stamp));
     if (!q) {
       dropped_++;
@@ -69,6 +89,8 @@ private:
 
   reef_x3_adapter::TruthBuffer truth_;
   long dropped_ = 0;
+  int64_t drop_until_ns_ = 0;
+  rclcpp::Subscription<std_msgs::msg::String>::SharedPtr fault_sub_;
   rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr pub_;
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr truth_sub_;
   rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr imu_sub_;

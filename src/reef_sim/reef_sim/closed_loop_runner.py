@@ -10,7 +10,14 @@ Before arming it waits (bounded) for /clock, truth odometry, and exactly one
 publisher on each required stream; if record_topics is set, also for the
 recorder's subscriptions. Phases are parallel arrays: name, duration,
 armed, z (REEF NED altitude setpoint, m), vx, vy (body-level, m/s; y right),
-yaw_rate (rad/s). Every phase is velocity mode (DesiredState.velocity_valid).
+yaw_rate (rad/s), and optionally (P07b) mode ('velocity' or 'position'), px,
+py (mocap NED position setpoint, m), heading (rad), setpoint (false: publish
+no setpoint in that phase), fault (a fault injected at the phase start):
+  imu_drop S | range_drop S | velocity_drop S | controller_exit | standin_exit
+      -> published on /x3/test/fault for the labelled test hooks
+  estimator_reset  -> the estimator's ~/reset service
+  pause S          -> Gazebo world paused for S wall seconds, then resumed
+Every fault and its outcome is written to the result (faults).
 
 Publishes: /x3/reef/desired_state (reef_msgs/DesiredState, 50 Hz),
 /x3/fc/arm (std_msgs/Bool, 10 Hz), /x3/scenario/phase (std_msgs/String,
@@ -18,6 +25,8 @@ transient local). Writes result_file (JSON).
 Exit status: 0 completed, 3 startup timeout or stall, 4 unexpected publishers.
 """
 import json
+import os
+import subprocess
 import sys
 import time
 
@@ -27,6 +36,7 @@ from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from reef_msgs.msg import DesiredState
 from std_msgs.msg import Bool, String
+from std_srvs.srv import Trigger
 
 REQUIRED = ['/clock', '/x3/truth/odom', '/x3/imu', '/x3/range', '/x3/reef/xyz_estimate',
             '/x3/reef/command', '/x3/fc/motor_speed', '/x3/reef/status']
@@ -48,9 +58,28 @@ class ClosedLoopRunner(Node):
         armed = list(p('phase_armed', [False]).value)
         if not names or any(len(v) != len(names) for v in list(cols.values()) + [armed]):
             raise ValueError('phase_* parameters must be non-empty arrays of equal length')
-        self.phases = [dict(name=n, duration=float(cols['durations'][i]), armed=bool(armed[i]),
+        n = len(names)
+
+        def optional(key, default):
+            v = list(p(f'phase_{key}', [default]).value)
+            if v == [default] and n != 1:
+                v = [default] * n
+            if len(v) != n:
+                raise ValueError(f'phase_{key} must have {n} entries')
+            return v
+        mode, px, py = optional('mode', 'velocity'), optional('px', 0.0), optional('py', 0.0)
+        heading, setpoint, fault = optional('heading', 0.0), optional('setpoint', True), optional('fault', 'none')
+        self.phases = [dict(name=nm, duration=float(cols['durations'][i]), armed=bool(armed[i]),
                             z=float(cols['z'][i]), vx=float(cols['vx'][i]), vy=float(cols['vy'][i]),
-                            yaw_rate=float(cols['yaw_rate'][i])) for i, n in enumerate(names)]
+                            yaw_rate=float(cols['yaw_rate'][i]), mode=mode[i], px=float(px[i]), py=float(py[i]),
+                            heading=float(heading[i]), setpoint=bool(setpoint[i]),
+                            fault='' if fault[i] == 'none' else fault[i]) for i, nm in enumerate(names)]
+        if any(ph['mode'] not in ('velocity', 'position') for ph in self.phases):
+            raise ValueError("phase_mode entries must be 'velocity' or 'position'")
+        self.world = p('world_name', 'x3_closed_loop').value
+        self.fault_pub = self.create_publisher(String, '/x3/test/fault', 10)
+        self.reset_client = self.create_client(Trigger, '/x3/reef/reef_estimator/reset')
+        self.faults = []
         self.desired_pub = self.create_publisher(DesiredState, '/x3/reef/desired_state', 10)
         self.arm_pub = self.create_publisher(Bool, '/x3/fc/arm', 10)
         latched = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL,
@@ -122,14 +151,63 @@ class ClosedLoopRunner(Node):
                 and not any('UNKNOWN' in n for n in names))
 
     def publish(self, ph):
+        if not ph['setpoint']:
+            return   # P07b stale-setpoint case: the controller keeps the last one
         d = DesiredState()
         d.header.stamp = self.get_clock().now().to_msg()
-        d.velocity_valid = True
         d.pose.z = ph['z']
-        d.velocity.x = ph['vx']
-        d.velocity.y = ph['vy']
-        d.velocity.yaw = ph['yaw_rate']
+        if ph['mode'] == 'position':
+            d.position_valid = True
+            d.pose.x, d.pose.y, d.pose.yaw = ph['px'], ph['py'], ph['heading']
+        else:
+            d.velocity_valid = True
+            d.velocity.x = ph['vx']
+            d.velocity.y = ph['vy']
+            d.velocity.yaw = ph['yaw_rate']
         self.desired_pub.publish(d)
+
+    def inject(self, ph):
+        """Inject the phase's fault (P07b) and record what happened."""
+        f = ph['fault']
+        ev = dict(phase=ph['name'], fault=f, t_sim=self.now_s(), ok=False, detail='')
+        kind = f.split()[0]
+        if kind in ('imu_drop', 'range_drop', 'velocity_drop', 'controller_exit', 'standin_exit'):
+            subs = self.count_subscribers('/x3/test/fault')
+            self.fault_pub.publish(String(data=f))
+            ev.update(ok=subs > 0, detail=f'published on /x3/test/fault ({subs} hook subscribers)')
+        elif kind == 'estimator_reset':
+            if self.reset_client.wait_for_service(timeout_sec=2.0):
+                fut = self.reset_client.call_async(Trigger.Request())
+                deadline = time.monotonic() + 5.0
+                while not fut.done() and time.monotonic() < deadline:
+                    rclpy.spin_once(self, timeout_sec=0.01)
+                r = fut.result() if fut.done() else None
+                ev.update(ok=bool(r and r.success), detail=r.message if r else 'no response')
+            else:
+                ev.update(detail='reset service unavailable')
+        elif kind == 'pause':
+            seconds = float(f.split()[1])
+            ok = self.world_control('pause: true')
+            t_wall = time.monotonic()
+            frozen = self.now_s()
+            while time.monotonic() - t_wall < seconds:
+                rclpy.spin_once(self, timeout_sec=0.05)
+            advanced = self.now_s() - frozen
+            ok = self.world_control('pause: false') and ok
+            ev.update(ok=ok and advanced < 0.05, detail=f'paused {seconds} s wall; sim time advanced {advanced:.4f} s meanwhile')
+        else:
+            ev.update(detail='unknown fault')
+        self.faults.append(ev)
+        (self.get_logger().warn if ev['ok'] else self.get_logger().error)(f"FAULT {f}: {ev['detail']}")
+
+    def world_control(self, req):
+        cmd = ['gz', 'service', '-s', f'/world/{self.world}/control', '--reqtype', 'gz.msgs.WorldControl',
+               '--reptype', 'gz.msgs.Boolean', '--timeout', '3000', '--req', req]
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=10, env=os.environ.copy())
+        except (OSError, subprocess.TimeoutExpired):
+            return False
+        return r.returncode == 0 and 'true' in r.stdout
 
     def arm(self, on):
         self.arm_pub.publish(Bool(data=bool(on)))
@@ -142,7 +220,11 @@ class ClosedLoopRunner(Node):
             self.phase_pub.publish(String(data=ph['name']))
             t_end = t_start + ph['duration']
             self.get_logger().info(f"phase {ph['name']}: {ph['duration']:.1f} s, armed={ph['armed']}, "
-                                   f"z={ph['z']}, v=({ph['vx']}, {ph['vy']}), yaw_rate={ph['yaw_rate']}")
+                                   f"mode={ph['mode']}, z={ph['z']}, v=({ph['vx']}, {ph['vy']}), "
+                                   f"p=({ph['px']}, {ph['py']}), heading={ph['heading']}, "
+                                   f"yaw_rate={ph['yaw_rate']}, setpoint={ph['setpoint']}, fault={ph['fault'] or '-'}")
+            if ph['fault']:
+                self.inject(ph)
             next_sp = t_start
             last_sim, last_wall = self.now_s(), time.monotonic()
             while True:
@@ -173,7 +255,7 @@ class ClosedLoopRunner(Node):
                          x=pos.x, y=pos.y, z=pos.z)
         result = dict(exit_code=code, status=status, phases=list(boundaries), final_truth=truth,
                       scenario_duration_s=sum(p['duration'] for p in self.phases), mode='closed_loop',
-                      graph=getattr(self, 'graph', None))
+                      graph=getattr(self, 'graph', None), faults=self.faults)
         if self.result_file:
             with open(self.result_file, 'w') as f:
                 json.dump(result, f, indent=2)

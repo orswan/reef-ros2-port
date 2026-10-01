@@ -101,8 +101,13 @@ def analyze(run, nominal=None):
     chk.add('architecture: no stock controller; the stand-in alone commands the motors', ok,
             f"stock command publishers {g.get('stock_command_publishers')}, messages {stock_msgs}; "
             f"motor command publishers {g.get('motor_command_publishers')}", 'ACCEPTANCE P07 architecture')
+    scenario = params.get('simulation', {}).get('ros__parameters', {}).get('scenario', 'nominal')
+    mocap = params.get('reef_adapter', {}).get('ros__parameters', {}).get('publish_mocap_pose', False)
+    expected = dict(CONTROLLER_INPUTS)
+    if mocap:   # P07b position mode: the idealized mocap pose from the REEF adapter
+        expected['/x3/reef/pose_stamped'] = ['/reef_adapter']
     inputs = {tp: pubs for tp, pubs in g.get('controller_inputs', {}).items() if tp != '/parameter_events'}
-    ok = inputs == CONTROLLER_INPUTS
+    ok = inputs == expected
     chk.add('data path: the controller reads only the REEF estimate, the setpoint, and the armed status', ok,
             f'controller inputs and their publishers: {inputs}', 'ACCEPTANCE P07 data path')
     labels = [m.data for _, m in data.get('/x3/fc/label', [])]
@@ -120,6 +125,12 @@ def analyze(run, nominal=None):
                               leaves_ground_after_arm=None if t_up is None else t_up - t_arm)
     chk.add('takeoff within 15 s of arming (REEF and truth)', ok, json.dumps(metrics['takeoff']),
             'ACCEPTANCE P07 takeoff')
+
+    if scenario != 'nominal':   # P07b fault and position-mode scenarios
+        from reef_sim.closed_loop_scenarios import evaluate
+        metrics['scenario_name'] = scenario
+        evaluate(scenario, chk, metrics, tr, data, result, phases, run)
+        return chk, metrics, tr, data, result, phases
 
     # Stability: height from takeoff to the end of descend; tilt and
     # finiteness through approach and land (ACCEPTANCE P07, amended).

@@ -18,6 +18,7 @@ setup(
         ('share/' + package_name, ['package.xml']),
         ('share/' + package_name + '/launch', glob('launch/*.launch.py')),
         ('share/' + package_name + '/config', glob('config/*.yaml')),
+        ('share/' + package_name + '/config/closed_loop', glob('config/closed_loop/*.yaml')),
         ('share/' + package_name + '/worlds', glob('worlds/*.sdf')),
         ('share/' + package_name + '/models/reef_x3', glob('models/reef_x3/*')),
         ('share/' + package_name + '/assets', glob('assets/*.json')),

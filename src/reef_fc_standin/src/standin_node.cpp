@@ -134,6 +134,19 @@ public:
     status_timer_ = create_wall_timer(std::chrono::milliseconds(100), [this] {publishStatus();});
     shutdown_handle_ = get_node_base_interface()->get_context()->add_pre_shutdown_callback(
       [this] {stopMotors();});
+    // TEST HOOK (P07b), off by default: "standin_exit" on /x3/test/fault makes
+    // the stand-in shut down in flight (its pre-shutdown callback zeroes the
+    // motors).
+    if (declare_parameter("test_hooks", false)) {
+      fault_sub_ = create_subscription<std_msgs::msg::String>("/x3/test/fault", rclcpp::QoS(10).reliable(),
+          [this](const std_msgs::msg::String & m) {
+            if (m.data == "standin_exit") {
+              RCLCPP_WARN(get_logger(), "TEST HOOK: standin_exit");
+              rclcpp::shutdown();
+            }
+          });
+      RCLCPP_WARN(get_logger(), "TEST HOOKS ENABLED (/x3/test/fault)");
+    }
     RCLCPP_WARN(get_logger(), "STAND-IN low-level loop (development tool, not ROSflight); attitude from TRUTH");
   }
 
@@ -198,6 +211,7 @@ private:
   rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr gyro_sub_;
   rclcpp::TimerBase::SharedPtr status_timer_;
   rclcpp::PreShutdownCallbackHandle shutdown_handle_;
+  rclcpp::Subscription<std_msgs::msg::String>::SharedPtr fault_sub_;
 };
 
 }  // namespace

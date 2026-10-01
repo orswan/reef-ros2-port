@@ -22,7 +22,10 @@
 # REEF_X3_RANGE_BIAS=<m> (closed loop, test hook: bias every in-range reading;
 # the causality run), REEF_X3_NOMINAL=<run dir> (closed loop: nominal run the
 # causality analysis compares with), REEF_X3_CONTROL_PARAMS=<yaml> (closed loop:
-# reef_control gains; default src/reef_control/config/reef_control_x3_sim.yaml).
+# reef_control gains; default src/reef_control/config/reef_control_x3_sim.yaml),
+# REEF_X3_CL_SCENARIO=<name> (closed loop, P07b: merge
+# src/reef_sim/config/closed_loop/<name>.yaml: a fault or position-mode
+# scenario; its `simulation` section may set control_respawn and may_exit).
 #
 # Every run is isolated (per-run GZ_PARTITION and ROS domain; the scenario
 # requires exactly one publisher per stream) and offline: Gazebo gets an empty
@@ -99,6 +102,14 @@ if [[ "$closed_loop" == true ]]; then
   runner=closed_loop_runner
   python3 "$REEF_ROOT/scripts/x3_merge_params.py" "$run_dir/x3_scenario.yaml" \
     "$REEF_ROOT/src/reef_sim/config/x3_closed_loop.yaml" || fail 2 "could not merge the closed-loop overlay"
+  cl_scenario="${REEF_X3_CL_SCENARIO:-nominal}"
+  if [[ "$cl_scenario" != nominal ]]; then
+    [[ "$cl_scenario" =~ ^[a-z0-9_]+$ ]] || fail 2 "invalid REEF_X3_CL_SCENARIO '$cl_scenario'"
+    overlay="$REEF_ROOT/src/reef_sim/config/closed_loop/$cl_scenario.yaml"
+    [[ -f "$overlay" ]] || fail 2 "unknown closed-loop scenario '$cl_scenario' ($overlay)"
+    python3 "$REEF_ROOT/scripts/x3_merge_params.py" "$run_dir/x3_scenario.yaml" "$overlay" \
+      || fail 2 "could not merge the scenario overlay"
+  fi
   control_src="${REEF_X3_CONTROL_PARAMS:-$REEF_ROOT/src/reef_control/config/reef_control_x3_sim.yaml}"
   [[ -f "$control_src" ]] || fail 2 "controller parameters not found: $control_src"
   cp "$control_src" "$run_dir/reef_control.yaml"
@@ -110,6 +121,17 @@ if [[ "$closed_loop" == true ]]; then
   fi
 elif [[ "$range_bias" != 0 ]]; then
   fail 2 "REEF_X3_RANGE_BIAS applies only to --closed-loop"
+fi
+control_respawn=false
+may_exit=()
+if [[ "$closed_loop" == true ]]; then
+  read -r control_respawn may_exit_list < <(python3 - "$run_dir/x3_scenario.yaml" <<'EOF'
+import sys, yaml
+s = yaml.safe_load(open(sys.argv[1])).get('simulation', {}).get('ros__parameters', {})
+print('true' if s.get('control_respawn') else 'false', ','.join(s.get('may_exit', [])) or '-')
+EOF
+)
+  [[ "$may_exit_list" != - ]] && IFS=, read -r -a may_exit <<< "$may_exit_list"
 fi
 read -r startup_timeout duration < <(python3 - "$run_dir/x3_scenario.yaml" "$runner" <<'EOF'
 import sys, yaml
@@ -136,6 +158,7 @@ python3 "$REEF_ROOT/scripts/x3_manifest.py" start "$run_dir" \
   "asset_verification=$asset_status" "headless=$headless" "ros_domain_id=$ROS_DOMAIN_ID" \
   "gz_partition=$GZ_PARTITION" "enable_range=$enable_range" "estimator=$estimator" \
   "closed_loop=$closed_loop" "range_bias=$range_bias" "control_params=${control_src:-none}" \
+  "closed_loop_scenario=${cl_scenario:-none}" "control_respawn=$control_respawn" \
   "command=scripts/run_x3_scenario.sh $*"
 
 # The Gazebo server always runs headless (-s); the GUI, if requested, is a
@@ -183,7 +206,7 @@ defer_traps
 if [[ "$closed_loop" == true ]]; then
   sim_start_session "$run_dir/launch.log" ros2 launch reef_sim x3_closed_loop.launch.py \
     "output_dir:=$run_dir" "params_file:=$run_dir/x3_scenario.yaml" "headless:=$headless" \
-    "control_params:=$run_dir/reef_control.yaml"
+    "control_params:=$run_dir/reef_control.yaml" "control_respawn:=$control_respawn"
 else
   sim_start_session "$run_dir/launch.log" ros2 launch reef_sim x3_scenario.launch.py \
     "output_dir:=$run_dir" "params_file:=$run_dir/x3_scenario.yaml" "headless:=$headless" \
@@ -210,7 +233,9 @@ while [[ ! -s "$result" ]]; do
       fi
     elif [[ -n "${seen[$p]:-}" ]]; then
       [[ -s "$result" ]] && break 2   # the runner finished while we looked
-      fail 2 "required process '$p' exited"
+      allowed=0
+      for m in "${may_exit[@]}"; do [[ "$p" == "$m" ]] && allowed=1; done
+      (( allowed )) || fail 2 "required process '$p' exited"
     fi
   done
   if [[ "$headless" == false ]] && (( ! gui_seen )) && pgrep -s "$sid" -f "^gz sim -g" >/dev/null; then gui_seen=1; fi

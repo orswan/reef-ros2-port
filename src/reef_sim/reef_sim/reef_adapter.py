@@ -128,6 +128,18 @@ def velocity_observation(t_ns, q_enu_flu, v_flu, std=VELOCITY_NOISE_STD, seed=VE
 MAX_EXTRAPOLATION_NS = 20_000_000
 
 
+def mocap_pose(p_enu, q_enu_flu_wxyz):
+    """IDEALIZED mocap pose (P07b position mode): truth position in NED and the
+    truth attitude of FRD in NED, as a motion-capture system would report it
+    in REEF's convention (x north, y east, z down)."""
+    x, y, z = p_enu
+    return (y, x, -z), ned_frd_from_enu_flu(q_enu_flu_wxyz)
+
+
+MOCAP_LABEL = ('IDEALIZED mocap pose on /x3/reef/pose_stamped: TRUTH position (NED) and TRUTH attitude '
+               '(FRD in NED) from /x3/truth/odom, no noise or latency (P07b position mode).')
+
+
 class TruthInterpolator:
     """Truth attitude samples (t_ns, q_ENU<-FLU as w, x, y, z), interpolated on request."""
 
@@ -201,7 +213,7 @@ def main(args=None):
     offline replay still uses), and the estimator reads /x3/range directly.
     """
     import rclpy
-    from geometry_msgs.msg import TwistWithCovarianceStamped
+    from geometry_msgs.msg import PoseStamped, TwistWithCovarianceStamped
     from nav_msgs.msg import Odometry
     from rclpy.node import Node
     from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
@@ -220,10 +232,41 @@ def main(args=None):
             self.label_pub.publish(String(data=LABEL))
             self.create_subscription(Odometry, '/x3/truth/odom', self.on_truth, 50)
             self.get_logger().warn(LABEL)
+            # P07b: idealized mocap pose (position mode), off by default.
+            self.mocap_pub = None
+            if self.declare_parameter('publish_mocap_pose', False).value:
+                self.mocap_pub = self.create_publisher(PoseStamped, '/x3/reef/pose_stamped', 50)
+                self.label_pub.publish(String(data=LABEL + ' ' + MOCAP_LABEL))
+                self.get_logger().warn(MOCAP_LABEL)
+            # TEST HOOK (P07b), off by default: "velocity_drop <seconds>" on
+            # /x3/test/fault drops the velocity observations stamped within the
+            # next <seconds> of sim time.
+            self.drop_until_ns = 0
+            if self.declare_parameter('test_hooks', False).value:
+                self.create_subscription(String, '/x3/test/fault', self.on_fault, 10)
+                self.get_logger().warn('TEST HOOKS ENABLED (/x3/test/fault)')
+
+        def on_fault(self, m):
+            parts = m.data.split()
+            if len(parts) == 2 and parts[0] == 'velocity_drop':
+                self.drop_until_ns = self.get_clock().now().nanoseconds + int(float(parts[1]) * 1e9)
+                self.get_logger().warn(f'TEST HOOK: dropping velocity observations for {parts[1]} s (sim)')
 
         def on_truth(self, m):
             o, v = m.pose.pose.orientation, m.twist.twist.linear
             t = m.header.stamp.sec * 1_000_000_000 + m.header.stamp.nanosec
+            if self.mocap_pub is not None:
+                pos = m.pose.pose.position
+                (nx, ny, nz), (qw, qx, qy, qz) = mocap_pose((pos.x, pos.y, pos.z), (o.w, o.x, o.y, o.z))
+                ps = PoseStamped()
+                ps.header.stamp = m.header.stamp
+                ps.header.frame_id = 'mocap_ned'
+                ps.pose.position.x, ps.pose.position.y, ps.pose.position.z = nx, ny, nz
+                ps.pose.orientation.w, ps.pose.orientation.x = qw, qx
+                ps.pose.orientation.y, ps.pose.orientation.z = qy, qz
+                self.mocap_pub.publish(ps)
+            if t < self.drop_until_ns:
+                return   # test hook: deliberate loss of the velocity observations
             vx, vy, var = velocity_observation(t, (o.w, o.x, o.y, o.z), (v.x, v.y, v.z),
                                                self.vel_std, self.vel_seed)
             tw = TwistWithCovarianceStamped()

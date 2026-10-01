@@ -14,7 +14,12 @@ offline guards, monitoring, manifest, analysis).
 Arguments: output_dir:=<dir> (required), params_file:=<merged yaml>,
 headless:=true|false (false adds a separate `gz sim -g` viewer),
 record:=true|false, control_params:=<reef_control yaml> (default
-reef_control_x3_sim.yaml: the shipped quad gains with dI = 0, see that file).
+reef_control_x3_sim.yaml: the shipped quad gains with dI = 0, see that file),
+control_respawn:=true|false (P07b controller-restart case only; default false
+so that a controller crash in any other run is never masked).
+The merged params_file also reaches the nodes with P07b test hooks and the
+controller (key /x3/reef/reef_control_pid), so a scenario overlay can enable
+hooks or the idealized mocap pose; all are off by default.
 The launch shuts down when the scenario runner exits.
 """
 from launch import LaunchDescription
@@ -33,7 +38,7 @@ TOPICS = ['/clock', '/x3/truth/odom', '/x3/imu', '/x3/range', '/x3/scenario/phas
           '/x3/reef/xyz_debug_estimate', '/x3/reef/is_flying_reef', '/x3/reef/input_labels',
           '/x3/reef/diagnostics', '/x3/reef/desired_state', '/x3/reef/controller_state',
           '/x3/reef/command', '/x3/reef/status', '/x3/fc/arm', '/x3/fc/motor_speed', '/x3/fc/debug',
-          '/x3/fc/label']
+          '/x3/fc/label', '/x3/reef/pose_stamped', '/x3/test/fault']
 
 
 def generate_launch_description():
@@ -55,6 +60,7 @@ def generate_launch_description():
         DeclareLaunchArgument('params_file'),
         DeclareLaunchArgument('headless', default_value='true'),
         DeclareLaunchArgument('record', default_value='true'),
+        DeclareLaunchArgument('control_respawn', default_value='false'),
         DeclareLaunchArgument('control_params', default_value=PathJoinSubstitution(
             [FindPackageShare('reef_control'), 'config', 'reef_control_x3_sim.yaml'])),
         AppendEnvironmentVariable('GZ_SIM_RESOURCE_PATH', PathJoinSubstitution([share, 'models'])),
@@ -73,21 +79,21 @@ def generate_launch_description():
         Node(package='reef_sim', executable='range_sensor', name='range_sensor', output='screen',
              parameters=[params_file, sim_time]),
         Node(package='reef_x3_adapter', executable='x3_imu_adapter', name='x3_imu_adapter', output='screen',
-             parameters=[sim_time]),
+             parameters=[params_file, sim_time]),
         Node(package='reef_sim', executable='reef_adapter', name='reef_adapter', output='screen',
-             parameters=[sim_time]),
+             parameters=[params_file, sim_time]),
         Node(package='reef_estimator', executable='reef_estimator_node', name='reef_estimator',
              namespace='/x3/reef', output='screen', remappings=[('sonar', '/x3/range')],
              parameters=[PathJoinSubstitution([reef_config, 'estimator_master.yaml']),
                          PathJoinSubstitution([reef_config, 'simulation.yaml']), sim_time]),
         # REEF controller: reads only xyz_estimate and desired_state (and status, is_flying).
         Node(package='reef_control', executable='reef_control_node', name='reef_control_pid',
-             namespace='/x3/reef', output='screen',
-             parameters=[LaunchConfiguration('control_params'), sim_time]),
+             namespace='/x3/reef', output='screen', respawn=LaunchConfiguration('control_respawn'),
+             respawn_delay=0.5, parameters=[LaunchConfiguration('control_params'), params_file, sim_time]),
         # STAND-IN low-level loop (development tool).
         Node(package='reef_fc_standin', executable='reef_fc_standin', name='reef_fc_standin', output='screen',
              parameters=[PathJoinSubstitution([FindPackageShare('reef_fc_standin'), 'config', 'x3_standin.yaml']),
-                         sim_time],
+                         params_file, sim_time],
              remappings=[('command', '/x3/reef/command'), ('arm', '/x3/fc/arm'),
                          ('gyro', '/x3/sim/imu_noise_free'), ('attitude', '/x3/fc/truth_odom'),
                          ('motor_speed', '/x3/fc/motor_speed'), ('debug', '/x3/fc/debug'),

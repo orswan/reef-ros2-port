@@ -1,0 +1,145 @@
+# Closed-loop scenario overlay (P07b): position mode, 1.5 m square, then heading 2.9 / -2.9 rad (K9)
+# Merged over x3_scenario.yaml, x3_reef_overlay.yaml and x3_closed_loop.yaml by
+# run_x3_scenario.sh --closed-loop with REEF_X3_CL_SCENARIO=position_square.
+# Criteria: docs/ACCEPTANCE.md (control/faults, P07b). Test hooks are labelled
+# and enabled only here.
+simulation:
+  ros__parameters:
+    scenario: position_square
+closed_loop_runner:
+  ros__parameters:
+    phase_names:
+    - settle
+    - takeoff_hover
+    - leg1
+    - leg2
+    - leg3
+    - leg4
+    - heading_a
+    - heading_b
+    - approach
+    - land
+    - disarmed
+    phase_durations:
+    - 5.0
+    - 20.0
+    - 12.0
+    - 12.0
+    - 12.0
+    - 12.0
+    - 15.0
+    - 15.0
+    - 6.0
+    - 8.0
+    - 4.0
+    phase_armed:
+    - false
+    - true
+    - true
+    - true
+    - true
+    - true
+    - true
+    - true
+    - true
+    - true
+    - false
+    phase_z:
+    - -1.0
+    - -1.0
+    - -1.0
+    - -1.0
+    - -1.0
+    - -1.0
+    - -1.0
+    - -1.0
+    - -0.3
+    - 0.1
+    - 0.1
+    phase_vx:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    phase_vy:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    phase_yaw_rate:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    phase_mode:
+    - velocity
+    - velocity
+    - position
+    - position
+    - position
+    - position
+    - position
+    - position
+    - velocity
+    - velocity
+    - velocity
+    phase_px:
+    - 0.0
+    - 0.0
+    - 1.5
+    - 1.5
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    phase_py:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.5
+    - 1.5
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    phase_heading:
+    - 0.0
+    - 0.0
+    - 1.5707963267948966
+    - 1.5707963267948966
+    - 1.5707963267948966
+    - 1.5707963267948966
+    - 2.9
+    - -2.9
+    - 0.0
+    - 0.0
+    - 0.0
+reef_adapter:
+  ros__parameters:
+    publish_mocap_pose: true

@@ -16,6 +16,7 @@
 #include <rosflight_msgs/msg/command.hpp>
 #include <rosflight_msgs/msg/status.hpp>
 #include <std_msgs/msg/bool.hpp>
+#include <std_msgs/msg/string.hpp>
 
 #include "reef_control/PID.h"
 
@@ -71,6 +72,7 @@ private:
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr pose_sub_;
   rclcpp::Subscription<rosflight_msgs::msg::Status>::SharedPtr status_sub_;
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr flying_sub_;
+  rclcpp::Subscription<std_msgs::msg::String>::SharedPtr fault_sub_;
   OnSetParametersCallbackHandle::SharedPtr validate_handle_;
   PostSetParametersCallbackHandle::SharedPtr apply_handle_;
 };

@@ -1,0 +1,77 @@
+# Closed-loop scenario overlay (P07b): IMU drop until the end: estimates stop, offboard timeout, crash (expected)
+# Merged over x3_scenario.yaml, x3_reef_overlay.yaml and x3_closed_loop.yaml by
+# run_x3_scenario.sh --closed-loop with REEF_X3_CL_SCENARIO=dropout_long.
+# Criteria: docs/ACCEPTANCE.md (control/faults, P07b). Test hooks are labelled
+# and enabled only here.
+simulation:
+  ros__parameters:
+    scenario: dropout_long
+closed_loop_runner:
+  ros__parameters:
+    phase_names:
+    - settle
+    - takeoff_hover
+    - fault
+    - recover
+    - approach
+    - land
+    - disarmed
+    phase_durations:
+    - 5.0
+    - 20.0
+    - 15.0
+    - 10.0
+    - 6.0
+    - 8.0
+    - 4.0
+    phase_armed:
+    - false
+    - true
+    - true
+    - true
+    - true
+    - true
+    - false
+    phase_z:
+    - -1.0
+    - -1.0
+    - -1.0
+    - -1.0
+    - -0.3
+    - 0.1
+    - 0.1
+    phase_vx:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    phase_vy:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    phase_yaw_rate:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    phase_fault:
+    - none
+    - none
+    - imu_drop 45
+    - none
+    - none
+    - none
+    - none
+x3_imu_adapter:
+  ros__parameters:
+    test_hooks: true

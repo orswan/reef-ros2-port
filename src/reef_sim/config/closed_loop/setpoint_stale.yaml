@@ -1,0 +1,82 @@
+# Closed-loop scenario overlay (P07b): setpoint publisher stops during a 0.3 m/s forward leg (6 s), then hover resumes
+# Merged over x3_scenario.yaml, x3_reef_overlay.yaml and x3_closed_loop.yaml by
+# run_x3_scenario.sh --closed-loop with REEF_X3_CL_SCENARIO=setpoint_stale.
+# Criteria: docs/ACCEPTANCE.md (control/faults, P07b). Test hooks are labelled
+# and enabled only here.
+simulation:
+  ros__parameters:
+    scenario: setpoint_stale
+closed_loop_runner:
+  ros__parameters:
+    phase_names:
+    - settle
+    - takeoff_hover
+    - forward
+    - stale
+    - recover
+    - approach
+    - land
+    - disarmed
+    phase_durations:
+    - 5.0
+    - 20.0
+    - 4.0
+    - 6.0
+    - 10.0
+    - 6.0
+    - 8.0
+    - 4.0
+    phase_armed:
+    - false
+    - true
+    - true
+    - true
+    - true
+    - true
+    - true
+    - false
+    phase_z:
+    - -1.0
+    - -1.0
+    - -1.0
+    - -1.0
+    - -1.0
+    - -0.3
+    - 0.1
+    - 0.1
+    phase_vx:
+    - 0.0
+    - 0.0
+    - 0.3
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    phase_vy:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    phase_yaw_rate:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    phase_setpoint:
+    - true
+    - true
+    - true
+    - false
+    - true
+    - true
+    - true
+    - true

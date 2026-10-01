@@ -241,6 +241,21 @@ ControlNode::ControlNode(const rclcpp::NodeOptions & options)
   pose_sub_ = create_subscription<geometry_msgs::msg::PoseStamped>("pose_stamped", qos,
       [this](const geometry_msgs::msg::PoseStamped & m) {onPose(m);});
 
+  // TEST HOOK (P07b, off by default; not part of the original): with the
+  // parameter test_hooks true, "controller_exit" on /x3/test/fault makes the
+  // node shut down gracefully (closed-loop restart case; the launch respawns
+  // it). The controller core is not involved.
+  if (declare_parameter("test_hooks", false, describe("P07b test hook: graceful exit on /x3/test/fault", true))) {
+    fault_sub_ = create_subscription<std_msgs::msg::String>("/x3/test/fault", rclcpp::QoS(10).reliable(),
+        [this](const std_msgs::msg::String & m) {
+          if (m.data == "controller_exit") {
+            RCLCPP_WARN(get_logger(), "TEST HOOK: controller_exit");
+            rclcpp::shutdown();
+          }
+        });
+    RCLCPP_WARN(get_logger(), "TEST HOOKS ENABLED (/x3/test/fault)");
+  }
+
   // Runtime gain changes (the original: dynamic_reconfigure). Out-of-range
   // values are rejected instead of clamped; accepted changes call
   // gainsCallback with the whole configuration, which keeps the integrators.

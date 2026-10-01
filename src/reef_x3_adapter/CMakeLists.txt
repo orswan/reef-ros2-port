@@ -16,10 +16,11 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
+find_package(std_msgs REQUIRED)
 
 add_executable(x3_imu_adapter src/x3_imu_adapter.cpp)
 target_include_directories(x3_imu_adapter PRIVATE include)
-target_link_libraries(x3_imu_adapter rclcpp::rclcpp ${sensor_msgs_TARGETS} ${nav_msgs_TARGETS})
+target_link_libraries(x3_imu_adapter rclcpp::rclcpp ${sensor_msgs_TARGETS} ${nav_msgs_TARGETS} ${std_msgs_TARGETS})
 install(TARGETS x3_imu_adapter DESTINATION lib/${PROJECT_NAME})
 
 if(BUILD_TESTING)
