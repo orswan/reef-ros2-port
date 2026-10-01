@@ -87,7 +87,7 @@ wrapper boundary ([INTERFACES.md §1](INTERFACES.md#1-command-interface)).
 | P07 REEF closed loop (stand-in low-level loop) | done, merged: REEF estimator + controller fly the X3 through the stand-in (development tool) on idealized inputs; nominal run 22/22, causality +0.30 m | `reef_check.sh control`, `reef_demo.sh closed-loop`; [ACCEPTANCE §5 control P07](ACCEPTANCE.md), [CONTROL_CHAIN §7](CONTROL_CHAIN.md), [reviews/P07.md](reviews/P07.md) |
 | P07b closed-loop faults and position mode | done, merged: 11 scenarios (estimate dropout short/long, estimator reset, controller restart, stale setpoint, range and velocity loss, pause, stand-in exit, position square with K9, `face_target` K10); crashes documented where the legacy system has no protection (USER) | `reef_check.sh faults`; [ACCEPTANCE §5 P07b](ACCEPTANCE.md), [reviews/P07b.md](reviews/P07b.md) |
 | R2 independent review | **PASS (SELF-REVIEW)**, USER 2026-10-01: an independent Claude session reviewed `p07b-faults-position` (code `bb47cf0`); minor documentation corrections applied (§5k) | [reviews/R2.md](reviews/R2.md), [reviews/R2_packet.md](reviews/R2_packet.md) |
-| P08 RGB-D | not started | |
+| P08 RGB-D | **in progress on `p08-rgbd`**: criteria fixed (`2ed22ac`); `rgbd_to_velocity` ported bit-exact (history imported, harness, 53/53 incl. Q1–Q10 and negative control); camera, scene, and interface checks pass (projection 0.03 px). Next: the replacement odometry | `reef_check.sh vision` (later parts N/A); [VISION.md](VISION.md) |
 | P09 simulation release | not started | |
 | P10–P13 hardware | blocked: target hardware unknown | |
 
@@ -450,5 +450,7 @@ passed: P06 106/106, nominal closed loop, causality. Findings record:
 
 ## 8. Next milestone
 
-**P08** (RGB-D processing and the remaining declared sensor modes): plan
-presented after R2; criteria to be fixed before any P08 code.
+**P08** in progress (branch `p08-rgbd`): next the replacement OpenCV
+odometry and its open-loop assessment (VISION.md §6), then REEF on vision,
+degraded cases, closed loop on vision. Check: `reef_check.sh vision` PASS at
+`7da686a` (converter 53/53, camera interface) with the remaining parts N/A.
