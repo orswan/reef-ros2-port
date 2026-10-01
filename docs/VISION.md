@@ -110,6 +110,49 @@ only the plain wall in view; the stock controller reaches about 92 % of the
 commanded displacement), depth loss (back to x ≈ −4.8 m: the wall about
 8.7 m away, beyond the far clip), descent to 0.4 m.
 
-## 6. Replacement odometry
+## 6. Replacement odometry (P08 step 4): design, fixed before the code
 
-Written with its implementation (P08 step 4).
+**A replacement, not a port** of `demo_rgbd` (USER, option B). Package
+`src/reef_rgbd_odometry`: a ROS-free OpenCV 4 core and an rclcpp node.
+
+| Stage | Design |
+|---|---|
+| Input | `/x3/camera/image` (rgb8 → grey), `/x3/camera/depth` (32FC1 planar m), `/x3/camera/camera_info` (K); RGB and depth paired by identical stamp |
+| Features | Shi-Tomasi corners (≤ 300, quality 0.01, min distance 8 px), replenished below 120 tracks, masked around existing tracks (DEMO's front-end also tracks corners with KLT) |
+| Tracking | pyramidal Lucas–Kanade (21×21, 3 levels) with a forward-backward check (≤ 1 px) |
+| Depth | the previous frame's depth at each track (nearest pixel), valid only if finite and within [near, far] clip (−inf/+inf/NaN never used) |
+| Motion | 3-D (previous frame, back-projected with K and Gazebo's pixel-centre convention, +0.5 px) to 2-D (current) PnP-RANSAC (reprojection 2 px), refined (Levenberg–Marquardt) on the inliers |
+| Pose | chained in the first frame's optical frame (x right, y down, z forward); output in **DEMO's convention** (x left, y up, z forward): p_demo = F p, R_demo = F R F with F = diag(−1, −1, 1); orientation = the camera's orientation in the init frame (the converter's formula turns it into C_init→cam) |
+| Health | LOST if < 40 depth-valid tracks (depth loss), < 25 RANSAC inliers (weak texture), or a step > 0.5 m or > 0.3 rad; while LOST **nothing is published** (no fallback, never truth); publishing resumes after 2 consecutive good frames |
+| Recovery | the motion while LOST is unknown: the chain resumes from the last published pose, so the converter (legacy) computes one low velocity from the first message after a loss (documented; REEF's gate and covariances decide) |
+| Outputs | `cam_to_init` (`nav_msgs/Odometry`, stamp = the frame's stamp); `vo/health` (`diagnostic_msgs/DiagnosticArray`: state, tracks, depth-valid tracks, inliers, reprojection RMS, processing time [wall ms], frame age [sim ms], counters) |
+| Test hooks (labelled, off by default) | `fault_schedule`: `delay PHASE OFFSET SPAN D` holds frames stamped from OFFSET to OFFSET + SPAN s after the start of scenario phase PHASE until stamp + D (sim time); `drop PHASE OFFSET SPAN` discards them (phases from `/x3/scenario/phase`) |
+
+Simulation chain for vision runs: camera → odometry → `rgbd_to_velocity`
+(`config/x3_sim_camera.yaml`) → REEF estimator with `enable_rgbd`,
+`enable_measurements` true and **`enable_mocap_xy` false** (no truth-derived
+velocity; criteria: ACCEPTANCE vision).
+
+## 7. Scoring definitions (P08 steps 5–7), fixed before the first scored run
+
+`ros2 run reef_sim analyze_vision RUN_DIR` (run by `run_x3_scenario.sh
+--vision`) turns the ACCEPTANCE `vision` rows into measurable windows. These
+are definitions of terms the criteria leave open (“steady segments”, “the
+loss”, “after the segment”); the limits are ACCEPTANCE's, unchanged.
+Truth is used for scoring and for the scene geometry only.
+
+| Term | Definition |
+|---|---|
+| Steady segments | phases with the rich texture in view and the wall inside the clip range: hover_start, forward, hover_fwd, back, hover_back, right, hover_right, left, hover_left, hover_ret, hover_end, hover_low, each without its first 1.0 s (controller transient). REEF samples additionally from 2 s after REEF's takeoff (as P05) |
+| Truth velocity | body-level (x forward, y right, yaw-aligned) from `/x3/truth/odom`, interpolated to each message stamp (`analyze_reef.truth_at`) |
+| Rate | vision velocity messages (`rgbd_to_velocity/body_level_frame`) per sim second in the steady segments |
+| Sign/frame | forward leg → mean vision x > +0.1 m/s, back → < −0.1, right → mean y > +0.1, left → < −0.1, cross axis below half of the primary |
+| Weak-texture event / end | event: first time in weak_left at which the right image edge ray meets the wall beyond the rich region (y > 1.5 m; no rich texture in view); end: first time in weak_return at which the optical axis meets the rich region again |
+| Depth-loss event / end | event: first time in far_back at which the planar depth of the wall at the image centre exceeds the far clip (8 m); end: first time in far_return at which it is back within |
+| Loss shown | a health message (stamp = image stamp) with state LOST between the segment's phase start and event + 0.5 s |
+| No publication while lost | no `cam_to_init` and no `rgbd_to_velocity` message stamped strictly inside any LOST interval (first LOST stamp → next published stamp), whole run |
+| Variance grows | REEF's σ(ẋ) and σ(ẏ) at the last estimate before the resume exceed those at the loss |
+| Resume | the last LOST → published transition between the segment's phase start and the end of the following hover phase, at most 1.0 s after the segment end |
+| REEF recovered | REEF velocity RMSE per axis over [end + 3 s, end + 4 s] ≤ 0.10 m/s |
+| Faults run | `REEF_X3_VISION_FAULTS=1` merges `config/x3_vision_faults.yaml` (`delay right 0 5 0.2`, `drop left 2 1`). Per window [phase start + offset, + span] extended by 2 s: every vision velocity finite and per-axis error ≤ 0.3 m/s. Latency (bag receive − stamp, both sim) and rate are REPORTED; the nominal items are REPORTED only in that run |
+| REPORTED (never counted as PASS) | noise vs configured covariance, latency, gate and fusion counts, performance (odometry wall ms per frame, processing share of one core, image rate, RTF) |
