@@ -108,6 +108,19 @@ above (no `/x3/cmd_vel`):
 The REEF estimator topics are those of §3 (namespace `/x3/reef`). Test hook:
 `REEF_X3_RANGE_BIAS` adds a bias to the idealized range (causality check).
 
+P07b additions (`REEF_X3_CL_SCENARIO=<name>`, overlays in
+`src/reef_sim/config/closed_loop/`):
+
+| Topic / parameter | Type | Category |
+|---|---|---|
+| `/x3/reef/pose_stamped` | `geometry_msgs/PoseStamped` | **IDEALIZED mocap pose** (truth position in NED, truth attitude of FRD in NED, frame `mocap_ned`), published by `reef_adapter` only with `publish_mocap_pose: true` (position-mode scenarios); read by reef_control in position mode |
+| `/x3/test/fault` | `std_msgs/String` | **TEST HOOK** commands from the scenario runner: `imu_drop S`, `range_drop S`, `velocity_drop S`, `controller_exit`, `standin_exit` |
+| `test_hooks` parameter of `x3_imu_adapter`, `range_sensor`, `reef_adapter`, `reef_control_pid`, `reef_fc_standin` | bool, default **false** | subscribe to `/x3/test/fault` only when true; never enabled outside the P07b scenarios |
+
+Other P07b faults: the estimator's `~/reset` service and a Gazebo world
+pause (`gz service .../control`). The controller is respawned by the launch
+only when the scenario sets `control_respawn`.
+
 **Freshness:** no staleness detection is implemented on these topics. Consumers
 must compare header stamps with the sim clock themselves. For REEF inputs,
 see §3.4 (timestamps and freshness) and §3.7 (health).
@@ -437,6 +450,7 @@ ignore; the ROS 2 type has `u[10]` and a `uint16` ignore. The mode value
 | Parameter | Default | Rule |
 |---|---|---|
 | `max_roll`, `max_pitch` [rad], `max_yaw_rate` [rad/s] | none (required) | finite, ≥ 0; read only |
+| `test_hooks` | false | read only. P07b test hook (not in the original): with true, `controller_exit` on `/x3/test/fault` shuts the node down gracefully |
 | `face_target`, `fly_fixed_wing` | false | read only. The original read them from the global namespace (K12); `config/reef_control_quad.yaml` records the effective values of the shipped file |
 | gains `uP uI uD vP vI vD wP wI wD uvtau dP dI dD nedtau yawP yawI yawD yawtau`, lookup `kp deadzone max_vel center_point alpha`, limits `max_u max_v max_w max_d` | `Gains.cfg` defaults (0) | within the `Gains.cfg` range; integers accepted; **changeable at runtime** |
 | `xIntegrator`, `uIntegrator` | true | bool; changeable at runtime |

@@ -138,6 +138,11 @@ with this file, this file wins.
   simulation change only in explained configuration commits
   (`reef_control_x3_sim.yaml`); never feed truth to the controller or the
   estimator beyond the documented idealized inputs.
+- Test hooks (P07b) are labelled, default off, and enabled only by the
+  scenario overlays in `src/reef_sim/config/closed_loop/`; never enable them
+  in nominal runs or demos, and never add hooks to the controller or
+  estimator cores. No failsafes beyond the legacy behaviour (USER): crashes
+  in the dropout and stand-in-exit cases are the documented result.
 
 ## Simulation data rules (`src/reef_sim`, docs/X3_SCENARIO.md)
 
