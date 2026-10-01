@@ -1,7 +1,8 @@
 # REEF ROS 2: project status
 
-Updated 2026-10-01 (P07 merged). `main` contains P00–P07 and the R1
-fixes, all merged by fast-forward at the user's request (P07: §5i).
+Updated 2026-10-01 (R2 done, P07b merged). `main` contains P00–P07, P07b,
+the R1 fixes, and the R2 documentation corrections, all merged by
+fast-forward at the user's request (P07: §5i, P07b: §5j, R2: §5k).
 Section 3 reconciles
 [docs/handoff/](handoff/) (conversation-derived history) with the repository
 and the recorded evidence.
@@ -23,7 +24,7 @@ project by the implementer, with logs or manifests in the repository tree.
 | `p05-horizontal-estimator` | `49f7073` | P05: combined estimator, opt-in C1, horizontal fixtures, `baseline`/`estimator`/`faults` targets, R1 packet | yes (fast-forward, 2026-09-30; USER: checks behaved as expected in the dev container) |
 | `r1-fixes` | `1ee999b` | R1 decisions: finding 1 (publish point), C1 default, published-message parity, doc fixes | yes (fast-forward, 2026-09-30; USER: `baseline`, `faults` passed in the dev container) |
 | `p06-controller` | `0f2aa63` | P06: control-chain spec, `reef_control` port (history imported), reference harness, fixtures, model, `control` target, dry-run sink | yes (fast-forward, 2026-10-01; USER: `control` 106/106 and `interfaces` passed in the dev container) |
-| `p07b-faults-position` | this work | P07b: closed-loop fault scenarios (test hooks), position mode with idealized mocap, K9/K10, `faults` target extension, R2 packet | no (under R2 review) |
+| `p07b-faults-position` | merged | P07b: closed-loop fault scenarios (test hooks), position mode with idealized mocap, K9/K10, `faults` target extension, R2 packet, R2 doc corrections | yes (fast-forward, 2026-10-01, after R2) |
 | `p07-closed-loop` | merged | P07: criteria, `reef_fc_standin`, closed-loop world/launch/runner/analyzer, recorded runs, `control` closed-loop steps, `reef_demo.sh closed-loop` | yes (fast-forward, 2026-10-01; USER: headless `control` passed in the dev container) |
 
 No Git remote, pull request, or tag exists; the repository is local. Upstream
@@ -84,8 +85,8 @@ wrapper boundary ([INTERFACES.md §1](INTERFACES.md#1-command-interface)).
 | R1 independent review | **SELF-REVIEW at `49f7073` (§5f)**, not independent confirmation. USER decisions (2026-09-30): fix finding 1; approve C1 (default on); defer C2–C6; keep the vibration assumption; fix the stale docs (finding 5). Applied on `r1-fixes` (§5g) | [reviews/R1.md](reviews/R1.md) |
 | P06 controller port and command interface | done, merged (`0f2aa63`): faithful bit-exact port of `reef_control` `12237b76` (USER), dry-run sink, stand-in design. USER: K1–K13 kept for the baseline; `is_flying` unconnected and the hardware throttle check deferred to P10 approved | `reef_check.sh control`; [CONTROL_CHAIN.md](CONTROL_CHAIN.md), [ACCEPTANCE.md §5 control](ACCEPTANCE.md), [INTERFACES.md §4](INTERFACES.md), [reviews/P06.md](reviews/P06.md) |
 | P07 REEF closed loop (stand-in low-level loop) | done, merged: REEF estimator + controller fly the X3 through the stand-in (development tool) on idealized inputs; nominal run 22/22, causality +0.30 m | `reef_check.sh control`, `reef_demo.sh closed-loop`; [ACCEPTANCE §5 control P07](ACCEPTANCE.md), [CONTROL_CHAIN §7](CONTROL_CHAIN.md), [reviews/P07.md](reviews/P07.md) |
-| P07b closed-loop faults and position mode | **done on `p07b-faults-position`**: 11 scenarios (estimate dropout short/long, estimator reset, controller restart, stale setpoint, range and velocity loss, pause, stand-in exit, position square with K9, `face_target` K10); crashes documented where the legacy system has no protection (USER) | `reef_check.sh faults`; [ACCEPTANCE §5 P07b](ACCEPTANCE.md), [reviews/P07b.md](reviews/P07b.md) |
-| R2 independent review | packet ready: [reviews/R2_packet.md](reviews/R2_packet.md); USER: an independent Claude session, labelled SELF-REVIEW | |
+| P07b closed-loop faults and position mode | done, merged: 11 scenarios (estimate dropout short/long, estimator reset, controller restart, stale setpoint, range and velocity loss, pause, stand-in exit, position square with K9, `face_target` K10); crashes documented where the legacy system has no protection (USER) | `reef_check.sh faults`; [ACCEPTANCE §5 P07b](ACCEPTANCE.md), [reviews/P07b.md](reviews/P07b.md) |
+| R2 independent review | **PASS (SELF-REVIEW)**, USER 2026-10-01: an independent Claude session reviewed `p07b-faults-position` (code `bb47cf0`); minor documentation corrections applied (§5k) | [reviews/R2.md](reviews/R2.md), [reviews/R2_packet.md](reviews/R2_packet.md) |
 | P08 RGB-D | not started | |
 | P09 simulation release | not started | |
 | P10–P13 hardware | blocked: target hardware unknown | |
@@ -309,6 +310,19 @@ Nothing was run in `reef_ros2_dev` by the implementer (H10).
 Not run: GUI demos (informational, USER); nothing in `reef_ros2_dev` by the
 implementer.
 
+## 5k. R2 review (SELF-REVIEW) and documentation corrections (2026-10-01)
+
+USER: the independent R2 review (a Claude session, labelled SELF-REVIEW)
+is complete with result **PASS**; it asked for minor documentation
+corrections only. Applied: stale lines in STATUS (`main` contents, branch
+and milestone rows) and INTERFACES §4 (the controller is in the X3 loop since
+P07); the latency margin stated precisely (ACCEPTANCE P07 note, item 24);
+the firmware `MIN_THROTTLE` / `MOTOR_IDLE_THR` semantics that the stand-in
+does not model (CONTROL_CHAIN §7, INTERFACES §4.3). [V] The reviewer's
+`reef_check.sh control` run (`log/checks/reef_check_control_20261001_062923`)
+passed: P06 106/106, nominal closed loop, causality. Findings record:
+[reviews/R2.md](reviews/R2.md). No code changed.
+
 ## 6. Open items and known limits
 
 1. `sim/launch/clock_demo.launch.py` still uses Gazebo's combined GUI mode,
@@ -365,8 +379,9 @@ implementer.
     launch files (the estimator publishes `is_flying_reef`); integrators run
     whenever armed. **Approved by the USER (2026-10-01).**
 24. **Timing margins on this host are thin.** P07 estimate age at the motor
-    command, p99: 14, 18, 24, 12, 12, 12 ms over the recorded and check
-    runs (limit 20 ms; one run failed). The P05 estimate age (stock run,
+    command (sim time, 2 ms resolution), p99 over 19 headless runs: 12–24 ms
+    (median 12; 15 runs 12–16 ms; one at 20 ms, passing; one at 24 ms,
+    failing); GUI runs 20 and 24 ms (limit 20 ms, ACCEPTANCE P07 note). The P05 estimate age (stock run,
     `reef_check.sh estimator` criterion) was p99 8 ms at P05 and 20.0 ms
     (FAIL, narrowly) in one run on 2026-10-01. No limit was changed. Options
     if it recurs: the stand-in steps on command arrival as well as on the
@@ -419,7 +434,5 @@ implementer.
 
 ## 8. Next milestone
 
-**R2**: the USER runs the independent review (Claude session, labelled
-SELF-REVIEW) with [reviews/R2_packet.md](reviews/R2_packet.md) on branch
-`p07b-faults-position`; then apply its decisions and merge; then P08
-(RGB-D).
+**P08** (RGB-D processing and the remaining declared sensor modes): plan
+presented after R2; criteria to be fixed before any P08 code.

@@ -438,6 +438,14 @@ zero motor speeds when it shuts down. Existing limits are unchanged; the
 stability and saturation windows end with `descend` because landing
 legitimately goes below 0.25 m and drives the throttle to 0.
 
+Latency margin (clarified after R2, no limit changed): the age is measured
+in sim time and is quantized to the 2 ms physics step, so p99 values are
+even milliseconds. Over the 19 headless closed-loop runs to 2026-10-01 the
+p99 was 12–24 ms (median 12 ms; 15 runs 12–16 ms; one exactly 20 ms, which
+passes; one 24 ms, which failed); the two GUI runs gave 20 and 24 ms. The
+limit is therefore met with margin in most headless runs but not
+guaranteed: a headless run on a busy host can fail it.
+
 USER decision (2026-10-01): **official acceptance comes from headless runs**
 (`reef_check.sh control`) on an otherwise idle machine. GUI runs
 (`reef_demo.sh closed-loop --gui`) are informational only: the software-rendered

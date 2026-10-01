@@ -422,7 +422,7 @@ producing roll, pitch, yaw rate, and throttle. Specification, frames, units,
 modes, and the legacy behaviour it keeps (K1–K13):
 [CONTROL_CHAIN.md](CONTROL_CHAIN.md). Faithful and bit-exact to the
 original (USER); `reef_check.sh control` compares every step.
-**Not in the loop of any simulation yet (P07).** No hardware output exists.
+**In the loop of the X3 simulation since P07** (`run_x3_scenario.sh --closed-loop`: REEF estimate → this node → the stand-in low-level loop of CONTROL_CHAIN.md §7, a development tool, not ROSflight). No hardware output exists.
 
 ### 4.1 Topics
 
@@ -470,6 +470,16 @@ first step uses dt = stamp − 0 (K4); before any `desired_state` the
 setpoint is all zeros. Output inhibition belongs to the low-level layer:
 the firmware (or, in simulation, the P07 stand-in) ignores commands while
 disarmed and falls back to RC 100 ms after the last command.
+
+Firmware throttle semantics that matter on hardware (P10) and are **not
+modelled by the stand-in** [V `b77c3854` `command_manager.cpp`,
+`mixer.cpp`, `param.cpp`]: with `MIN_THROTTLE` (default true) the firmware
+uses the **lower** of the RC throttle stick and the offboard throttle, so
+the pilot's stick is a ceiling on REEF's throttle (and arming requires a low
+stick); with `MOTOR_IDLE_THR` 0.1 and `ARM_SPIN_MOTORS` (default true) armed
+motors never go below 10 % command, and yaw commands are ignored below that
+throttle. The stand-in has no RC and lets armed motors go to 0, so in the
+simulated crash cases real armed motors would idle at 10 % instead.
 
 ### 4.4 Dry-run command sink
 

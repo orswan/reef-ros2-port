@@ -196,7 +196,14 @@ ROSflight, not flight-representative.** As built [V]:
 
 What the stand-in does not give: firmware estimator behaviour, RC override,
 failsafe, PWM/ESC dynamics, MAVLink latency, firmware parameter semantics,
-integrators in the attitude loop.
+integrators in the attitude loop. In particular (R2 note) [V `b77c3854`]:
+`MIN_THROTTLE` (default true; `command_manager.cpp` `do_throttle_muxing`)
+makes the firmware use the lower of RC and offboard throttle, so on hardware
+the RC stick caps REEF's throttle and must be low to arm
+(`state_manager.cpp`); `MOTOR_IDLE_THR` = 0.1 with `ARM_SPIN_MOTORS`
+(`mixer.cpp` `write_motor`) keeps armed motors at ≥ 10 % and drops yaw
+commands below that throttle. The stand-in lets armed motors reach 0 and has
+no RC cap; P10 must re-verify the throttle chain with these semantics.
 
 Closed-loop runs: `scripts/run_x3_scenario.sh --closed-loop`
 (`reef_demo.sh closed-loop`, `reef_check.sh control`); results in
