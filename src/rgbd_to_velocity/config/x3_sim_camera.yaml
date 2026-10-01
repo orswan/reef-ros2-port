@@ -1,0 +1,12 @@
+# rgbd_to_velocity parameters for the simulated X3 camera (P08): the
+# reef_x3_rgbd model mounts the camera at kiwi's position, ideally forward.
+# In the converter's convention (body FRD -> DEMO camera: x left, y up,
+# z forward) that is body_to_camera_quat = (0.5, -0.5, 0.5, -0.5). Checked
+# against the model by src/reef_sim/test/test_vision_assets.py.
+/**:
+  ros__parameters:
+    alpha: 1.0
+    x_vel_covariance: 0.01
+    y_vel_covariance: 0.01
+    body_to_camera_quat: [0.5, -0.5, 0.5, -0.5]
+    body_to_camera_trans: [0.1354765750332004, 0.0175314092839309, -0.0455417178618858]

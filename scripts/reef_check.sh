@@ -91,9 +91,11 @@ Targets (simulation only; nothing here talks to hardware):
                                 rgbd_to_velocity: the pinned original in a
                                 reference harness vs the port (core and node),
                                 independent model, legacy quirks Q1-Q10,
-                                negative control. Camera, odometry, REEF on
-                                vision, degraded and closed-loop cases: N/A
-                                until implemented (about 3 min)
+                                negative control; camera interface in the
+                                vision scene (intrinsics, projection, depth,
+                                stamps). Odometry, REEF on vision, degraded and
+                                closed-loop cases: N/A until implemented
+                                (about 10 min)
   release                       NOT IMPLEMENTED (milestone P09)
 
 Exit: 0 PASS, 1 FAIL (executed), 2 BLOCKED / NOT IMPLEMENTED / invalid,
@@ -394,11 +396,20 @@ PY
       bash -c 'source "$1/install/setup.bash" && exec python3 "$2" --port "$1/install/rgbd_to_velocity/lib/rgbd_to_velocity/rgbd_to_velocity_event_replay"' \
       _ "$tree" "$V/check_rgbd.py"
     grep -E '^(PASS|FAIL) \[(Q|negative)\]|^(PASS|FAIL): ' "$logdir/rgbd.log" | cut -c1-150 | sed 's/^/     /' || true
-    for part in "camera interface" "replacement odometry vs truth (open loop)" "REEF on vision (open loop)" \
+    python3 "$S/setup_assets.py" --verify >"$logdir/assets_precheck.log" 2>&1 \
+      || blocked "X3 assets missing or modified; run scripts/setup_assets.py"
+    run_step "vision assets generated and up to date" 0 "$logdir/vision_assets.log" \
+      python3 "$S/make_vision_assets.py" --check
+    vrun="$logdir/x3_vision"
+    run_step "camera interface: rendered RGB-D in the vision scene (stock controller flies)" 0 "$logdir/vision.log" \
+      env REEF_X3_OUT="$vrun" "$S/run_x3_scenario.sh" --vision
+    grep -E '^(PASS|FAIL) camera|^REPORTED invalid' "$logdir/vision.log" | cut -c1-150 | sed 's/^/     /' || true
+    artifacts+=("$vrun/camera_check.json" "$vrun/analysis")
+    for part in "replacement odometry vs truth (open loop)" "REEF on vision (open loop)" \
                 "weak texture / depth loss / delayed and missing frames" "closed loop on vision" "performance"; do
       results+=("N/A|$part|NOT IMPLEMENTED yet (P08 in progress)")
     done
-    sim_notes+=("fixture time only so far")
+    sim_notes+=("fixture time; vision run in ${vrun#"$REEF_ROOT"/} (sim time)")
     artifacts+=("$REEF_ROOT/build/baseline/rgbd/check/results.json")
     ;;
 

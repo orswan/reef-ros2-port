@@ -1,0 +1,31 @@
+# Overlay for vision runs (run_x3_scenario.sh --vision, P08), merged over
+# x3_scenario.yaml and x3_reef_overlay.yaml. The stock truth-fed controller
+# flies this velocity profile (body FLU: x forward, y LEFT) in front of the
+# vision scene (scripts/make_vision_assets.py: textured wall x = 4 m,
+# y -3..1.5; plain wall y 1.5..6; plain floor; camera far clip 8 m). Vision
+# is not in the control loop here. Phases (ACCEPTANCE.md vision, P08):
+# textured legs; weak texture (left to y ~ 4.0: the stock controller reaches
+# about 92 % of the commanded displacement; view y 1.8..6.2, plain wall only);
+# depth loss (back to x ~ -4.8: the wall about 8.7 m away, beyond the far clip); the
+# final descent (0.6 m) leaves the vehicle hovering at about 0.4 m, as in
+# the stock scenario (a 1 m descent touched down hard: 89 m/s^2).
+scenario_runner:
+  ros__parameters:
+    phase_names:     [settle, ascend, hover_start, forward, hover_fwd, back,  hover_back, right, hover_right, left, hover_left, weak_left, hover_weak, weak_return, hover_ret, far_back, hover_far, far_return, hover_end, descend, hover_low]
+    phase_durations: [5.0,    4.0,    4.0,         5.0,     3.0,       5.0,   3.0,        5.0,   3.0,         5.0,  3.0,        14.5,      5.0,        14.5,        3.0,       13.0,     5.0,       13.0,       3.0,       4.0,     3.0]
+    phase_vx:        [0.0,    0.0,    0.0,         0.3,     0.0,       -0.3,  0.0,        0.0,   0.0,         0.0,  0.0,        0.0,       0.0,        0.0,         0.0,       -0.4,     0.0,       0.4,        0.0,       0.0,     0.0]
+    phase_vy:        [0.0,    0.0,    0.0,         0.0,     0.0,       0.0,   0.0,        -0.3,  0.0,         0.3,  0.0,        0.3,       0.0,        -0.3,        0.0,       0.0,      0.0,       0.0,        0.0,       0.0,     0.0]
+    phase_vz:        [0.0,    0.25,   0.0,         0.0,     0.0,       0.0,   0.0,        0.0,   0.0,         0.0,  0.0,        0.0,       0.0,        0.0,         0.0,       0.0,      0.0,       0.0,        0.0,       -0.15,   0.0]
+    phase_yaw_rate:  [0.0,    0.0,    0.0,         0.0,     0.0,       0.0,   0.0,        0.0,   0.0,         0.0,  0.0,        0.0,       0.0,        0.0,         0.0,       0.0,      0.0,       0.0,        0.0,       0.0,     0.0]
+camera_check:
+  ros__parameters:
+    window_start: 2.0       # sim s: on the ground, static (settle)
+    window_end: 4.5
+    width: 320
+    height: 240
+    hfov: 1.0471975511965976
+    rate: 15.0
+    mount_flu: [0.1354765750332004, -0.0175314092839309, 0.0455417178618858]
+    target: [3.5, -1.0, 1.4]
+    wall_x: 4.0
+    physics_step: 0.002

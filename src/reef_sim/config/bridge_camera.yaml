@@ -1,0 +1,18 @@
+# ros_gz_bridge configuration for the RGB-D camera (P08; worlds *_vision.sdf).
+# Run as its own bridge process (image throughput). Gazebo publishes the
+# rgbd_camera sensor of reef_x3_rgbd on /reef/x3/rgbd/*.
+- ros_topic_name: /x3/camera/image
+  gz_topic_name: /reef/x3/rgbd/image
+  ros_type_name: sensor_msgs/msg/Image
+  gz_type_name: gz.msgs.Image
+  direction: GZ_TO_ROS
+- ros_topic_name: /x3/camera/depth
+  gz_topic_name: /reef/x3/rgbd/depth_image
+  ros_type_name: sensor_msgs/msg/Image
+  gz_type_name: gz.msgs.Image
+  direction: GZ_TO_ROS
+- ros_topic_name: /x3/camera/camera_info
+  gz_topic_name: /reef/x3/rgbd/camera_info
+  ros_type_name: sensor_msgs/msg/CameraInfo
+  gz_type_name: gz.msgs.CameraInfo
+  direction: GZ_TO_ROS

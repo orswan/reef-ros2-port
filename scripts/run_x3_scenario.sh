@@ -6,6 +6,10 @@
 #       estimator (vertical filter) beside the truth-fed controller, with the
 #       IMU vibration overlay (config/x3_reef_overlay.yaml), and score it
 #       (analysis_reef/). REEF is not in the control loop.
+#   scripts/run_x3_scenario.sh --vision       # P08: RGB-D camera rendering in the
+#       vision scene (worlds/x3_vision.sdf, headless EGL rendering) while the
+#       stock truth-fed controller flies config/x3_vision.yaml; camera
+#       interface checks (camera_check.json). Vision is not in the loop.
 #   scripts/run_x3_scenario.sh --closed-loop  # P07: REEF estimator AND REEF
 #       controller in the loop: world without the stock controller, stand-in
 #       low-level loop (reef_fc_standin, development tool) on the motor model,
@@ -46,12 +50,14 @@ headless=true
 analyze=1
 estimator=false
 closed_loop=false
+vision=false
 for arg in "$@"; do
   case "$arg" in
     --gui) headless=false ;;
     --no-analysis) analyze=0 ;;
     --estimator) estimator=true ;;
     --closed-loop) closed_loop=true; estimator=true ;;
+    --vision) vision=true ;;
     *) echo "unknown argument: $arg" >&2; exit 2 ;;
   esac
 done
@@ -98,6 +104,11 @@ if [[ "$estimator" == true ]]; then
 fi
 range_bias="${REEF_X3_RANGE_BIAS:-0}"
 runner=scenario_runner
+if [[ "$vision" == true ]]; then
+  [[ "$closed_loop" == true || "$estimator" == true ]] && fail 2 "--vision cannot be combined with --estimator or --closed-loop yet"
+  python3 "$REEF_ROOT/scripts/x3_merge_params.py" "$run_dir/x3_scenario.yaml" \
+    "$REEF_ROOT/src/reef_sim/config/x3_vision.yaml" || fail 2 "could not merge the vision overlay"
+fi
 if [[ "$closed_loop" == true ]]; then
   runner=closed_loop_runner
   python3 "$REEF_ROOT/scripts/x3_merge_params.py" "$run_dir/x3_scenario.yaml" \
@@ -157,7 +168,7 @@ enable_range=true
 python3 "$REEF_ROOT/scripts/x3_manifest.py" start "$run_dir" \
   "asset_verification=$asset_status" "headless=$headless" "ros_domain_id=$ROS_DOMAIN_ID" \
   "gz_partition=$GZ_PARTITION" "enable_range=$enable_range" "estimator=$estimator" \
-  "closed_loop=$closed_loop" "range_bias=$range_bias" "control_params=${control_src:-none}" \
+  "closed_loop=$closed_loop" "vision=$vision" "range_bias=$range_bias" "control_params=${control_src:-none}" \
   "closed_loop_scenario=${cl_scenario:-none}" "control_respawn=$control_respawn" \
   "command=scripts/run_x3_scenario.sh $*"
 
@@ -174,6 +185,7 @@ gui_seen=0
 [[ "$enable_range" == true ]] && required+=("range_sensor")
 [[ "$estimator" == true ]] && required+=("reef_estimator_node" "reef_adapter" "x3_imu_adapter")
 [[ "$closed_loop" == true ]] && required+=("reef_control_node" "reef_fc_standin")
+[[ "$vision" == true ]] && required+=("camera_check")
 if [[ "$closed_loop" == true && "$enable_range" != true ]]; then fail 2 "--closed-loop needs the range stream"; fi
 
 # --- cleanup and signals
@@ -203,7 +215,10 @@ normal_traps
 
 # --- start the owned simulation; signals wait until its session is registered
 defer_traps
-if [[ "$closed_loop" == true ]]; then
+if [[ "$vision" == true ]]; then
+  sim_start_session "$run_dir/launch.log" ros2 launch reef_sim x3_vision.launch.py \
+    "output_dir:=$run_dir" "params_file:=$run_dir/x3_scenario.yaml" "headless:=$headless"
+elif [[ "$closed_loop" == true ]]; then
   sim_start_session "$run_dir/launch.log" ros2 launch reef_sim x3_closed_loop.launch.py \
     "output_dir:=$run_dir" "params_file:=$run_dir/x3_scenario.yaml" "headless:=$headless" \
     "control_params:=$run_dir/reef_control.yaml" "control_respawn:=$control_respawn"
@@ -277,6 +292,22 @@ elif (( analyze )); then
   say "analysis"
   ros2 run reef_sim analyze_x3_bag "$run_dir" | tee "$run_dir/analysis.log" || rc=1
   [[ "${PIPESTATUS[0]}" == 0 ]] || rc=1
+  if [[ "$vision" == true ]]; then
+    say "camera interface (camera_check.json)"
+    python3 - "$run_dir/camera_check.json" <<'EOF' | tee "$run_dir/analysis_camera.log" || rc=1
+import json, sys
+try:
+    r = json.load(open(sys.argv[1]))
+except OSError as e:
+    print(f'FAIL camera interface: no result ({e})')
+    sys.exit(1)
+for c in r['checks']:
+    print(f"{'PASS' if c['ok'] else 'FAIL'} camera: {c['name']}: {c['detail']}")
+print(f"REPORTED invalid depth pixels: {r['invalid']}")
+sys.exit(0 if r['ok'] else 1)
+EOF
+    [[ "${PIPESTATUS[0]}" == 0 ]] || rc=1
+  fi
   if [[ "$estimator" == true ]]; then
     say "REEF vertical estimate vs truth (idealized inputs)"
     ros2 run reef_sim analyze_reef_vertical "$run_dir" | tee "$run_dir/analysis_reef.log" || rc=1

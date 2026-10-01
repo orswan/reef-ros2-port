@@ -88,6 +88,17 @@ The full specification is in [X3_SCENARIO.md](X3_SCENARIO.md). Summary:
 | `/x3/cmd_vel` | `geometry_msgs/Twist` | command to the truth-fed stock controller | body FLU | 20 Hz | sim time |
 | `/x3/scenario/phase` | `std_msgs/String` | phase label (transient local) | — | per phase | recorder receive time (sim) |
 
+### RGB-D camera (P08, `run_x3_scenario.sh --vision`)
+
+| Topic | Type | Category | Frame / units |
+|---|---|---|---|
+| `/x3/camera/image` | `sensor_msgs/Image` (`rgb8`, 320×240) | measurement (rendered) | `x3/camera_optical` (x right, y down, z forward) |
+| `/x3/camera/depth` | `sensor_msgs/Image` (`32FC1`) | measurement (rendered) | planar depth [m]; −inf nearer than 0.3 m, +inf beyond 8.0 m |
+| `/x3/camera/camera_info` | `sensor_msgs/CameraInfo` | calibration | fx = fy = 277.128, cx 160, cy 120, no distortion |
+
+15 Hz configured (0.066 s spacing, sim time); RGB and depth share stamps.
+Details and the scene: [VISION.md §5](VISION.md).
+
 ### REEF-controlled X3 (P07, `run_x3_scenario.sh --closed-loop`)
 
 World `x3_closed_loop.sdf` (no stock controller). Topics in addition to the
