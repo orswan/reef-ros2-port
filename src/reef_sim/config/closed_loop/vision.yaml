@@ -1,0 +1,25 @@
+# Closed loop on vision (P08; run_x3_scenario.sh --closed-loop --vision).
+# Merged over x3_scenario.yaml, x3_reef_overlay.yaml, x3_closed_loop.yaml and
+# the camera_check section of x3_vision.yaml. REEF controller + stand-in
+# (development tool) fly on the REEF estimate; REEF's only horizontal velocity
+# input is vision (camera -> reef_rgbd_odometry, a REPLACEMENT odometry ->
+# rgbd_to_velocity); attitude and range stay idealized. Criteria:
+# docs/ACCEPTANCE.md (vision, closed loop) with the definitions of
+# docs/VISION.md section 7. No yaw phase: the camera must keep the textured
+# wall (x = 4 m, rich for y -3..1.5) in view. z is REEF's NED altitude
+# setpoint; vx, vy body-level (x forward, y RIGHT).
+#   judged: takeoff through hover_left (legs at 0.3 m/s in front of the rich texture)
+#   characterization: weak_left (to y ~ 4.8 m: only the plain wall in view;
+#   legacy: no failsafe), its hold, the return, and the landing
+simulation:
+  ros__parameters:
+    scenario: vision
+closed_loop_runner:
+  ros__parameters:
+    phase_names:     [settle, takeoff_hover, forward, hover_fwd, back, hover_back, right, hover_right, left, hover_left, weak_left, hover_weak, weak_return, hover_ret, approach, land, disarmed]
+    phase_durations: [5.0,    20.0,          6.0,     6.0,       6.0,  6.0,        6.0,   6.0,         6.0,  6.0,        16.0,      6.0,        16.0,        6.0,       6.0,      8.0,  4.0]
+    phase_armed:     [false,  true,          true,    true,      true, true,       true,  true,        true, true,       true,      true,       true,        true,      true,     true, false]
+    phase_z:         [-1.0,   -1.0,          -1.0,    -1.0,      -1.0, -1.0,       -1.0,  -1.0,        -1.0, -1.0,       -1.0,      -1.0,       -1.0,        -1.0,      -0.3,     0.1,  0.1]
+    phase_vx:        [0.0,    0.0,           0.3,     0.0,       -0.3, 0.0,        0.0,   0.0,         0.0,  0.0,        0.0,       0.0,        0.0,         0.0,       0.0,      0.0,  0.0]
+    phase_vy:        [0.0,    0.0,           0.0,     0.0,       0.0,  0.0,        0.3,   0.0,         -0.3, 0.0,        -0.3,      0.0,        0.3,         0.0,       0.0,      0.0,  0.0]
+    phase_yaw_rate:  [0.0,    0.0,           0.0,     0.0,       0.0,  0.0,        0.0,   0.0,         0.0,  0.0,        0.0,       0.0,        0.0,         0.0,       0.0,      0.0,  0.0]
