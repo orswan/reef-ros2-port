@@ -40,7 +40,12 @@ Modes (simulation only):
                       Replay on a ROS graph in its own domain; the bag is the only
                       /clock source and no foreign sensor streams exist (checked)
                       (RUN_DIR/reef_replay_*/).
-  closed-loop         NOT IMPLEMENTED (milestone P07)
+  closed-loop [--gui] X3 flown by REEF (P07): the ported REEF estimator AND REEF
+                      controller in the loop, the stock controller removed, a
+                      STAND-IN low-level loop (development tool, not ROSflight)
+                      on Gazebo's motor model; IDEALIZED estimator inputs.
+                      Records, scores against the P07 criteria, plots
+                      (analysis_closed_loop/).
   vision              NOT IMPLEMENTED (milestone P08)
 
 Exit: 0 completed, 1 failed, 2 NOT IMPLEMENTED / BLOCKED / invalid,
@@ -55,7 +60,6 @@ shift || true
 if [[ -z "$mode" ]]; then usage; echo; echo "missing mode (see above)"; exit 2; fi
 case "$mode" in
   help|-h|--help) usage; exit 0 ;;
-  closed-loop) not_implemented closed-loop P07 ;;
   vision) not_implemented vision P08 ;;
 
   stock)
@@ -77,6 +81,29 @@ case "$mode" in
     case "$rc" in
       0|130|143) exit "$rc" ;;
       *) exit 1 ;;   # run_x3_scenario.sh codes 1/2/3/124: the demo ran and failed
+    esac
+    ;;
+
+  closed-loop)
+    args=()
+    for a in "$@"; do
+      case "$a" in
+        --gui) args+=(--gui) ;;
+        *) echo "invalid option '$a' for 'closed-loop'"; usage; exit 2 ;;
+      esac
+    done
+    python3 "$S/setup_assets.py" --verify >/dev/null 2>&1 \
+      || { echo "BLOCKED: X3 assets missing or modified; run scripts/setup_assets.py"; exit 2; }
+    if [[ " ${args[*]:-} " == *" --gui "* ]] && ! "$S/check_display.sh" >/dev/null 2>&1; then
+      echo "BLOCKED: browser desktop not ready (scripts/check_display.sh)"; exit 2
+    fi
+    echo "SIMULATION: X3 flown by REEF (estimator + controller) through a STAND-IN low-level loop"
+    echo "(development tool, not ROSflight); IDEALIZED estimator inputs. Not hardware evidence."
+    rc=0
+    "$S/run_x3_scenario.sh" --closed-loop "${args[@]}" || rc=$?
+    case "$rc" in
+      0|130|143) exit "$rc" ;;
+      *) exit 1 ;;
     esac
     ;;
 

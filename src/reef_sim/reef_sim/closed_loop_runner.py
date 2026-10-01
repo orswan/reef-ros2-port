@@ -85,7 +85,13 @@ class ClosedLoopRunner(Node):
         stock = {t: self.count_publishers(t) for t in FORBIDDEN}
         if any(stock.values()):
             return 4, f'stock-controller command has publishers: {stock}'
+        # Discovery of subscriptions and node names can lag the publisher
+        # counts: read the graph until it is complete (bounded).
         self.graph = self.read_graph()
+        deadline = time.monotonic() + 20.0
+        while not self.graph_complete(self.graph) and time.monotonic() < deadline:
+            rclpy.spin_once(self, timeout_sec=0.2)
+            self.graph = self.read_graph()
         recorded = [t for t in self.record_topics if self.count_publishers(t) > 0]
         if recorded and not self.spin_until(lambda: all(self.count_subscribers(t) >= 1 for t in recorded), 20.0):
             return 3, 'recorder did not subscribe to ' + str([t for t in recorded if self.count_subscribers(t) < 1])
@@ -106,6 +112,14 @@ class ClosedLoopRunner(Node):
         for topic, _ in subs:
             g['controller_inputs'][topic] = pubs(topic)
         return g
+
+    @staticmethod
+    def graph_complete(g):
+        inputs = g.get('controller_inputs', {})
+        names = [n for pubs in inputs.values() for n in pubs] + g.get('motor_command_publishers', [])
+        return ('/x3/reef/xyz_estimate' in inputs and '/x3/reef/desired_state' in inputs
+                and inputs['/x3/reef/xyz_estimate'] and g.get('motor_command_publishers')
+                and not any('UNKNOWN' in n for n in names))
 
     def publish(self, ph):
         d = DesiredState()

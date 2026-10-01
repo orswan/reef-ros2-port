@@ -25,12 +25,13 @@ scripts/reef_demo.sh replay recordings/<run> [--rate R]
 scripts/reef_demo.sh estimator [--gui]
 scripts/reef_demo.sh estimator --offline recordings/<run>
 scripts/reef_demo.sh estimator --replay recordings/<run> [--rate R]
+scripts/reef_demo.sh closed-loop [--gui]
 ```
 
 Not yet implemented (each says NOT IMPLEMENTED and exits 2):
-`reef_check.sh vision|release` and `reef_demo.sh closed-loop|vision`.
-`reef_check.sh control` covers the P06 controller fidelity; its closed-loop
-part (P07) is reported as N/A.
+`reef_check.sh vision|release` and `reef_demo.sh vision`.
+`reef_check.sh control` covers the P06 controller fidelity and the P07
+closed loop (stand-in low-level loop, idealized inputs).
 `reef_check.sh faults` runs F1–F12 (ACCEPTANCE.md §5). `reef_check.sh
 estimator` and `reef_demo.sh estimator` cover the complete estimator
 (vertical and horizontal). All demo modes are **simulation only**; no mode
@@ -86,6 +87,26 @@ The full specification is in [X3_SCENARIO.md](X3_SCENARIO.md). Summary:
 | `/x3/range` | `sensor_msgs/Range` | idealized measurement derived from truth; slant range; REP 117 ±inf | `x3/range_link` | 20 Hz | sim time (the truth sample it was computed from) |
 | `/x3/cmd_vel` | `geometry_msgs/Twist` | command to the truth-fed stock controller | body FLU | 20 Hz | sim time |
 | `/x3/scenario/phase` | `std_msgs/String` | phase label (transient local) | — | per phase | recorder receive time (sim) |
+
+### REEF-controlled X3 (P07, `run_x3_scenario.sh --closed-loop`)
+
+World `x3_closed_loop.sdf` (no stock controller). Topics in addition to the
+above (no `/x3/cmd_vel`):
+
+| Topic | Type | Category | Producer → consumer |
+|---|---|---|---|
+| `/x3/reef/desired_state` | `reef_msgs/DesiredState` | setpoint (velocity mode), 50 Hz | `closed_loop_runner` → reef_control |
+| `/x3/reef/command` | `rosflight_msgs/Command` | REEF controller output (§4) | reef_control → stand-in |
+| `/x3/reef/controller_state` | `reef_msgs/DesiredState` | REEF controller internals | reef_control → recorder |
+| `/x3/reef/status` | `rosflight_msgs/Status` | armed flag | stand-in → reef_control |
+| `/x3/fc/arm` | `std_msgs/Bool` | arm/disarm, 10 Hz | `closed_loop_runner` → stand-in |
+| `/x3/fc/truth_odom` | `nav_msgs/Odometry` | TRUTH, 250 Hz (stand-in attitude only) | Gazebo → stand-in |
+| `/x3/sim/imu_noise_free` | `sensor_msgs/Imu` | simulator-internal; TRUTH body rates for the stand-in | Gazebo → imu_noise, stand-in |
+| `/x3/fc/motor_speed` | `actuator_msgs/Actuators` | motor speeds [rad/s], bridged to `/X3/gazebo/command/motor_speed` | stand-in → MulticopterMotorModel |
+| `/x3/fc/debug`, `/x3/fc/label` | `std_msgs/Float64MultiArray`, `std_msgs/String` | stand-in trace and label (development tool) | stand-in → recorder |
+
+The REEF estimator topics are those of §3 (namespace `/x3/reef`). Test hook:
+`REEF_X3_RANGE_BIAS` adds a bias to the idealized range (causality check).
 
 **Freshness:** no staleness detection is implemented on these topics. Consumers
 must compare header stamps with the sim clock themselves. For REEF inputs,

@@ -167,7 +167,7 @@ candidates for a later, separately approved correction list (none approved).
   armed flag) to CSV; it has no hardware output, and a `hardware` parameter
   is refused (NOT IMPLEMENTED, P10).
 
-## 7. Low-level simulation: stand-in design (implementation in P07)
+## 7. Low-level simulation: the stand-in (built in P07)
 
 USER decision: a simplified stand-in, not ROSflight SIL.
 
@@ -177,24 +177,26 @@ visualizer; no Gazebo Harmonic integration is present (the modern
 `rosflight_viz_gazebo` directory is absent, and CMake skips it). Porting SIL
 firmware plus a Harmonic plugin would be substantial work; it is out of scope.
 
-**`reef_fc_standin`: DEVELOPMENT TOOL, not ROSflight, not flight-representative.**
+**`reef_fc_standin` (package `src/reef_fc_standin`): DEVELOPMENT TOOL, not
+ROSflight, not flight-representative.** As built [V]:
 
-| Aspect | Design |
+| Aspect | As built |
 |---|---|
-| Input | `command` (`rosflight_msgs/Command`, mode 2 only; other modes rejected and counted), an `armed` flag (service or parameter in simulation) |
-| Command mux | firmware semantics from `b77c3854`: offboard channels inactive after 100 ms without a command; ignored or inactive channels take the "RC" value, which in simulation is neutral (roll 0, pitch 0, yaw rate 0, throttle 0); unarmed → motors stopped. Failsafe is not modelled |
-| Attitude loop | roll/pitch angle PID and yaw-rate PID with the firmware's structure (angle P, D on body rate; rate P for yaw), gains in a versioned YAML tuned for the X3 in separate commits; attitude and body rates from **truth** (idealized, labelled, consistent with the estimator's idealized attitude input) |
-| Mixer | quad-X rows from `mixer.h`, thrust F scaled by a documented maximum thrust; motor order and spin directions mapped explicitly to the X3 model's `MulticopterMotorModel` indices |
-| Actuators | Gazebo Harmonic `MulticopterMotorModel` via its `gz.msgs.Actuators` motor-speed topic (ros_gz bridge), or a small gz system plugin if bridge latency is too high (decided in P07 by measurement) |
-| Physics | **one owner: Gazebo**. The stock `MulticopterVelocityControl` system is removed from the world in REEF-controlled runs |
-| Rate and timing | driven by the simulated IMU stamps (250 Hz), sim time; latency from estimate stamp to motor command is recorded |
-| Labels | every topic, manifest, and plot says "stand-in low-level controller (development tool)"; results are not ROSflight or hardware evidence |
+| Input | `/x3/reef/command` (`rosflight_msgs/Command`, mode 2; other modes give neutral values), `/x3/fc/arm` (`std_msgs/Bool`, from the scenario) |
+| Command mux | `reef_control::FirmwareMux` (firmware `b77c3854` semantics): channels inactive 100 ms after the last command; ignored or inactive channels take the neutral "RC" value (roll 0, pitch 0, yaw rate 0, **throttle 0**: the vehicle descends or falls, there is no RC and no failsafe); disarmed → motors stopped |
+| Attitude loop | roll/pitch: τ = I·(k_p (θ_c − θ) − k_d ω) (angle P, D on the body rate, the firmware's structure); yaw: τ_z = I_zz k_r (r_c − r). k_p = 64 s⁻², k_d = 12.8 s⁻¹ (8 rad/s, damping 0.8), k_r = 1 s⁻¹, chosen before the first run (`config/x3_standin.yaml`). No integrators |
+| Attitude source | **truth**: attitude from a 250 Hz truth odometry (`/x3/fc/truth_odom`), body rates from Gazebo's noise-free gyro; one step per gyro sample (250 Hz, sim time) |
+| Thrust | **linear**: T = F · T_max, T_max = 4 k ω_max² = 21.9 N (hover F ≈ 0.68). Assumption: a thrust-linearized motor; ROSflight maps F to PWM, and real thrust is not linear in PWM |
+| Allocation | exact inverse of the X3's rotor geometry (FRD): T = Σf, τ_x = Σ −y f, τ_y = Σ x f, τ_z = Σ dir·m·f; each f clamped to [0, k ω_max²]; ω = √(f/k). The design's quad-X mixer rows were replaced by the exact geometry (the X3's arms are not symmetric: 0.20 and 0.22 m) |
+| Actuators | `actuator_msgs/Actuators` on `/x3/fc/motor_speed` → ros_gz_bridge → `gz.msgs.Actuators` on `/X3/gazebo/command/motor_speed` (the four `MulticopterMotorModel` systems). Motor mapping verified in Gazebo before closing the loop (roll, pitch, yaw signs) |
+| Physics | one owner: Gazebo. `worlds/x3_closed_loop.sdf` = `x3_flight.sdf` without `MulticopterVelocityControl` (test `test_closed_loop_world.py`) |
+| Outputs | `/x3/reef/status` (armed; read by reef_control), `/x3/fc/debug` (per step: mux selection, attitude, torques, motor speeds, saturation, estimate age, timeouts), `/x3/fc/label` |
+| Labels | node log, label topic, run manifest, analysis report and plots say "stand-in low-level loop (development tool)" |
 
 What the stand-in does not give: firmware estimator behaviour, RC override,
-failsafe, PWM/ESC dynamics, MAVLink latency, firmware parameter semantics.
+failsafe, PWM/ESC dynamics, MAVLink latency, firmware parameter semantics,
+integrators in the attitude loop.
 
-P07 work list: implement the stand-in and the X3 world variant without the
-velocity controller; motor mapping test; `reef_demo.sh closed-loop`;
-`reef_check.sh control` closed-loop cases (altitude first, then velocity and
-yaw) with the limits fixed in ACCEPTANCE before scoring; causality checks
-(perturbing the estimate changes the command path).
+Closed-loop runs: `scripts/run_x3_scenario.sh --closed-loop`
+(`reef_demo.sh closed-loop`, `reef_check.sh control`); results in
+[reviews/P07.md](reviews/P07.md).

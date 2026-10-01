@@ -76,8 +76,12 @@ Targets (simulation only; nothing here talks to hardware):
                                 streams, independent model, K1-K12
                                 characterizations, parameter cases, negative
                                 control, plus a stream from an own X3 + REEF run;
-                                dry-run sink in the tests. Closed loop (P07):
-                                NOT IMPLEMENTED, reported N/A (about 8 min)
+                                dry-run sink in the tests. P07 closed loop: REEF
+                                estimator + controller fly the X3 through a
+                                stand-in low-level loop (development tool) on
+                                idealized inputs; nominal run scored against the
+                                P07 criteria and a causality run with a range
+                                bias (about 15 min)
   vision                        NOT IMPLEMENTED (milestone P08)
   release                       NOT IMPLEMENTED (milestone P09)
 
@@ -336,9 +340,20 @@ PY
       bash -c 'source "$1/install/setup.bash" && exec python3 "$2" --port "$1/install/reef_control/lib/reef_control/reef_control_event_replay" --stream "$3/reef_offline/estimates.csv"' \
       _ "$tree" "$C/check_control.py" "$run"
     grep -E '^(PASS|FAIL) \[(K|params|negative|cfg)\]|^(PASS|FAIL): ' "$logdir/control.log" | sed 's/^/     /' || true
-    results+=("N/A|closed loop with the stand-in low-level loop|NOT IMPLEMENTED (P07)")
-    sim_notes+=("fixture time; one estimate stream from the run in ${run#"$REEF_ROOT"/}")
-    artifacts+=("$REEF_ROOT/build/baseline/control/check/results.json" "$run/reef_offline/estimates.csv")
+    # P07: REEF estimator + controller in the loop, stand-in low-level loop (development tool).
+    cl="$logdir/closed_loop_nominal"
+    run_step "closed loop: nominal run, P07 criteria" 0 "$logdir/closed_loop.log" \
+      env REEF_X3_OUT="$cl" "$S/run_x3_scenario.sh" --closed-loop
+    grep -E '^(PASS|FAIL) ' "$logdir/closed_loop.log" | sed 's/^/     /' || true
+    run_step "closed loop: causality run (+0.30 m range bias)" 0 "$logdir/closed_loop_bias.log" \
+      env REEF_X3_OUT="$logdir/closed_loop_bias" REEF_X3_RANGE_BIAS=0.30 REEF_X3_NOMINAL="$cl" \
+      "$S/run_x3_scenario.sh" --closed-loop
+    grep -E '^(PASS|FAIL) causality' "$logdir/closed_loop_bias.log" | sed 's/^/     /' || true
+    configs+=("$REEF_ROOT/src/reef_sim/config/x3_closed_loop.yaml" "$REEF_ROOT/src/reef_control/config/reef_control_x3_sim.yaml"
+              "$REEF_ROOT/src/reef_fc_standin/config/x3_standin.yaml" "$REEF_ROOT/src/reef_sim/worlds/x3_closed_loop.sdf")
+    sim_notes+=("fixture time; estimate stream from ${run#"$REEF_ROOT"/}; closed-loop runs in sim time (stand-in low-level loop, idealized inputs)")
+    artifacts+=("$REEF_ROOT/build/baseline/control/check/results.json" "$run/reef_offline/estimates.csv"
+                "$cl/analysis_closed_loop" "$logdir/closed_loop_bias/analysis_closed_loop")
     ;;
 
   sim-data)

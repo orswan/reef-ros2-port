@@ -139,6 +139,12 @@ def analyze(run, nominal=None):
             f'max tilt {tilt:.3f} rad, min height {hmin:.3f} m, finite {finite}, {result["status"]}',
             'ACCEPTANCE P07 stability')
 
+    # Altitude steps and holds are not judged in the causality run: its range
+    # is deliberately wrong, so the truth height is meant to miss the setpoint.
+    bias = params.get('range_sensor', {}).get('ros__parameters', {}).get('bias', 0.0)
+    judge_altitude = not bias
+    metrics['altitude_judged'] = judge_altitude
+
     # Altitude steps.
     metrics['steps'] = {}
     for name, label in STEPS:
@@ -155,7 +161,8 @@ def analyze(run, nominal=None):
         first = np.nonzero(m & (np.abs(tr['h'] - target) <= LIM['band']))[0]
         metrics['steps'][name] = dict(target=target, overshoot=over, in_band_from_15s=in_band,
                                       first_in_band_s=float(tr['t'][first[0]] - ph['t_start']) if len(first) else None)
-        chk.add(f'altitude step {label}: overshoot <= 0.4 m, in +-0.15 m from 15 s to phase end',
+        if judge_altitude:
+            chk.add(f'altitude step {label}: overshoot <= 0.4 m, in +-0.15 m from 15 s to phase end',
                 over <= LIM['overshoot'] and in_band, f'overshoot {over:.3f} m, in band {in_band}, '
                 f"first in band after {metrics['steps'][name]['first_in_band_s']} s", 'ACCEPTANCE P07 altitude step')
 
@@ -177,7 +184,8 @@ def analyze(run, nominal=None):
         if name in HOVERS:
             e = tr['h'][m] + ph['z']
             metrics['hold'][name] = dict(rmse=rmse(e), mean_error=float(np.mean(e)))
-            chk.add(f'altitude hold {name} (last 4 s): RMSE <= 0.10 m', rmse(e) <= LIM['hold_rmse'],
+            if judge_altitude:
+                chk.add(f'altitude hold {name} (last 4 s): RMSE <= 0.10 m', rmse(e) <= LIM['hold_rmse'],
                     f'RMSE {rmse(e):.3f} m, mean error {np.mean(e):+.3f} m', 'ACCEPTANCE P07 altitude hold')
     ph = phases['yaw']
     m = window(tr['t'], ph['t_end'] - 3.0, ph['t_end'])
@@ -210,8 +218,10 @@ def analyze(run, nominal=None):
             f"p50 {metrics['latency']['age_p50']}, p99 {p99:.4f} s, max {metrics['latency']['age_max']}; "
             f'offboard timeouts {new_timeouts}', 'ACCEPTANCE P07 staleness and latency')
 
-    bias = params.get('range_sensor', {}).get('ros__parameters', {}).get('bias', 0.0)
     metrics['range_bias'] = bias
+    if bias and nominal is None:
+        chk.add('causality: a biased run needs the nominal run to compare with', False,
+                f'range bias {bias} m but no --nominal run', 'ACCEPTANCE P07 causality')
     if nominal is not None:
         ph = phases['takeoff_hover']
         mine = float(np.mean(tr['h'][window(tr['t'], ph['t_end'] - 4, ph['t_end'])]))
@@ -277,8 +287,9 @@ def plots(tr, data, result, phases, out):
             a.axvline(p['t_start'] - t0, color='0.85', lw=0.8)
         a.legend(loc='upper right', fontsize=7)
         a.grid(alpha=0.3)
-    fig.suptitle(LABEL, fontsize=8)
-    fig.tight_layout()
+    import textwrap
+    fig.suptitle('\n'.join(textwrap.wrap(LABEL, 130)), fontsize=8)
+    fig.tight_layout(rect=(0, 0, 1, 0.97))
     fig.savefig(out / 'closed_loop.png', dpi=110)
     plt.close(fig)
 
@@ -299,6 +310,9 @@ def main(argv=None):
         print(f'FAIL cannot analyze {run}: {e!r}')
         return 2
     lines = [LABEL, '']
+    if not metrics.get('altitude_judged', True):
+        lines.append(f"NOTE causality run (range bias {metrics['range_bias']} m): altitude steps and holds "
+                     'recorded in results.json, not judged')
     for i in chk.items:
         lines.append(f"{'PASS' if i['ok'] else 'FAIL'} {i['name']}: {i['detail']}  [{i['criterion']}]")
     lines.append('ANALYSIS PASSED' if chk.ok else 'ANALYSIS FAILED')

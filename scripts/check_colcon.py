@@ -31,12 +31,14 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 import colcon_tree  # noqa: E402
 
-EXPECTED = {'reef_msgs', 'reef_estimator', 'reef_control', 'reef_sim', 'reef_x3_adapter', 'rosflight_msgs'}
+EXPECTED = {'reef_msgs', 'reef_estimator', 'reef_control', 'reef_fc_standin', 'reef_sim', 'reef_x3_adapter',
+            'rosflight_msgs'}
 # package -> (minimum test cases, required result-file kinds)
 MINIMUM = {
     'reef_msgs': (49, {'gtest', 'xunit'}),
     'reef_estimator': (66, {'gtest', 'xunit'}),
     'reef_control': (20, {'gtest', 'xunit'}),
+    'reef_fc_standin': (5, {'gtest'}),
     'reef_sim': (15, {'pytest'}),
     'reef_x3_adapter': (2, {'gtest'}),
 }
