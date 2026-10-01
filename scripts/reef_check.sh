@@ -332,8 +332,10 @@ PY
     grep -E '^reef_control +files=' "$logdir/colcon.log" | sed 's/^/     /' || true
     run="$logdir/x3_reef"
     # shellcheck disable=SC2016  # expanded by the inner shell
+    # Only the estimate stream is needed here; the estimator's plausibility
+    # (including its timing limits) is judged by `reef_check.sh estimator`.
     run_step "X3 + REEF run and offline replay (estimate stream)" 0 "$logdir/sim.log" \
-      bash -c 'REEF_X3_OUT="$2" "$3/run_x3_scenario.sh" --estimator && source "$1/install/setup.bash" && ros2 run reef_sim x3_reef_offline "$2"' \
+      bash -c 'REEF_X3_OUT="$2" "$3/run_x3_scenario.sh" --estimator --no-analysis && source "$1/install/setup.bash" && ros2 run reef_sim x3_reef_offline "$2"' \
       _ "$tree" "$run" "$S"
     # shellcheck disable=SC2016  # expanded by the inner shell
     run_step "controller: original vs port, model, characterizations" 0 "$logdir/control.log" \

@@ -359,7 +359,9 @@ def main():
     g = run([sys.executable, HERE / 'fixtures.py', fixdir, '--lock', HERE / 'fixtures.lock.json'])
     record('fixtures', 'regenerated fixtures match the lock', g.returncode == 0, g.stdout.strip())
     streams = list(STREAMS)
-    if a.stream:
+    if a.stream and not Path(a.stream).is_file():
+        record('fixtures', 'recorded estimate stream', False, f'{a.stream} not found')
+    elif a.stream:
         name, n = stream_from_csv(a.stream, fixdir)
         streams.append(name)
         record('fixtures', 'recorded estimate stream', True, f'{a.stream}: {n} estimates')
