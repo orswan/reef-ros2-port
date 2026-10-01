@@ -524,12 +524,44 @@ about 3 s while the stand-in's slow yaw loop is still turning, and the
 bearing of a target inside the dead zone swings, so "within 0.2 rad by 6 s"
 was the wrong moment.
 
-### `vision` (P08)
+### `vision` (P08): RGB-D velocity — fixed 2026-10-01, before any P08 code
 
-Rendered RGB and depth images are processed; truth-derived velocity is not
-acceptance evidence. Weak-texture, dropout, and delay cases must show
-documented health and recovery. Wall-time processing rate is reported
-separately from sim-time correctness.
+USER decisions (2026-10-01): **odometry front-end = a compact OpenCV
+replacement** (option B), labelled a replacement everywhere (it is not a
+port of `demo_rgbd`, which needs ROS 1, PCL, and iSAM and cannot be
+reference-tested here); **`rgbd_to_velocity` gets the full P06 treatment**
+(history import, unmodified original in a harness, bit-exact parity,
+independent model, legacy quirks kept and asserted); camera profile
+**320×240 at 15 Hz** (fallback **160×120 at 10 Hz**, documented, used only if
+a container cannot hold real time); VRPN mocap and joystick teleop are
+**Unsupported/Deferred** in the capability matrix; no Dockerfile change.
+Validity limits as P07 (stand-in low-level loop, truth attitude to REEF).
+**Truth-derived velocity is not acceptance evidence** in this target: in
+vision runs the truth-based velocity observations are disabled and the
+estimator's only horizontal velocity input is the vision chain.
+
+Chain: Gazebo `rgbd_camera` on the X3 (forward-looking, legacy mounting:
+about 0.14 m ahead of the body origin) → ros_gz bridge (RGB, depth,
+camera info) → **replacement RGB-D odometry** (OpenCV 4: corner tracking,
+depth lookup, robust pose; output `cam_to_init` in DEMO's camera
+convention) → **`rgbd_to_velocity`** (ported) → `reef_msgs/DeltaToVel`
+→ REEF estimator (`enable_rgbd`, `enable_measurements` true; mocap
+velocity off).
+
+| Area | Judged |
+|---|---|
+| Camera interface | camera info consistent with the SDF (fx = fy = w / (2 tan(fov/2)), principal point at the image centre within 0.5 px, no distortion); the ROS optical frame verified by projecting a known world target into the image (error ≤ 1 px); depth in metres; invalid pixels (outside the clip range: ±inf or NaN as delivered) counted and never used; image stamps = the render sim time; the camera extrinsics in the world equal the converter's `body_to_camera` parameters |
+| `rgbd_to_velocity` port | the unmodified original (pinned, checksummed) in a harness; port output **bit-identical** on locked fixtures, every output field; independent step-wise model; negative control (a mutated original must fail); legacy quirks asserted as characterizations |
+| Replacement odometry, open loop (stock truth-fed controller flying a velocity profile in the textured scene; vision not in the loop) | vision velocity vs truth body-level velocity, steady segments: RMSE ≤ 0.10 m/s per axis and |bias| ≤ 0.03 m/s; output rate ≥ 10 Hz (sim); sign/frame tests (forward motion → +x, rightward → +y); measured noise vs the configured covariance reported (noise, frame, and timing assessment of the replacement) |
+| REEF with vision, open loop | REEF horizontal velocity RMSE ≤ 0.10 m/s per axis against truth (the P05 limit) on vision input only; outputs finite; gate decisions and fusion counts reported; data path from the ROS graph: the estimator's horizontal velocity input comes only from `rgbd_to_velocity` |
+| Weak texture / depth loss (scripted segments) | the odometry's health shows the loss within 0.5 s (sim) and the chain publishes no velocity while lost (never truth); REEF's horizontal variance grows; after the segment, velocity output resumes within 1 s and REEF's error is back within 0.10 m/s within 3 s |
+| Delayed (200 ms) and missing (1 s) frames (labelled test hooks, off by default) | outputs finite; no vision velocity error above 0.3 m/s; latency and rate reported |
+| Closed loop (REEF controller and the P07 stand-in; vision is the only horizontal velocity input) | velocity-leg tracking RMSE ≤ 0.15 m/s per axis in steady segments; stability as P07; response to a weak-texture segment recorded as a characterization (legacy: no failsafe) |
+| Performance | wall-time processing rate and CPU of the odometry, image rate, and real-time factor per profile, reported separately from sim-time correctness |
+| Capability matrix | every advertised sensing/command mode marked: supported in simulation / supported with idealized input / Unsupported-Deferred (VRPN mocap, joystick teleop: USER) |
+
+Wrappers: `reef_check.sh vision`, `reef_demo.sh vision [--gui]`. Official
+results headless on an idle machine (USER, P07).
 
 ### `release` (P09)
 
