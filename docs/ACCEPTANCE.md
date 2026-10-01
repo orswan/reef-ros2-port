@@ -518,7 +518,7 @@ stays bit-exact): `velocity_loss` — the 6-state filter's propagation couples
 velocity and attitude bias, so in maneuvering flight σ dips slightly at
 some steps (496 of 2449, at most 0.010 m/s) while growing 34× overall;
 `estimator_reset` — the first published estimate already includes a range
-update (0.536 m between z_x0 0.25 m and the true 0.987 m), so "pinned at
+update (0.536 m between z_x0 0.25 m and the true 0.983 m), so "pinned at
 z_x0" never appears in the output; K10 — the vehicle reaches the target in
 about 3 s while the stand-in's slow yaw loop is still turning, and the
 bearing of a target inside the dead zone swings, so "within 0.2 rad by 6 s"

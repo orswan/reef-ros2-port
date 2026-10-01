@@ -121,7 +121,7 @@ Other P07b faults: the estimator's `~/reset` service and a Gazebo world
 pause (`gz service .../control`). The controller is respawned by the launch
 only when the scenario sets `control_respawn`.
 
-**Freshness:** no staleness detection is implemented on these topics. Consumers
+**Freshness:** no staleness detection is implemented on these topics, with one exception in REEF-controlled runs: the stand-in applies the firmware's 100 ms offboard timeout to `/x3/reef/command` (CONTROL_CHAIN.md §7). Consumers
 must compare header stamps with the sim clock themselves. For REEF inputs,
 see §3.4 (timestamps and freshness) and §3.7 (health).
 
@@ -499,5 +499,7 @@ armed state, and motor state. It drives nothing. `hardware:=true` exits 2
 | `rosflight_msgs/Command` `x, y, z, F` (44e5f37e) | v2.0.1 `u[0..3]`, same mode and ignore values |
 | command header left zero | header stamp = estimate stamp (metadata only) |
 | `rc_raw` subscribed, callback empty | not subscribed |
+| `max_roll`, `max_pitch`, `max_yaw_rate`: any value (ROS_ASSERT only on presence) | must be finite and ≥ 0 (startup error) |
+| integer `xIntegrator`/`uIntegrator` silently ignored by roscpp's boolean `getParam` (cfg default true) | rejected (startup error naming the parameter); use true/false |
 | global `face_target`, `fly_fixed_wing` | node parameters (effective values carried over) |
 

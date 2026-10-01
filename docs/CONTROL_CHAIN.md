@@ -149,7 +149,10 @@ candidates for a later, separately approved correction list (none approved).
   changes (dynamic_reconfigure) map to `on_set_parameters`, applying
   `setGains`/`setMinMax` exactly as `gainsCallback` (no integrator reset,
   K11). `max_roll`, `max_pitch`, `max_yaw_rate` are required (ROS_ASSERT in
-  the original). K10: the port initializes θ to 0; the reference harness
+  the original) and must be finite and ≥ 0 (a plumbing deviation: the
+  original accepted any value); integer values for `xIntegrator` /
+  `uIntegrator` are rejected (roscpp's boolean `getParam` ignored them and
+  the cfg default true applied). K10: the port initializes θ to 0; the reference harness
   constructs the original object in zeroed storage so both agree (adaptation
   documented in `baseline/README.md`).
 - Command message: the ROS 2 type `rosflight_msgs/Command` (vendored 2.0)

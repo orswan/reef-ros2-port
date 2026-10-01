@@ -16,7 +16,7 @@ project by the implementer, with logs or manifests in the repository tree.
 
 | Branch | Head | Contents | Merged to `main`? |
 |---|---|---|---|
-| `main` | see `git log -1 main` | starter, checker fixes, dev container, P00–P05, R1 fixes | — |
+| `main` | see `git log -1 main` | starter, checker fixes, dev container, P00–P07, P07b, R1 fixes, R2 documentation corrections | — |
 | `feature/x3-sim-dataset`, `p00-status-and-wrappers` | merged | P01, P00 | yes (fast-forward, 2026-09-30) |
 | `p02-baseline` | `04c9b19` | P02: reference harness, fixtures, independent check, baseline decision, `reef_check.sh baseline` | yes (fast-forward, 2026-09-30) |
 | `p03-msgs-interfaces` | `65bd779` | P03: `reef_msgs`, vendored `rosflight_msgs`, parameter contract, interface contract | yes (fast-forward, 2026-09-30; USER: `interfaces` passed in the dev container) |
@@ -307,8 +307,10 @@ Nothing was run in `reef_ros2_dev` by the implementer (H10).
 | pytest `test_adapter.py` (mocap pose) | 0 | 9 cases |
 | `shellcheck -x` on `run_x3_scenario.sh`, `reef_check.sh`, `env.sh` | 0 | no findings |
 
-Not run: GUI demos (informational, USER); nothing in `reef_ros2_dev` by the
-implementer.
+Not run: `reef_check.sh estimator`, `baseline`, `interfaces` (the IMU
+adapter changed only by a test hook that is off by default; the estimator
+is unchanged); GUI demos (informational, USER); nothing in `reef_ros2_dev`
+by the implementer (H11).
 
 ## 5k. R2 review (SELF-REVIEW) and documentation corrections (2026-10-01)
 
@@ -397,6 +399,16 @@ passed: P06 106/106, nominal closed loop, causality. Findings record:
     10 s); without range, altitude error 0.27 m in 10 s; `face_target` makes
     the heading wander inside the dead zone (K10). Position mode uses an
     IDEALIZED (truth) mocap pose.
+28. **R2 follow-ups (code, open)**: compare `node_id` in the P06 parity;
+    legacy helper vectors for `get_yaw`; assert K11's "differentiators never
+    reset"; report the K10 heading error at 6 s again; report the three
+    always-pass characterization items as REPORTED instead of counting them
+    as checks; make "fault injected" require the hook's own subscription
+    (not the recorder's); throw on int32 duration overflow. R2 verdict: P10
+    must re-verify firmware `u[3]`, `MIN_THROTTLE`/RC override, failsafe
+    (0.3), the nonlinear throttle map with `wI`, the real latency budget,
+    K4 with wall-clock stamps, and gains on the vehicle; R3 is required
+    before any flight.
 25. The closed-loop controller gains are `reef_control_x3_sim.yaml` (the
     shipped quad gains with `dI` = 0, explained in that file and in
     reviews/P07.md); with the shipped gains the first hover fails the
@@ -427,6 +439,10 @@ passed: P06 106/106, nominal closed loop, causality. Findings record:
   disarms. A GUI run under other load failed only the latency check (p99
   24 ms; analysed: CPU contention). USER: GUI runs are informational,
   headless runs are official; no latency rework. Merged.
+- **H11 (P07b, dev container):** `scripts/reef_check.sh faults` (expect
+  PASS: F1–F12 36/36 and 11 closed-loop scenarios, about 30 min, headless,
+  idle machine). Not yet run in the dev container (R2 relied on the
+  implementer's run).
 - **H3:** open the three plots and `manifest.yaml` of a recent
   `recordings/x3_*` run, and check them against
   [X3_SCENARIO.md](X3_SCENARIO.md). (`feature/x3-sim-dataset` is already

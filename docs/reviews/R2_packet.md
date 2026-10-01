@@ -94,6 +94,10 @@ Each run writes `recordings/<run>/analysis_closed_loop/report.txt` and
 
 ## 7. Failed, skipped, and known-limited items
 
+*Correction after R2 (2026-10-01): the latency item below understated the
+problem. A headless run (`p07_cl_nominal_b`) also failed at 24 ms; the
+precise distribution is in ACCEPTANCE §5 (P07 note) and STATUS item 24.*
+
 - Latency margin: estimate age at the motor command p99 12–24 ms (limit
   20 ms) in headless runs; GUI runs on a loaded host fail it (informational
   by USER decision; no rework). STATUS §6 item 24.
