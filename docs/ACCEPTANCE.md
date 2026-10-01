@@ -398,8 +398,14 @@ ROSflight, hardware, or flight evidence.
 Scenario `closed_loop` (sim time, 250 Hz IMU): disarmed settle 5 s; arm;
 velocity mode with zero velocity and altitude setpoint z = −1.0 m (REEF
 NED: range sensor 1.0 m above ground) for 20 s (takeoff + hover); forward
-0.3 m/s 6 s; hover 6 s; left 0.3 m/s 6 s; hover 6 s; yaw rate 0.3 rad/s 6 s;
-hover 6 s; climb to z = −1.5 m 20 s; descend to z = −0.6 m 20 s. Gains: the
+0.3 m/s 6 s; hover 6 s; left 0.3 m/s 6 s; hover 6 s; **back** (0.3 m/s
+backward and 0.3 m/s right together, undoing both legs) 6 s; hover 6 s; yaw
+rate 0.3 rad/s 6 s; hover 6 s; climb to z = −1.5 m 20 s; descend to
+z = −0.6 m 20 s; **approach** z = −0.3 m 6 s; **land** z = +0.1 m (below the
+ground, so the controller keeps descending) 8 s; **disarmed** 4 s (the
+stand-in stops the motors). The return legs come before the yaw phase
+because velocity commands are relative to the heading. (Amended 2026-10-01,
+see the note below the table.) Gains: the
 shipped quad gains (`config/reef_control_quad.yaml`) unless replaced in a
 separate, explained configuration commit (controller math never changes);
 stand-in gains from CONTROL_CHAIN.md §7, chosen before the first run.
@@ -409,20 +415,33 @@ stand-in gains from CONTROL_CHAIN.md §7, chosen before the first run.
 | Architecture | the world has no `MulticopterVelocityControl` and nothing publishes `/x3/cmd_vel`; the motor command topic has exactly one publisher (the stand-in); one physics engine (Gazebo); every topic, manifest and plot labels the stand-in a development tool |
 | Data path | truth is used only by the documented idealized inputs (REEF attitude, range, velocity observations; stand-in attitude and rates) and for scoring; the controller reads only REEF estimates and the setpoint (checked from the ROS graph: its subscriptions and their publishers) |
 | Takeoff | REEF reports takeoff and the vehicle leaves the ground within 15 s of arming |
-| Stability (every flight phase after takeoff) | finite outputs; \|roll\|, \|pitch\| ≤ 0.35 rad (truth); range-sensor height ≥ 0.25 m; no flip; the run completes |
+| Stability (from takeoff to the end of `descend`; tilt and finiteness also through `approach` and `land`) | finite outputs; \|roll\|, \|pitch\| ≤ 0.35 rad (truth); range-sensor height ≥ 0.25 m; no flip; the run completes |
 | Altitude step response (takeoff to 1.0 m; 1.0 → 1.5 m; 1.5 → 0.6 m) | overshoot ≤ 0.4 m; within ±0.15 m of the setpoint by 15 s after the step and staying there to the end of the phase |
 | Altitude hold (last 4 s of each hover phase) | RMSE of truth sensor height vs setpoint ≤ 0.10 m |
-| Horizontal velocity (last 3 s of each velocity phase; last 4 s of hovers) | RMSE of truth body-level velocity vs command ≤ 0.15 m/s per axis |
+| Horizontal velocity (last 3 s of each velocity phase, including `back`; last 4 s of hovers) | RMSE of truth body-level velocity vs command ≤ 0.15 m/s per axis |
 | Yaw rate (last 3 s of the yaw phase) | \|mean truth yaw rate − 0.3\| ≤ 0.1 rad/s |
-| Saturation | throttle command at 0 or 1 for ≤ 5 % of samples after takeoff; motor-speed clamping in ≤ 5 % of stand-in steps after takeoff |
+| Saturation (from takeoff to the end of `descend`) | throttle command at 0 or 1 for ≤ 5 % of samples; motor-speed clamping in ≤ 5 % of stand-in steps |
 | Staleness and latency | age of the estimate at the motor command (ROS clock, which is sim time, at the stand-in step minus the command's estimate stamp), p99 ≤ 20 ms; no offboard timeout after arming |
 | Causality | a second run with a +0.30 m bias on the range measurement (test hook, labelled) holds the truth height lower by 0.30 ± 0.10 m in the first hover than the nominal run: the REEF estimate, not truth, closes the altitude loop |
+| End state (last 1 s of `disarmed`) | the stand-in is disarmed and every motor-speed command is 0; truth sensor height ≤ 0.05 m, speed ≤ 0.05 m/s, tilt ≤ 0.1 rad: the vehicle rests on the ground before anything shuts down |
+| Return and landing | reported, not judged: horizontal distance from the takeoff point at the end of `hover_back` and at the end; touchdown vertical speed; time from the start of `land` to touchdown |
 | Reproducibility | reported, not judged: a second nominal run (same seeds) and the spread of every metric (Gazebo and ROS timing are not deterministic) |
 | Comparison | the stock (truth-fed) run and the REEF-controlled run are both recorded with manifests and plots; differences are reported, not judged |
 
+Note (2026-10-01, USER-approved amendment after the GUI demo): when the
+scenario ended, every ROS node stopped while the Gazebo server ran on for
+5 s or more; the motor model keeps the last commanded speeds, so the
+uncontrolled vehicle flew away (no recorded metric was affected; scoring
+ends with the last phase). The scenario now returns, lands, and disarms
+before it ends, and the end state is judged. The stand-in also commands
+zero motor speeds when it shuts down. Existing limits are unchanged; the
+stability and saturation windows end with `descend` because landing
+legitimately goes below 0.25 m and drives the throttle to 0.
+
 Not covered in P07 (later, with their own criteria): RC override, failsafe,
-estimate interruption and restart, landing, position mode (needs a mocap
-input; the controller supports it), wind, sensor faults.
+estimate interruption and restart, landing quality (only reported),
+position mode (needs a mocap input; the controller supports it), wind,
+sensor faults.
 
 ### `vision` (P08)
 
