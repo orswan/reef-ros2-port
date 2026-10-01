@@ -118,6 +118,21 @@ with this file, this file wins.
 - Scripts that build C++ packages use the per-environment tree
   (`scripts/colcon_tree.py`); the shared `build/` belongs to manual builds.
 
+## Controller port rules (P06, docs/CONTROL_CHAIN.md, INTERFACES.md §4)
+
+- USER (2026-09-30): the `reef_control` port is strictly faithful and
+  bit-exact to `12237b76`; no robustness changes or algorithm improvements.
+  Legacy behaviour K1–K13 stays and is asserted; changing it needs an
+  explicit decision, its own commit, and tests (none approved).
+- After any change to `src/reef_control`, run `reef_check.sh control`
+  (original in `baseline/control` vs port, core and node, independent model).
+  Never patch the pinned sources; harness adaptations go in
+  `baseline/README.md` (C1–C3).
+- The low-level loop for simulation is a labelled stand-in (development
+  tool, CONTROL_CHAIN.md §7), never described as ROSflight or hardware
+  evidence. No hardware output exists; the dry-run sink refuses
+  `hardware:=true` until P10.
+
 ## Simulation data rules (`src/reef_sim`, docs/X3_SCENARIO.md)
 
 - Keep **truth** (`/x3/truth/...`) separate from **measurements** (`/x3/imu`,

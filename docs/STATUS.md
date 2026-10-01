@@ -1,8 +1,9 @@
 # REEF ROS 2: project status
 
-Updated 2026-09-30 (R1 decisions applied). `main` contains P00–P05, all
-merged by fast-forward at the user's request (P05 at `49f7073`), plus the R1
-fixes from branch `r1-fixes` (§5g) once merged. Section 3 reconciles
+Updated 2026-10-01 (P06 complete on its branch). `main` = `1ee999b`:
+P00–P05 and the R1 fixes, all merged by fast-forward at the user's request.
+P06 (controller port, dry-run sink, stand-in design) is on branch
+`p06-controller` (§5h). Section 3 reconciles
 [docs/handoff/](handoff/) (conversation-derived history) with the repository
 and the recorded evidence.
 
@@ -21,7 +22,8 @@ project by the implementer, with logs or manifests in the repository tree.
 | `p03-msgs-interfaces` | `65bd779` | P03: `reef_msgs`, vendored `rosflight_msgs`, parameter contract, interface contract | yes (fast-forward, 2026-09-30; USER: `interfaces` passed in the dev container) |
 | `p04-vertical-estimator` | `b291ca3` | P04: vertical estimator | yes (fast-forward, 2026-09-30; USER: `estimator` passed in the dev container) |
 | `p05-horizontal-estimator` | `49f7073` | P05: combined estimator, opt-in C1, horizontal fixtures, `baseline`/`estimator`/`faults` targets, R1 packet | yes (fast-forward, 2026-09-30; USER: checks behaved as expected in the dev container) |
-| `r1-fixes` | this work | R1 decisions: finding 1 (publish point), C1 default, published-message parity, doc fixes | yes, at the user's request (fast-forward) |
+| `r1-fixes` | `1ee999b` | R1 decisions: finding 1 (publish point), C1 default, published-message parity, doc fixes | yes (fast-forward, 2026-09-30; USER: `baseline`, `faults` passed in the dev container) |
+| `p06-controller` | this work | P06: control-chain spec, `reef_control` port (history imported), reference harness, fixtures, model, `control` target, dry-run sink | no |
 
 No Git remote, pull request, or tag exists; the repository is local. Upstream
 references are pinned in [MIGRATION.md §2](MIGRATION.md): `reef_estimator`
@@ -79,7 +81,8 @@ wrapper boundary ([INTERFACES.md §1](INTERFACES.md#1-command-interface)).
 | P04 vertical estimator and ROS 2 wrapper | done, merged (USER: dev-container `estimator` PASS) | [reviews/P04.md](reviews/P04.md) |
 | P05 combined estimator, faults | done, merged (`49f7073`). F11 failed until R1 (legacy D1); passes with C1, the default since R1 | `reef_check.sh baseline|estimator|faults`; [ACCEPTANCE.md §4d, §5](ACCEPTANCE.md), [reviews/P05.md](reviews/P05.md) |
 | R1 independent review | **SELF-REVIEW at `49f7073` (§5f)**, not independent confirmation. USER decisions (2026-09-30): fix finding 1; approve C1 (default on); defer C2–C6; keep the vibration assumption; fix the stale docs (finding 5). Applied on `r1-fixes` (§5g) | [reviews/R1.md](reviews/R1.md) |
-| P06–P07 controller, REEF closed loop | not started | |
+| P06 controller port and command interface | **done on `p06-controller`**: faithful bit-exact port of `reef_control` `12237b76` (USER), dry-run sink, stand-in design | `reef_check.sh control`; [CONTROL_CHAIN.md](CONTROL_CHAIN.md), [ACCEPTANCE.md §5 control](ACCEPTANCE.md), [INTERFACES.md §4](INTERFACES.md), [reviews/P06.md](reviews/P06.md) |
+| P07 REEF closed loop (stand-in low-level loop) | not started; design in CONTROL_CHAIN.md §7 | |
 | P08 RGB-D | not started | |
 | P09 simulation release | not started | |
 | P10–P13 hardware | blocked: target hardware unknown | |
@@ -254,6 +257,21 @@ Skipped: `regress_x3_scenario.sh` (no `reef_sim` or X3 script changed);
 shellcheck (no shell script changed). Nothing was run in `reef_ros2_dev`
 by the implementer (H8).
 
+## 5h. Checks run for P06 (original container, 2026-10-01, branch `p06-controller`)
+
+| Command | Exit | Result |
+|---|---|---|
+| `scripts/reef_check.sh control` (at `12b093f` plus the uncommitted `reef_check.sh` target, `check_colcon.py` package set, docs, and a comment-only restore in `controller.cpp`; all committed right after) | 0 | **PASS**, 503 s. colcon build + test of all packages (reef_control 20 cases); own X3 + REEF run and offline replay; `check_control.py` **106/106**: reference build from checksummed pinned sources; fixture lock; 21 streams (20 fixtures + 11,595-event stream from the run) with port core == original and node == original on every one of 142 columns (node: all but the command stamp, which equals the estimate stamp); independent model 0 difference on every stream; determinism; K13 and missing-parameter cases; `Gains.cfg` tables; K1–K12; negative control (D-term sign flipped: model and port comparison both fail). Closed loop: N/A (P07) |
+| colcon test `reef_control`, `reef_msgs` | 0 | 20 and 55 cases (launch test: exit codes 1/2/0, live commands, sink trace with offboard timeout) |
+| `shellcheck -x` on `reef_check.sh`, `build_control_reference.sh`, `fetch_sources.sh`, `source_diff.sh` | 0 | no findings |
+
+Found while testing (my expectations corrected, code unchanged): a 100 ns
+stamp step runs a control step, because `1e-9 * 100` is
+1.0000000000000001e−7 in double (> 1e−7); the original does the same.
+Not run: `interfaces`, `estimator`, `baseline`, `faults` (the estimator is
+unchanged; `reef_msgs` gained two messages and `get_yaw`, covered by the
+colcon step above). Nothing was run in `reef_ros2_dev` by the implementer (H9).
+
 ## 6. Open items and known limits
 
 1. `sim/launch/clock_demo.launch.py` still uses Gazebo's combined GUI mode,
@@ -297,6 +315,18 @@ by the implementer (H8).
     `e4179f48` minus that file).
 15. The attitude input in simulation is truth (idealized); no attitude
     estimator exists.
+20. **License of `reef_control`** (USER): MIT was added upstream in
+    `43cdee8` (2020), after the ported `12237b76`; applicability assumed
+    [A] (`src/reef_control/LICENSE_NOTE.md`). Confirm before publishing.
+21. Controller legacy behaviour K1–K13 (CONTROL_CHAIN.md §5) is kept by
+    USER decision, notably K1 (D term anti-damping), K2 (no effective
+    anti-windup), K5 (no output inhibition), K6 (NaN latch), K9 (no heading
+    wrap). Candidates for a later, separately approved correction list.
+22. [A] ROSflight 2.x firmware semantics of `Command.u[3]` in mode 2 are
+    unverified; the hardware command contract is P10.
+23. The controller's `is_flying` input is unconnected, as in the legacy
+    launch files (the estimator publishes `is_flying_reef`); integrators run
+    whenever armed.
 
 ## 7. Human checks still needed
 
@@ -311,15 +341,13 @@ by the implementer (H8).
   container after the build-tree fix.
 - **H6 (P04):** done. USER: `reef_check.sh estimator` passed in the dev
   container; vibration assumption kept; takeoff detector added as C6.
-- **H7 (P05, dev container):** rerun after the C++ adapter fix:
-  `scripts/reef_check.sh baseline` (expect PASS, about 15 min; the first
-  run builds `reef_x3_adapter`), `scripts/reef_check.sh estimator` (expect
-  PASS; the first attempt failed on estimate age, §5e), and
-  `scripts/reef_check.sh faults` (expect **FAIL 35/36**, only F11 baseline).
-  Then decide whether to merge `p05-horizontal-estimator` and start R1 with
-  [reviews/R1_packet.md](reviews/R1_packet.md).
+- **H7 (P05):** done. USER: the checks behaved as expected; merged.
 - **H8 (R1 fixes):** done. USER: `baseline` and `faults` passed in the dev
   container.
+- **H9 (P06, dev container):** `scripts/reef_check.sh control` (expect PASS,
+  106/106, about 9 min; the first run builds `reef_control`) and
+  `scripts/reef_check.sh interfaces` (expect PASS; the package set now
+  includes `reef_control`). Then decide whether to merge `p06-controller`.
 - **H3:** open the three plots and `manifest.yaml` of a recent
   `recordings/x3_*` run, and check them against
   [X3_SCENARIO.md](X3_SCENARIO.md). (`feature/x3-sim-dataset` is already
@@ -327,6 +355,8 @@ by the implementer (H8).
 
 ## 8. Next milestone
 
-**P06**: controller port and command interface (system integration),
-followed by P07 (REEF in the loop). See the plan presented with the R1
-fixes and [handoff/REEF_COMPLETION_PROMPTS.md](handoff/REEF_COMPLETION_PROMPTS.md).
+**P07**: REEF-driven closed loop in Gazebo Harmonic with the labelled
+stand-in low-level loop (CONTROL_CHAIN.md §7): fix the P07 `control`
+criteria first, then the stand-in, the X3 world without the stock velocity
+controller, altitude then velocity and yaw scenarios, causality checks,
+`reef_demo.sh closed-loop`.

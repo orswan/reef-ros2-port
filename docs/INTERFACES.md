@@ -1,7 +1,7 @@
 # Interfaces
 
-Current contracts for the project's command line, simulation topics, and
-the REEF estimator node. **Implemented** means exercised by a check in this
+Current contracts for the project's command line, simulation topics, the
+REEF estimator node, and the REEF controller node (§4). **Implemented** means exercised by a check in this
 repository; **PLANNED** or **NOT DEFINED** means no ROS 2 implementation exists.
 
 ## 1. Command interface
@@ -18,6 +18,7 @@ scripts/reef_check.sh baseline [--floor]
 scripts/reef_check.sh interfaces
 scripts/reef_check.sh estimator
 scripts/reef_check.sh faults
+scripts/reef_check.sh control
 scripts/reef_demo.sh help
 scripts/reef_demo.sh stock [--gui]
 scripts/reef_demo.sh replay recordings/<run> [--rate R]
@@ -27,7 +28,9 @@ scripts/reef_demo.sh estimator --replay recordings/<run> [--rate R]
 ```
 
 Not yet implemented (each says NOT IMPLEMENTED and exits 2):
-`reef_check.sh control|vision|release` and `reef_demo.sh closed-loop|vision`.
+`reef_check.sh vision|release` and `reef_demo.sh closed-loop|vision`.
+`reef_check.sh control` covers the P06 controller fidelity; its closed-loop
+part (P07) is reported as N/A.
 `reef_check.sh faults` runs F1–F12 (ACCEPTANCE.md §5). `reef_check.sh
 estimator` and `reef_demo.sh estimator` cover the complete estimator
 (vertical and horizontal). All demo modes are **simulation only**; no mode
@@ -376,3 +379,80 @@ would add locking without benefit.
 | D1: an XY observation re-fused at every IMU step after a partial update | **R1: correction C1 on by default** (algorithmic change, approved; false restores master) |
 | (P04) no reset | `~/reset` service; reset on a backward ROS time jump |
 | (P04) range/mocap rejection logged at every message | throttled to 1 Hz; stamp anomalies logged (throttled) and counted |
+
+## 4. REEF controller node interface (implemented: P06)
+
+`reef_control_node` (node name `reef_control_pid`), the port of
+`reef_control` `12237b76`: a cascade of PIDs and a position lookup table
+producing roll, pitch, yaw rate, and throttle. Specification, frames, units,
+modes, and the legacy behaviour it keeps (K1–K13):
+[CONTROL_CHAIN.md](CONTROL_CHAIN.md). Faithful and bit-exact to the
+original (USER); `reef_check.sh control` compares every step.
+**Not in the loop of any simulation yet (P07).** No hardware output exists.
+
+### 4.1 Topics
+
+| Topic | Type | Direction | Notes |
+|---|---|---|---|
+| `xyz_estimate` | `reef_msgs/XYZEstimate` | in | one control step per message; `dt` from header stamps (ROS 1 `Duration` arithmetic); a step needs dt > 1e−7 s |
+| `desired_state` | `reef_msgs/DesiredState` | in | stored until the next one (no freshness check); flags select the mode (CONTROL_CHAIN §4) |
+| `pose_stamped` | `geometry_msgs/PoseStamped` | in | mocap x, y (NED) and orientation (yaw); only position mode and heading use it |
+| `status` | `rosflight_msgs/Status` | in | `armed`; sets `initialized = armed` |
+| `is_flying` | `std_msgs/Bool` | in | sets `initialized = is_flying && armed`. The estimator publishes `is_flying_reef`; the original launch files did not connect them (kept) |
+| `command` | `rosflight_msgs/Command` (v2.0.1) | out | mode 2 (roll, pitch, yaw rate, throttle); `u[0]` roll [rad], `u[1]` pitch [rad], `u[2]` yaw rate [rad/s], `u[3]` throttle [0, 1]; `ignore` 0 or 0x07; header stamp = the triggering estimate's stamp |
+| `controller_state` | `reef_msgs/DesiredState` | out | the desired state after the PID step (internal loop outputs), every step |
+
+QoS: reliable, volatile, keep last 1 on every topic (ROS 1 queue size 1).
+`rc_raw` is not subscribed (the original's callback was empty).
+
+The legacy `rosflight_msgs/Command` had fields `x, y, z, F` and a `uint8`
+ignore; the ROS 2 type has `u[10]` and a `uint16` ignore. The mode value
+(2) and ignore bits (1, 2, 4) are numerically the same. [A] Whether ROSflight
+2.x firmware interprets `u[3]` as throttle in mode 2 is **not verified**
+(its firmware is not vendored); the hardware command contract is P10.
+
+### 4.2 Parameters
+
+| Parameter | Default | Rule |
+|---|---|---|
+| `max_roll`, `max_pitch` [rad], `max_yaw_rate` [rad/s] | none (required) | finite, ≥ 0; read only |
+| `face_target`, `fly_fixed_wing` | false | read only. The original read them from the global namespace (K12); `config/reef_control_quad.yaml` records the effective values of the shipped file |
+| gains `uP uI uD vP vI vD wP wI wD uvtau dP dI dD nedtau yawP yawI yawD yawtau`, lookup `kp deadzone max_vel center_point alpha`, limits `max_u max_v max_w max_d` | `Gains.cfg` defaults (0) | within the `Gains.cfg` range; integers accepted; **changeable at runtime** |
+| `xIntegrator`, `uIntegrator` | true | bool; changeable at runtime |
+
+Out-of-range values stop the node at startup (exit 1, every problem named)
+and are rejected at runtime; the original clamped them silently (K13).
+Runtime changes apply the whole configuration as the original's
+`gainsCallback` (integrators kept, K11). Not declared (never read by the
+original): `yawRate*`, `max_n`, `max_e`, the cfg copy of `max_yaw_rate`,
+`gravity`, `hover_throttle`, `gaussian_offset`.
+
+### 4.3 Startup, inhibition, freshness
+
+Exactly as the original (characterized, not changed): the node publishes a
+command for every estimate from the first one on, armed or not (K5); the
+first step uses dt = stamp − 0 (K4); before any `desired_state` the
+setpoint is all zeros. Output inhibition belongs to the low-level layer:
+the firmware (or, in simulation, the P07 stand-in) ignores commands while
+disarmed and falls back to RC 100 ms after the last command.
+
+### 4.4 Dry-run command sink
+
+`reef_control_sink` subscribes to `command` and `status` and writes a CSV
+trace (`trace_file`) with the firmware's interpretation of each command
+(`firmware_mux.hpp`, from firmware `b77c3854`): channel sources
+(offboard or RC after an ignore bit or the 100 ms `offboard_timeout_ms`),
+armed state, and motor state. It drives nothing. `hardware:=true` exits 2
+(NOT IMPLEMENTED, P10). Launch both with
+`ros2 launch reef_control reef_control.launch.py [trace_file:=...]`.
+
+### 4.5 Differences from ROS 1 (middleware only)
+
+| ROS 1 | ROS 2 |
+|---|---|
+| dynamic_reconfigure (clamps to the cfg range) | node parameters with runtime changes; out-of-range values rejected |
+| `rosflight_msgs/Command` `x, y, z, F` (44e5f37e) | v2.0.1 `u[0..3]`, same mode and ignore values |
+| command header left zero | header stamp = estimate stamp (metadata only) |
+| `rc_raw` subscribed, callback empty | not subscribed |
+| global `face_target`, `fly_fixed_wing` | node parameters (effective values carried over) |
+

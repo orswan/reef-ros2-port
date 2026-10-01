@@ -207,7 +207,7 @@ replacement.
 
 | Package | ROS 1 dependencies | ROS 2 notes |
 |---|---|---|
-| reef_control (sim pin `fa4ffa39`) | roscpp, rospy, geometry_msgs, reef_msgs, rosflight_msgs, dynamic_reconfigure, message_generation | Publishes `rosflight_msgs/Command` on `command`. Subscribes `desired_state`, `xyz_estimate`, `is_flying`, `status`, `rc_raw`, `pose_stamped`. `dynamic_reconfigure` → ROS 2 parameters + `on_set_parameters` callback. [V] manifest + topics |
+| reef_control (sim pin `fa4ffa39`) | roscpp, rospy, geometry_msgs, reef_msgs, rosflight_msgs, dynamic_reconfigure, message_generation | Publishes `rosflight_msgs/Command` on `command`. Subscribes `desired_state`, `xyz_estimate`, `is_flying`, `status`, `rc_raw`, `pose_stamped`. `dynamic_reconfigure` → ROS 2 parameters + `on_set_parameters` callback. [V] manifest + topics **Ported in P06 from the hardware pin `12237b76`** (same controller math; docs/CONTROL_CHAIN.md) |
 
 [A] For Gazebo Harmonic without rosflight, `rosflight_msgs/Command` (attitude
 + throttle) has no native consumer. Section 6 covers the options.
