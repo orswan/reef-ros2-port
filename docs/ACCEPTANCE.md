@@ -477,11 +477,11 @@ judged as desirable.
 |---|---|---|---|
 | `dropout_short` | IMU drop 50 ms (below the 100 ms offboard timeout) | estimate gap 40–100 ms observed; no offboard timeout; tilt ≤ 0.35 rad; \|h − 1.0\| ≤ 0.15 m through `fault` and `recover`; P07 end state | — |
 | `dropout_long` | IMU drop until the end of the run | estimate gap ≥ 10 s; the stand-in's offboard timeout fires within 150 ms (sim) of the last command; selected throttle 0 afterwards | the vehicle falls: vertical speed ≤ −1 m/s and height < 0.1 m within 2.5 s of the timeout (crash; impact speed reported). End state not judged |
-| `estimator_reset` | estimator `~/reset` in flight | the reset is accepted; outputs finite; the run completes | the estimate restarts landed (z_x0 pinned until takeoff is re-detected); estimate jump, min height, max tilt, recovery reported (a crash is reported as such) |
+| `estimator_reset` | estimator `~/reset` in flight | the reset is accepted; outputs finite; the run completes | **(corrected)** REEF announces landed (`is_flying_reef` false), publishes no estimate during its accelerometer initialization (gap ≤ 0.1 s), re-detects takeoff (`is_flying_reef` true again), and restarts its altitude filter from z_x0: the first estimate after the reset lies between z_x0 and the measured height. Min height, max tilt, recovery reported (a crash is reported as such) |
 | `controller_restart` | controller exits (graceful) and is respawned | a command gap and a new controller process are observed; outputs finite; the run completes | integrators restart from 0: altitude loss and recovery time reported (a crash is reported as such) |
 | `setpoint_stale` | the runner stops publishing during a 0.3 m/s forward leg (6 s), then resumes with hover | tilt ≤ 0.35 rad; P07 end state | the last setpoint persists (no freshness check): mean truth forward velocity in the last 3 s of the stale window 0.3 ± 0.1 m/s |
 | `range_loss` | range drop 10 s at hover | outputs finite; tilt ≤ 0.35 rad; the run completes | altitude from the IMU only: truth height deviation and REEF z error during the loss reported |
-| `velocity_loss` | velocity-observation drop 10 s at hover | REEF's horizontal velocity variance grows monotonically during the loss (C1; F11 in closed loop); tilt ≤ 0.35 rad; the run completes | horizontal truth drift during the loss reported |
+| `velocity_loss` | velocity-observation drop 10 s at hover | **(corrected)** no observation fused during the loss; REEF's horizontal velocity σ never below its value at the start of the loss and ≥ 10× that value at its end (C1; F11 in closed loop); tilt ≤ 0.35 rad; the run completes | horizontal truth drift during the loss reported |
 | `pause_resume` | Gazebo paused 2 s (wall) at hover | the pause took effect (runner confirms); no offboard timeout; tilt ≤ 0.35 rad; \|h − 1.0\| ≤ 0.15 m through `fault` and `recover`; P07 end state | — |
 | `standin_exit` | the stand-in exits (graceful) in flight | its last motor command is all zeros | the vehicle falls: vertical speed ≤ −1 m/s and height < 0.1 m within 2.5 s (crash). End state not judged |
 
@@ -499,10 +499,22 @@ scenarios). Square of 1.5 m legs in mocap NED: (1.5, 0), (1.5, 1.5),
 | Overshoot (each leg) | maximum distance beyond the waypoint along the leg ≤ 0.30 m |
 | Stability and altitude | tilt ≤ 0.35 rad; altitude-hold RMSE ≤ 0.10 m in the last 4 s of each leg; P07 end state |
 | K9 (characterization) | heading setpoint 2.9 rad, then −2.9 rad: the second turn goes the long way (yaw-rate command and truth yaw rate negative at its start, although the short way is positive) |
-| K10 (characterization, `position_face_target`: `face_target` true, one leg to (1.5, 1.5)) | at the first position-mode step the heading setpoint equals the current heading (θ = 0 before the first lookup); later steps use θ of the previous step, so the heading converges to the bearing of the target (truth heading within 0.2 rad of the bearing, π/4, by 6 s into the leg) |
+| K10 (characterization, `position_face_target`: `face_target` true, one leg to (1.5, 1.5)) | at the first position-mode step the heading setpoint equals the current heading (θ = 0 before the first lookup); later steps use θ of the previous step, so the heading turns towards the bearing of the target: **(corrected)** the heading error to the bearing decreases from the leg start and is ≤ 0.2 rad when the vehicle first comes within 0.15 m of the target; inside the dead zone the bearing of a target a few cm away swings and the heading follows it (reported) |
 
 Runs: `reef_check.sh faults` adds every scenario above (fixture-level F1–F12
 unchanged).
+
+Corrections (2026-10-01, USER-approved after the first runs; they correct
+my descriptions of the legacy behaviour, not a tolerance on the port, which
+stays bit-exact): `velocity_loss` — the 6-state filter's propagation couples
+velocity and attitude bias, so in maneuvering flight σ dips slightly at
+some steps (496 of 2449, at most 0.010 m/s) while growing 34× overall;
+`estimator_reset` — the first published estimate already includes a range
+update (0.536 m between z_x0 0.25 m and the true 0.987 m), so "pinned at
+z_x0" never appears in the output; K10 — the vehicle reaches the target in
+about 3 s while the stand-in's slow yaw loop is still turning, and the
+bearing of a target inside the dead zone swings, so "within 0.2 rad by 6 s"
+was the wrong moment.
 
 ### `vision` (P08)
 
