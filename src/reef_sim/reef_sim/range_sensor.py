@@ -14,6 +14,11 @@ horizon. In-range readings get Gaussian noise (noise_std) drawn from a
 generator keyed by (seed, stamp), so the noise of each sample is reproducible,
 and are clamped to [min_range, max_range]. The stamp is the truth sample's sim time.
 
+TEST HOOK (P07 causality check): `bias` [m], default 0, is added to every
+in-range reading (after the noise, before the clamp). A nonzero bias makes
+the range a deliberately WRONG measurement; it is logged and recorded in the
+run's parameters. With bias 0 the output is unchanged.
+
 Subscribes: /x3/truth/odom (nav_msgs/Odometry)   [truth input]
 Publishes:  /x3/range      (sensor_msgs/Range)   [idealized measurement]
 """
@@ -39,6 +44,7 @@ class IdealRangeSensor(Node):
         self.noise_std = self.declare_parameter('noise_std', 0.01).value
         self.seed = int(self.declare_parameter('seed', 42).value)
         self.frame_id = self.declare_parameter('frame_id', 'x3/range_link').value
+        self.bias = float(self.declare_parameter('bias', 0.0).value)
         self.period_ns = int(1e9 / self.rate_hz)
         self.next_ns = None
         self.pub = self.create_publisher(Range, '/x3/range', 10)
@@ -46,6 +52,8 @@ class IdealRangeSensor(Node):
         self.get_logger().info(
             f'idealized range: offset {self.offset.tolist()} m, limits [{self.min_range}, '
             f'{self.max_range}] m, noise {self.noise_std} m, seed {self.seed}, {self.rate_hz} Hz')
+        if self.bias:
+            self.get_logger().warn(f'TEST HOOK: range bias {self.bias} m added to every in-range reading')
 
     def on_truth(self, odom):
         t_ns = odom.header.stamp.sec * 1_000_000_000 + odom.header.stamp.nanosec
@@ -66,6 +74,8 @@ class IdealRangeSensor(Node):
         else:
             rng = np.random.default_rng([self.seed, t_ns])
             noisy = true_range + (rng.normal(0.0, self.noise_std) if self.noise_std > 0 else 0.0)
+            if self.bias:
+                noisy += self.bias
             value = min(max(noisy, self.min_range), self.max_range)
         msg = Range()
         msg.header.stamp = odom.header.stamp

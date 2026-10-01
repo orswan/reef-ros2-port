@@ -1,0 +1,24 @@
+# reef_fc_standin for the reef_x3 model (STAND-IN, development tool).
+# Geometry and motor constants from src/reef_sim/models/reef_x3/model.sdf and
+# the MulticopterMotorModel plugins of worlds/x3_closed_loop.sdf; positions
+# converted FLU -> FRD (y negated). rotor_dir: +1 = turningDirection ccw.
+# Gains chosen from first principles before the first closed-loop run
+# (CONTROL_CHAIN.md section 7): roll/pitch as a second-order loop with
+# natural frequency 8 rad/s and damping 0.8 (kp = 8^2, kd = 2*0.8*8); yaw
+# rate first order at 1 rad/s (the X3's yaw authority is small: the drag
+# torque is 0.016 m times the thrust difference).
+/**:
+  ros__parameters:
+    rotor_x: [0.13, -0.13, 0.13, -0.13]
+    rotor_y: [0.22, -0.20, -0.22, 0.20]
+    rotor_dir: [1, 1, -1, -1]
+    motor_constant: 8.54858e-06
+    moment_constant: 0.016
+    max_rot_velocity: 800.0
+    ixx: 0.0347563
+    iyy: 0.07
+    izz: 0.0977
+    kp_angle: 64.0
+    kd_rate: 12.8
+    kp_yaw_rate: 1.0
+    offboard_timeout_ms: 100

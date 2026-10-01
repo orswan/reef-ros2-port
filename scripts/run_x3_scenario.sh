@@ -6,6 +6,10 @@
 #       estimator (vertical filter) beside the truth-fed controller, with the
 #       IMU vibration overlay (config/x3_reef_overlay.yaml), and score it
 #       (analysis_reef/). REEF is not in the control loop.
+#   scripts/run_x3_scenario.sh --closed-loop  # P07: REEF estimator AND REEF
+#       controller in the loop: world without the stock controller, stand-in
+#       low-level loop (reef_fc_standin, development tool) on the motor model,
+#       phases of config/x3_closed_loop.yaml; scored by analyze_closed_loop.
 # Builds in the per-environment tree (scripts/colcon_tree.py).
 # Output: recordings/x3_<time>_<id>/ (manifest.yaml, x3_scenario.yaml, bag/,
 # scenario_result.json, launch.log, analysis/). Recordings are ignored by Git.
@@ -14,7 +18,11 @@
 # REEF_X3_OUT (run directory), REEF_ASSETS_DIR (verified asset directory,
 # default assets/models),
 # REEF_TEST_ROS_DOMAIN_ID / REEF_TEST_GZ_PARTITION (default: per run),
-# REEF_X3_ENABLE_RANGE=0 (test hook: omit the range stream).
+# REEF_X3_ENABLE_RANGE=0 (test hook: omit the range stream),
+# REEF_X3_RANGE_BIAS=<m> (closed loop, test hook: bias every in-range reading;
+# the causality run), REEF_X3_NOMINAL=<run dir> (closed loop: nominal run the
+# causality analysis compares with), REEF_X3_CONTROL_PARAMS=<yaml> (closed loop:
+# reef_control gains; default src/reef_control/config/reef_control_quad.yaml).
 #
 # Every run is isolated (per-run GZ_PARTITION and ROS domain; the scenario
 # requires exactly one publisher per stream) and offline: Gazebo gets an empty
@@ -34,11 +42,13 @@ reef_setup_env
 headless=true
 analyze=1
 estimator=false
+closed_loop=false
 for arg in "$@"; do
   case "$arg" in
     --gui) headless=false ;;
     --no-analysis) analyze=0 ;;
     --estimator) estimator=true ;;
+    --closed-loop) closed_loop=true; estimator=true ;;
     *) echo "unknown argument: $arg" >&2; exit 2 ;;
   esac
 done
@@ -83,12 +93,30 @@ if [[ "$estimator" == true ]]; then
   python3 "$REEF_ROOT/scripts/x3_merge_params.py" "$run_dir/x3_scenario.yaml" \
     "$REEF_ROOT/src/reef_sim/config/x3_reef_overlay.yaml" || fail 2 "could not merge the REEF overlay"
 fi
-read -r startup_timeout duration < <(python3 - "$run_dir/x3_scenario.yaml" <<'EOF'
+range_bias="${REEF_X3_RANGE_BIAS:-0}"
+runner=scenario_runner
+if [[ "$closed_loop" == true ]]; then
+  runner=closed_loop_runner
+  python3 "$REEF_ROOT/scripts/x3_merge_params.py" "$run_dir/x3_scenario.yaml" \
+    "$REEF_ROOT/src/reef_sim/config/x3_closed_loop.yaml" || fail 2 "could not merge the closed-loop overlay"
+  control_src="${REEF_X3_CONTROL_PARAMS:-$REEF_ROOT/src/reef_control/config/reef_control_quad.yaml}"
+  [[ -f "$control_src" ]] || fail 2 "controller parameters not found: $control_src"
+  cp "$control_src" "$run_dir/reef_control.yaml"
+  if [[ "$range_bias" != 0 ]]; then
+    [[ "$range_bias" =~ ^-?[0-9]+([.][0-9]+)?$ ]] || fail 2 "invalid REEF_X3_RANGE_BIAS '$range_bias'"
+    printf 'range_sensor:\n  ros__parameters:\n    bias: %s\n' "$range_bias" > "$run_dir/range_bias_overlay.yaml"
+    python3 "$REEF_ROOT/scripts/x3_merge_params.py" "$run_dir/x3_scenario.yaml" "$run_dir/range_bias_overlay.yaml" \
+      || fail 2 "could not merge the range bias"
+  fi
+elif [[ "$range_bias" != 0 ]]; then
+  fail 2 "REEF_X3_RANGE_BIAS applies only to --closed-loop"
+fi
+read -r startup_timeout duration < <(python3 - "$run_dir/x3_scenario.yaml" "$runner" <<'EOF'
 import sys, yaml
 p = yaml.safe_load(open(sys.argv[1]))
 s = p['simulation']['ros__parameters']
 print(int(s['startup_timeout_s']),
-      int(sum(p['scenario_runner']['ros__parameters']['phase_durations']) + 1))
+      int(sum(p[sys.argv[2]]['ros__parameters']['phase_durations']) + 1))
 EOF
 )
 
@@ -107,11 +135,12 @@ enable_range=true
 python3 "$REEF_ROOT/scripts/x3_manifest.py" start "$run_dir" \
   "asset_verification=$asset_status" "headless=$headless" "ros_domain_id=$ROS_DOMAIN_ID" \
   "gz_partition=$GZ_PARTITION" "enable_range=$enable_range" "estimator=$estimator" \
+  "closed_loop=$closed_loop" "range_bias=$range_bias" "control_params=${control_src:-none}" \
   "command=scripts/run_x3_scenario.sh $*"
 
 # The Gazebo server always runs headless (-s); the GUI, if requested, is a
 # separate optional viewer and not required for a valid recording.
-required=("^gz sim -r -s " "parameter_bridge" "imu_noise" "scenario_runner" "ros2 bag record")
+required=("^gz sim -r -s " "parameter_bridge" "imu_noise" "$runner" "ros2 bag record")
 if [[ "$headless" == false ]]; then
   if ! display_report="$("$REEF_ROOT/scripts/check_display.sh" 2>&1)"; then
     echo "$display_report"
@@ -121,6 +150,8 @@ fi
 gui_seen=0
 [[ "$enable_range" == true ]] && required+=("range_sensor")
 [[ "$estimator" == true ]] && required+=("reef_estimator_node" "reef_adapter" "x3_imu_adapter")
+[[ "$closed_loop" == true ]] && required+=("reef_control_node" "reef_fc_standin")
+if [[ "$closed_loop" == true && "$enable_range" != true ]]; then fail 2 "--closed-loop needs the range stream"; fi
 
 # --- cleanup and signals
 launch_pid="" sid="" pending=""
@@ -149,9 +180,15 @@ normal_traps
 
 # --- start the owned simulation; signals wait until its session is registered
 defer_traps
-sim_start_session "$run_dir/launch.log" ros2 launch reef_sim x3_scenario.launch.py \
-  "output_dir:=$run_dir" "params_file:=$run_dir/x3_scenario.yaml" "headless:=$headless" \
-  "enable_range:=$enable_range" "with_estimator:=$estimator"
+if [[ "$closed_loop" == true ]]; then
+  sim_start_session "$run_dir/launch.log" ros2 launch reef_sim x3_closed_loop.launch.py \
+    "output_dir:=$run_dir" "params_file:=$run_dir/x3_scenario.yaml" "headless:=$headless" \
+    "control_params:=$run_dir/reef_control.yaml"
+else
+  sim_start_session "$run_dir/launch.log" ros2 launch reef_sim x3_scenario.launch.py \
+    "output_dir:=$run_dir" "params_file:=$run_dir/x3_scenario.yaml" "headless:=$headless" \
+    "enable_range:=$enable_range" "with_estimator:=$estimator"
+fi
 [[ -n "$sid" ]] || { normal_traps; fail 2 "simulation session did not start"; }
 normal_traps
 exit_for_pending
@@ -181,7 +218,7 @@ while [[ ! -s "$result" ]]; do
   sleep 0.2
 done
 for p in "${required[@]}"; do
-  [[ -n "${seen[$p]:-}" ]] || [[ "$p" == scenario_runner ]] || fail 2 "required process '$p' never started"
+  [[ -n "${seen[$p]:-}" ]] || [[ "$p" == "$runner" ]] || fail 2 "required process '$p' never started"
 done
 
 # --- orderly shutdown: the launch stops itself when the runner exits, and the
@@ -206,7 +243,12 @@ say "scenario completed; bag finalized; no Fuel fetches"
 if [[ "$headless" == false ]] && (( ! gui_seen )); then echo "WARN the Gazebo GUI viewer never started (recording unaffected)"; fi
 
 rc=0
-if (( analyze )); then
+if (( analyze )) && [[ "$closed_loop" == true ]]; then
+  say "closed-loop analysis (stand-in low-level loop; idealized inputs)"
+  nominal=(); [[ -n "${REEF_X3_NOMINAL:-}" ]] && nominal=(--nominal "$REEF_X3_NOMINAL")
+  ros2 run reef_sim analyze_closed_loop "$run_dir" "${nominal[@]}" | tee "$run_dir/analysis_closed_loop.log" || rc=1
+  [[ "${PIPESTATUS[0]}" == 0 ]] || rc=1
+elif (( analyze )); then
   say "analysis"
   ros2 run reef_sim analyze_x3_bag "$run_dir" | tee "$run_dir/analysis.log" || rc=1
   [[ "${PIPESTATUS[0]}" == 0 ]] || rc=1

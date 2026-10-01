@@ -34,6 +34,8 @@ setup(
             'range_sensor = reef_sim.range_sensor:main',
             'imu_noise = reef_sim.imu_noise:main',
             'scenario_runner = reef_sim.scenario_runner:main',
+            'closed_loop_runner = reef_sim.closed_loop_runner:main',
+            'analyze_closed_loop = reef_sim.analyze_closed_loop:main',
             'analyze_x3_bag = reef_sim.analyze:main',
             'reef_adapter = reef_sim.reef_adapter:main',
             'x3_reef_offline = reef_sim.reef_offline:main',

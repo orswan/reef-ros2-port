@@ -1,0 +1,17 @@
+# Overlay for REEF-controlled X3 runs (run_x3_scenario.sh --closed-loop, P07),
+# merged over x3_scenario.yaml and x3_reef_overlay.yaml (IMU vibration
+# assumption kept). Phases as fixed in docs/ACCEPTANCE.md (control, P07).
+# z is REEF's NED altitude setpoint (range sensor height above ground,
+# negative up); vx, vy in REEF's body-level frame (x forward, y right).
+closed_loop_runner:
+  ros__parameters:
+    setpoint_rate_hz: 50.0
+    startup_timeout_s: 90.0
+    stall_timeout_s: 20.0
+    phase_names:     [settle, takeoff_hover, forward, hover_fwd, left,  hover_left, yaw,  hover_yaw, climb, descend]
+    phase_durations: [5.0,    20.0,          6.0,     6.0,       6.0,   6.0,        6.0,  6.0,       20.0,  20.0]
+    phase_armed:     [false,  true,          true,    true,      true,  true,       true, true,      true,  true]
+    phase_z:         [-1.0,   -1.0,          -1.0,    -1.0,      -1.0,  -1.0,       -1.0, -1.0,      -1.5,  -0.6]
+    phase_vx:        [0.0,    0.0,           0.3,     0.0,       0.0,   0.0,        0.0,  0.0,       0.0,   0.0]
+    phase_vy:        [0.0,    0.0,           0.0,     0.0,       -0.3,  0.0,        0.0,  0.0,       0.0,   0.0]
+    phase_yaw_rate:  [0.0,    0.0,           0.0,     0.0,       0.0,   0.0,        0.3,  0.0,       0.0,   0.0]

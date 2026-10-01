@@ -1,0 +1,188 @@
+"""Closed-loop X3 scenario (P07): setpoints for reef_control and arming of the
+stand-in low-level loop, phase by phase in simulation time.
+
+REEF is IN the control loop here: the stand-in (reef_fc_standin, a
+development tool) drives the motors from reef_control's commands, and
+reef_control uses only the REEF estimate and these setpoints. Nothing
+publishes /x3/cmd_vel and the world has no stock controller.
+
+Before arming it waits (bounded) for /clock, truth odometry, and exactly one
+publisher on each required stream; if record_topics is set, also for the
+recorder's subscriptions. Phases are parallel arrays: name, duration,
+armed, z (REEF NED altitude setpoint, m), vx, vy (body-level, m/s; y right),
+yaw_rate (rad/s). Every phase is velocity mode (DesiredState.velocity_valid).
+
+Publishes: /x3/reef/desired_state (reef_msgs/DesiredState, 50 Hz),
+/x3/fc/arm (std_msgs/Bool, 10 Hz), /x3/scenario/phase (std_msgs/String,
+transient local). Writes result_file (JSON).
+Exit status: 0 completed, 3 startup timeout or stall, 4 unexpected publishers.
+"""
+import json
+import sys
+import time
+
+import rclpy
+from nav_msgs.msg import Odometry
+from rclpy.node import Node
+from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
+from reef_msgs.msg import DesiredState
+from std_msgs.msg import Bool, String
+
+REQUIRED = ['/clock', '/x3/truth/odom', '/x3/imu', '/x3/range', '/x3/reef/xyz_estimate',
+            '/x3/reef/command', '/x3/fc/motor_speed', '/x3/reef/status']
+FORBIDDEN = ['/x3/cmd_vel']   # the stock controller's command: must have no publisher
+
+
+class ClosedLoopRunner(Node):
+
+    def __init__(self):
+        super().__init__('closed_loop_runner')
+        p = self.declare_parameter
+        self.setpoint_rate = p('setpoint_rate_hz', 50.0).value
+        self.startup_timeout = p('startup_timeout_s', 90.0).value
+        self.stall_timeout = p('stall_timeout_s', 20.0).value
+        self.result_file = p('result_file', '').value
+        self.record_topics = [t for t in p('record_topics', ['']).value if t]
+        names = list(p('phase_names', ['']).value)
+        cols = {k: list(p(f'phase_{k}', [0.0]).value) for k in ('durations', 'z', 'vx', 'vy', 'yaw_rate')}
+        armed = list(p('phase_armed', [False]).value)
+        if not names or any(len(v) != len(names) for v in list(cols.values()) + [armed]):
+            raise ValueError('phase_* parameters must be non-empty arrays of equal length')
+        self.phases = [dict(name=n, duration=float(cols['durations'][i]), armed=bool(armed[i]),
+                            z=float(cols['z'][i]), vx=float(cols['vx'][i]), vy=float(cols['vy'][i]),
+                            yaw_rate=float(cols['yaw_rate'][i])) for i, n in enumerate(names)]
+        self.desired_pub = self.create_publisher(DesiredState, '/x3/reef/desired_state', 10)
+        self.arm_pub = self.create_publisher(Bool, '/x3/fc/arm', 10)
+        latched = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL,
+                             reliability=ReliabilityPolicy.RELIABLE)
+        self.phase_pub = self.create_publisher(String, '/x3/scenario/phase', latched)
+        self.truth = None
+        self.create_subscription(Odometry, '/x3/truth/odom', self.on_truth, 10)
+
+    def on_truth(self, msg):
+        self.truth = msg
+
+    def now_s(self):
+        return self.get_clock().now().nanoseconds * 1e-9
+
+    def spin_until(self, pred, wall_limit):
+        deadline = time.monotonic() + wall_limit
+        while not pred():
+            if time.monotonic() > deadline:
+                return False
+            rclpy.spin_once(self, timeout_sec=0.05)
+        return True
+
+    def startup(self):
+        if not self.spin_until(lambda: self.now_s() > 0 and self.truth is not None, self.startup_timeout):
+            return 3, 'no sim clock or truth odometry within startup timeout'
+        ok = self.spin_until(lambda: all(self.count_publishers(t) >= 1 for t in REQUIRED), 30.0)
+        counts = {t: self.count_publishers(t) for t in REQUIRED}
+        if not ok:
+            return 3, f'required publishers missing: {counts}'
+        if any(c != 1 for c in counts.values()):
+            return 4, f'expected exactly one publisher per stream, got {counts}'
+        stock = {t: self.count_publishers(t) for t in FORBIDDEN}
+        if any(stock.values()):
+            return 4, f'stock-controller command has publishers: {stock}'
+        self.graph = self.read_graph()
+        recorded = [t for t in self.record_topics if self.count_publishers(t) > 0]
+        if recorded and not self.spin_until(lambda: all(self.count_subscribers(t) >= 1 for t in recorded), 20.0):
+            return 3, 'recorder did not subscribe to ' + str([t for t in recorded if self.count_subscribers(t) < 1])
+        return 0, 'ok'
+
+    def read_graph(self):
+        """The controller's subscriptions and who publishes each, plus the
+        publishers of the motor command and of the stock controller's topic."""
+        def pubs(topic):
+            return sorted(f'{i.node_namespace.rstrip("/")}/{i.node_name}' for i in self.get_publishers_info_by_topic(topic))
+        g = {'controller_inputs': {}, 'motor_command_publishers': pubs('/x3/fc/motor_speed'),
+             'stock_command_publishers': pubs('/x3/cmd_vel')}
+        try:
+            subs = self.get_subscriber_names_and_types_by_node('reef_control_pid', '/x3/reef')
+        except Exception as e:  # node not found
+            g['error'] = str(e)
+            return g
+        for topic, _ in subs:
+            g['controller_inputs'][topic] = pubs(topic)
+        return g
+
+    def publish(self, ph):
+        d = DesiredState()
+        d.header.stamp = self.get_clock().now().to_msg()
+        d.velocity_valid = True
+        d.pose.z = ph['z']
+        d.velocity.x = ph['vx']
+        d.velocity.y = ph['vy']
+        d.velocity.yaw = ph['yaw_rate']
+        self.desired_pub.publish(d)
+
+    def arm(self, on):
+        self.arm_pub.publish(Bool(data=bool(on)))
+
+    def fly(self):
+        period = 1.0 / self.setpoint_rate
+        boundaries, t_start = [], self.now_s()
+        next_arm = t_start
+        for ph in self.phases:
+            self.phase_pub.publish(String(data=ph['name']))
+            t_end = t_start + ph['duration']
+            self.get_logger().info(f"phase {ph['name']}: {ph['duration']:.1f} s, armed={ph['armed']}, "
+                                   f"z={ph['z']}, v=({ph['vx']}, {ph['vy']}), yaw_rate={ph['yaw_rate']}")
+            next_sp = t_start
+            last_sim, last_wall = self.now_s(), time.monotonic()
+            while True:
+                now = self.now_s()
+                if now >= t_end:
+                    break
+                if now > last_sim:
+                    last_sim, last_wall = now, time.monotonic()
+                elif time.monotonic() - last_wall > self.stall_timeout:
+                    return 3, f'sim time stalled at {now:.3f} s', boundaries
+                if now >= next_sp:
+                    self.publish(ph)
+                    next_sp = max(next_sp + period, now)
+                if now >= next_arm:
+                    self.arm(ph['armed'])
+                    next_arm = now + 0.1
+                rclpy.spin_once(self, timeout_sec=0.002)
+            boundaries.append(dict(ph, t_start=t_start, t_end=t_end))
+            t_start = t_end
+        self.phase_pub.publish(String(data='end'))
+        return 0, 'completed', boundaries
+
+    def write_result(self, code, status, boundaries=()):
+        truth = None
+        if self.truth is not None:
+            pos = self.truth.pose.pose.position
+            truth = dict(t=self.truth.header.stamp.sec + self.truth.header.stamp.nanosec * 1e-9,
+                         x=pos.x, y=pos.y, z=pos.z)
+        result = dict(exit_code=code, status=status, phases=list(boundaries), final_truth=truth,
+                      scenario_duration_s=sum(p['duration'] for p in self.phases), mode='closed_loop',
+                      graph=getattr(self, 'graph', None))
+        if self.result_file:
+            with open(self.result_file, 'w') as f:
+                json.dump(result, f, indent=2)
+        (self.get_logger().info if code == 0 else self.get_logger().error)(f'scenario {status} (exit {code})')
+
+
+def main():
+    rclpy.init()
+    node = ClosedLoopRunner()
+    code = 130
+    try:
+        code, status = node.startup()
+        boundaries = []
+        if code == 0:
+            code, status, boundaries = node.fly()
+        node.write_result(code, status, boundaries)
+    except (KeyboardInterrupt, rclpy.executors.ExternalShutdownException):
+        node.write_result(130, 'interrupted')
+    finally:
+        node.destroy_node()
+        rclpy.try_shutdown()
+    sys.exit(code)
+
+
+if __name__ == '__main__':
+    main()

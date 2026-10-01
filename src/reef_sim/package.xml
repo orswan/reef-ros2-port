@@ -28,6 +28,10 @@
   <exec_depend>reef_estimator</exec_depend>
   <exec_depend>reef_msgs</exec_depend>
   <exec_depend>reef_x3_adapter</exec_depend>
+  <exec_depend>reef_control</exec_depend>
+  <exec_depend>reef_fc_standin</exec_depend>
+  <exec_depend>rosflight_msgs</exec_depend>
+  <exec_depend>actuator_msgs</exec_depend>
   <exec_depend>python3-numpy</exec_depend>
   <exec_depend>python3-matplotlib</exec_depend>
   <exec_depend>python3-yaml</exec_depend>

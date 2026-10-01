@@ -1,0 +1,38 @@
+# ros_gz_bridge configuration for REEF-controlled X3 runs (P07,
+# worlds/x3_closed_loop.sdf). As bridge.yaml, without the stock controller's
+# /x3/cmd_vel, plus the stand-in's inputs and the motor command.
+- ros_topic_name: /clock
+  gz_topic_name: /clock
+  ros_type_name: rosgraph_msgs/msg/Clock
+  gz_type_name: gz.msgs.Clock
+  direction: GZ_TO_ROS
+
+# SIMULATION TRUTH (100 Hz): REEF adapters, range sensor, scoring.
+- ros_topic_name: /x3/truth/odom
+  gz_topic_name: /reef/x3/truth/odom
+  ros_type_name: nav_msgs/msg/Odometry
+  gz_type_name: gz.msgs.Odometry
+  direction: GZ_TO_ROS
+
+# SIMULATION TRUTH (250 Hz): attitude for the stand-in low-level loop only.
+- ros_topic_name: /x3/fc/truth_odom
+  gz_topic_name: /reef/x3/fc/odom
+  ros_type_name: nav_msgs/msg/Odometry
+  gz_type_name: gz.msgs.Odometry
+  direction: GZ_TO_ROS
+
+# SIMULATOR-INTERNAL: noise-free IMU (FLU). Input to imu_noise (-> /x3/imu)
+# and the stand-in's body rates (TRUTH).
+- ros_topic_name: /x3/sim/imu_noise_free
+  gz_topic_name: /reef/x3/imu_noise_free
+  ros_type_name: sensor_msgs/msg/Imu
+  gz_type_name: gz.msgs.IMU
+  direction: GZ_TO_ROS
+
+# MOTOR COMMAND from the stand-in to the four MulticopterMotorModel systems
+# (velocity[i] in rad/s for actuator_number i).
+- ros_topic_name: /x3/fc/motor_speed
+  gz_topic_name: /X3/gazebo/command/motor_speed
+  ros_type_name: actuator_msgs/msg/Actuators
+  gz_type_name: gz.msgs.Actuators
+  direction: ROS_TO_GZ
