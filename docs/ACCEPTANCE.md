@@ -399,7 +399,7 @@ Scenario `closed_loop` (sim time, 250 Hz IMU): disarmed settle 5 s; arm;
 velocity mode with zero velocity and altitude setpoint z = −1.0 m (REEF
 NED: range sensor 1.0 m above ground) for 20 s (takeoff + hover); forward
 0.3 m/s 6 s; hover 6 s; left 0.3 m/s 6 s; hover 6 s; yaw rate 0.3 rad/s 6 s;
-hover 6 s; climb to z = −1.5 m 10 s; descend to z = −0.6 m 10 s. Gains: the
+hover 6 s; climb to z = −1.5 m 20 s; descend to z = −0.6 m 20 s. Gains: the
 shipped quad gains (`config/reef_control_quad.yaml`) unless replaced in a
 separate, explained configuration commit (controller math never changes);
 stand-in gains from CONTROL_CHAIN.md §7, chosen before the first run.
