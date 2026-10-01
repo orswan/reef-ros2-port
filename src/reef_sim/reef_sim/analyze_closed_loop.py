@@ -129,6 +129,11 @@ def analyze(run, nominal=None):
     chk.add('takeoff within 15 s of arming (REEF and truth)', ok, json.dumps(metrics['takeoff']),
             'ACCEPTANCE P07 takeoff')
 
+    if scenario == 'vision':    # P08: the closed loop on vision (closed_loop_vision.py)
+        from reef_sim.closed_loop_vision import evaluate_vision
+        metrics['scenario_name'] = scenario
+        evaluate_vision(chk, metrics, tr, data, result, phases, run)
+        return chk, metrics, tr, data, result, phases
     if scenario != 'nominal':   # P07b fault and position-mode scenarios
         from reef_sim.closed_loop_scenarios import evaluate
         metrics['scenario_name'] = scenario
@@ -289,7 +294,7 @@ def analyze(run, nominal=None):
     return chk, metrics, tr, data, result, phases
 
 
-def plots(tr, data, result, phases, out):
+def plots(tr, data, result, phases, out, label=LABEL):
     import matplotlib
     matplotlib.use('Agg')
     import matplotlib.pyplot as plt
@@ -339,7 +344,7 @@ def plots(tr, data, result, phases, out):
         a.legend(loc='upper right', fontsize=7)
         a.grid(alpha=0.3)
     import textwrap
-    fig.suptitle('\n'.join(textwrap.wrap(LABEL, 130)), fontsize=8)
+    fig.suptitle('\n'.join(textwrap.wrap(label, 130)), fontsize=8)
     fig.tight_layout(rect=(0, 0, 1, 0.97))
     fig.savefig(out / 'closed_loop.png', dpi=110)
     plt.close(fig)
@@ -360,7 +365,8 @@ def main(argv=None):
     except (OSError, KeyError, ValueError, IndexError) as e:
         print(f'FAIL cannot analyze {run}: {e!r}')
         return 2
-    lines = [LABEL, '']
+    label = metrics.get('label', LABEL)
+    lines = [label, '']
     rl = metrics.get('return_landing')
     if rl:
         lines.append('REPORTED return and landing: ' + ', '.join(
@@ -369,14 +375,20 @@ def main(argv=None):
         lines.append(f"NOTE causality run (range bias {metrics['range_bias']} m): altitude steps and holds "
                      'recorded in results.json, not judged')
     for i in chk.items:
-        lines.append(f"{'PASS' if i['ok'] else 'FAIL'} {i['name']}: {i['detail']}  [{i['criterion']}]")
+        if i['criterion'] == 'REPORTED':   # never counted as PASS
+            lines.append(f"REPORTED {i['name']}: {i['detail']}")
+        else:
+            lines.append(f"{'PASS' if i['ok'] else 'FAIL'} {i['name']}: {i['detail']}  [{i['criterion']}]")
+    judged = [i for i in chk.items if i['criterion'] != 'REPORTED']
+    lines.append(f"{sum(i['ok'] for i in judged)}/{len(judged)} judged items PASS "
+                 f"({len(chk.items) - len(judged)} REPORTED, not counted)")
     lines.append('ANALYSIS PASSED' if chk.ok else 'ANALYSIS FAILED')
     print('\n'.join(lines))
     (out / 'report.txt').write_text('\n'.join(lines) + '\n')
-    (out / 'results.json').write_text(json.dumps(dict(label=LABEL, ok=chk.ok, checks=chk.items, metrics=metrics),
+    (out / 'results.json').write_text(json.dumps(dict(label=label, ok=chk.ok, checks=chk.items, metrics=metrics),
                                                  indent=1, default=float))
     try:
-        plots(tr, data, result, phases, out)
+        plots(tr, data, result, phases, out, label)
     except Exception as e:   # plots are evidence, not a check
         print(f'WARN plots failed: {e!r}')
     return 0 if (chk.ok or a.no_limits) else 1

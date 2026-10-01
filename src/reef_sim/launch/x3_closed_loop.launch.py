@@ -16,7 +16,14 @@ headless:=true|false (false adds a separate `gz sim -g` viewer),
 record:=true|false, control_params:=<reef_control yaml> (default
 reef_control_x3_sim.yaml: the shipped quad gains with dI = 0, see that file),
 control_respawn:=true|false (P07b controller-restart case only; default false
-so that a controller crash in any other run is never masked).
+so that a controller crash in any other run is never masked),
+vision:=true|false (P08: the closed loop on vision; default false).
+With vision:=true the world is x3_closed_loop_vision.sdf (RGB-D camera, vision
+scene, run with --headless-rendering), the camera chain runs (camera bridge,
+camera_check, reef_rgbd_odometry: a REPLACEMENT odometry, rgbd_to_velocity),
+the estimator adds config/simulation_vision.yaml (RGB-D on, mocap velocity
+off), and the REEF adapter (truth-derived velocity observations) is NOT
+started: REEF's only horizontal velocity input is vision.
 The merged params_file also reaches the nodes with P07b test hooks and the
 controller (key /x3/reef/reef_control_pid), so a scenario overlay can enable
 hooks or the idealized mocap pose; all are off by default.
@@ -39,6 +46,8 @@ TOPICS = ['/clock', '/x3/truth/odom', '/x3/imu', '/x3/range', '/x3/scenario/phas
           '/x3/reef/diagnostics', '/x3/reef/desired_state', '/x3/reef/controller_state',
           '/x3/reef/command', '/x3/reef/status', '/x3/fc/arm', '/x3/fc/motor_speed', '/x3/fc/debug',
           '/x3/fc/label', '/x3/reef/pose_stamped', '/x3/test/fault']
+VISION_TOPICS = ['/x3/camera/camera_info', '/x3/reef/cam_to_init', '/x3/reef/vo/health',
+                 '/x3/reef/rgbd_to_velocity/body_level_frame', '/x3/reef/rgbd_to_velocity/init_frame']
 
 
 def generate_launch_description():
@@ -49,24 +58,33 @@ def generate_launch_description():
     sim_time = {'use_sim_time': True}
     reef_config = PathJoinSubstitution([FindPackageShare('reef_estimator'), 'config'])
     gz_launch = PathJoinSubstitution([FindPackageShare('ros_gz_sim'), 'launch', 'gz_sim.launch.py'])
-    world = PathJoinSubstitution([share, 'worlds', 'x3_closed_loop.sdf'])
+    vision = LaunchConfiguration('vision')
+    vision_on = IfCondition(vision)
+    world = PathJoinSubstitution([share, 'worlds', PythonExpression(
+        ["'x3_closed_loop_vision.sdf' if '", vision, "' == 'true' else 'x3_closed_loop.sdf'"])])
+    gz_server = PythonExpression(["'-r -s --headless-rendering ' if '", vision, "' == 'true' else '-r -s '"])
+    estimator_params = [PathJoinSubstitution([reef_config, 'estimator_master.yaml']),
+                        PathJoinSubstitution([reef_config, 'simulation.yaml'])]
     runner = Node(
         package='reef_sim', executable='closed_loop_runner', name='closed_loop_runner', output='screen',
         parameters=[params_file, sim_time, {
             'result_file': PathJoinSubstitution([output_dir, 'scenario_result.json']),
-            'record_topics': PythonExpression([f'{TOPICS!r} if "', record, '" == "true" else [""]'])}])
+            'record_topics': PythonExpression(
+                [f'({TOPICS!r} + ({VISION_TOPICS!r} if "', vision, '" == "true" else [])) if "', record,
+                 '" == "true" else [""]'])}])
     return LaunchDescription([
         DeclareLaunchArgument('output_dir'),
         DeclareLaunchArgument('params_file'),
         DeclareLaunchArgument('headless', default_value='true'),
         DeclareLaunchArgument('record', default_value='true'),
         DeclareLaunchArgument('control_respawn', default_value='false'),
+        DeclareLaunchArgument('vision', default_value='false'),
         DeclareLaunchArgument('control_params', default_value=PathJoinSubstitution(
             [FindPackageShare('reef_control'), 'config', 'reef_control_x3_sim.yaml'])),
         AppendEnvironmentVariable('GZ_SIM_RESOURCE_PATH', PathJoinSubstitution([share, 'models'])),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(gz_launch),
-            launch_arguments={'gz_args': ['-r -s ', world], 'on_exit_shutdown': 'true'}.items()),
+            launch_arguments={'gz_args': [gz_server, world], 'on_exit_shutdown': 'true'}.items()),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(gz_launch),
             launch_arguments={'gz_args': '-g', 'on_exit_shutdown': 'false'}.items(),
@@ -81,11 +99,28 @@ def generate_launch_description():
         Node(package='reef_x3_adapter', executable='x3_imu_adapter', name='x3_imu_adapter', output='screen',
              parameters=[params_file, sim_time]),
         Node(package='reef_sim', executable='reef_adapter', name='reef_adapter', output='screen',
-             parameters=[params_file, sim_time]),
+             parameters=[params_file, sim_time], condition=UnlessCondition(vision)),
         Node(package='reef_estimator', executable='reef_estimator_node', name='reef_estimator',
              namespace='/x3/reef', output='screen', remappings=[('sonar', '/x3/range')],
-             parameters=[PathJoinSubstitution([reef_config, 'estimator_master.yaml']),
-                         PathJoinSubstitution([reef_config, 'simulation.yaml']), sim_time]),
+             parameters=[*estimator_params, sim_time], condition=UnlessCondition(vision)),
+        # P08 vision chain (vision:=true): camera -> REPLACEMENT odometry -> rgbd_to_velocity -> REEF.
+        Node(package='reef_estimator', executable='reef_estimator_node', name='reef_estimator',
+             namespace='/x3/reef', output='screen', remappings=[('sonar', '/x3/range')],
+             parameters=[*estimator_params, PathJoinSubstitution([reef_config, 'simulation_vision.yaml']),
+                         sim_time], condition=vision_on),
+        Node(package='ros_gz_bridge', executable='parameter_bridge', name='camera_bridge', output='screen',
+             parameters=[{'config_file': PathJoinSubstitution([share, 'config', 'bridge_camera.yaml'])}, sim_time],
+             condition=vision_on),
+        Node(package='reef_sim', executable='camera_check', name='camera_check', output='screen',
+             parameters=[params_file, sim_time, {'output_dir': output_dir}], condition=vision_on),
+        Node(package='reef_rgbd_odometry', executable='reef_rgbd_odometry', name='reef_rgbd_odometry',
+             namespace='/x3/reef', output='screen', parameters=[params_file, sim_time],
+             remappings=[('image', '/x3/camera/image'), ('depth', '/x3/camera/depth'),
+                         ('camera_info', '/x3/camera/camera_info')], condition=vision_on),
+        Node(package='rgbd_to_velocity', executable='rgbd_to_velocity_node', name='rgbd_to_velocity_node',
+             namespace='/x3/reef', output='screen',
+             parameters=[PathJoinSubstitution([FindPackageShare('rgbd_to_velocity'), 'config', 'x3_sim_camera.yaml']),
+                         sim_time], condition=vision_on),
         # REEF controller: reads only xyz_estimate and desired_state (and status, is_flying).
         Node(package='reef_control', executable='reef_control_node', name='reef_control_pid',
              namespace='/x3/reef', output='screen', respawn=LaunchConfiguration('control_respawn'),
@@ -102,7 +137,13 @@ def generate_launch_description():
         ExecuteProcess(
             cmd=['ros2', 'bag', 'record', '--use-sim-time', '--disable-keyboard-controls', '-s', 'mcap',
                  '-o', PathJoinSubstitution([output_dir, 'bag']), '--topics', *TOPICS],
-            name='recorder', output='screen', condition=IfCondition(record)),
+            name='recorder', output='screen',
+            condition=IfCondition(PythonExpression(['"', record, '" == "true" and "', vision, '" != "true"']))),
+        ExecuteProcess(
+            cmd=['ros2', 'bag', 'record', '--use-sim-time', '--disable-keyboard-controls', '-s', 'mcap',
+                 '-o', PathJoinSubstitution([output_dir, 'bag']), '--topics', *TOPICS, *VISION_TOPICS],
+            name='recorder', output='screen',
+            condition=IfCondition(PythonExpression(['"', record, '" == "true" and "', vision, '" == "true"']))),
         RegisterEventHandler(OnProcessExit(
             target_action=runner, on_exit=[EmitEvent(event=Shutdown(reason='scenario finished'))])),
     ])

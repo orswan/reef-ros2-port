@@ -8,12 +8,16 @@
 #       (analysis_reef/). REEF is not in the control loop.
 #   scripts/run_x3_scenario.sh --vision       # P08: RGB-D camera rendering in the
 #       vision scene (worlds/x3_vision.sdf, headless EGL rendering) while the
-#       stock truth-fed controller flies config/x3_vision.yaml; camera
-#       interface checks (camera_check.json). Vision is not in the loop.
+#       stock truth-fed controller flies config/x3_vision.yaml; camera ->
+#       reef_rgbd_odometry (replacement) -> rgbd_to_velocity -> REEF, open
+#       loop; camera_check.json and analyze_vision. Vision is not in the loop.
 #   scripts/run_x3_scenario.sh --closed-loop  # P07: REEF estimator AND REEF
 #       controller in the loop: world without the stock controller, stand-in
 #       low-level loop (reef_fc_standin, development tool) on the motor model,
 #       phases of config/x3_closed_loop.yaml; scored by analyze_closed_loop.
+#   scripts/run_x3_scenario.sh --closed-loop --vision  # P08: the same loop with
+#       vision as REEF's only horizontal velocity input
+#       (worlds/x3_closed_loop_vision.sdf, config/closed_loop/vision.yaml).
 # Builds in the per-environment tree (scripts/colcon_tree.py).
 # Output: recordings/x3_<time>_<id>/ (manifest.yaml, x3_scenario.yaml, bag/,
 # scenario_result.json, launch.log, analysis/). Recordings are ignored by Git.
@@ -108,13 +112,17 @@ fi
 range_bias="${REEF_X3_RANGE_BIAS:-0}"
 runner=scenario_runner
 if [[ "$vision" == true ]]; then
-  [[ "$closed_loop" == true || "$estimator" == true ]] && fail 2 "--vision cannot be combined with --estimator or --closed-loop yet"
-  # REEF runs open loop on vision; the IMU vibration assumption is needed for its takeoff detector.
-  python3 "$REEF_ROOT/scripts/x3_merge_params.py" "$run_dir/x3_scenario.yaml" \
-    "$REEF_ROOT/src/reef_sim/config/x3_reef_overlay.yaml" || fail 2 "could not merge the REEF overlay"
+  [[ "$estimator" == true && "$closed_loop" != true ]] && fail 2 "--vision runs REEF itself; do not add --estimator"
+  if [[ "$closed_loop" != true ]]; then
+    # REEF runs open loop on vision; the IMU vibration assumption is needed for its takeoff detector.
+    python3 "$REEF_ROOT/scripts/x3_merge_params.py" "$run_dir/x3_scenario.yaml" \
+      "$REEF_ROOT/src/reef_sim/config/x3_reef_overlay.yaml" || fail 2 "could not merge the REEF overlay"
+  fi
+  # (with --closed-loop only its camera_check section matters: the closed-loop runner flies)
   python3 "$REEF_ROOT/scripts/x3_merge_params.py" "$run_dir/x3_scenario.yaml" \
     "$REEF_ROOT/src/reef_sim/config/x3_vision.yaml" || fail 2 "could not merge the vision overlay"
   if [[ "${REEF_X3_VISION_FAULTS:-0}" == 1 ]]; then
+    [[ "$closed_loop" == true ]] && fail 2 "REEF_X3_VISION_FAULTS applies only to the open-loop --vision run"
     python3 "$REEF_ROOT/scripts/x3_merge_params.py" "$run_dir/x3_scenario.yaml" \
       "$REEF_ROOT/src/reef_sim/config/x3_vision_faults.yaml" || fail 2 "could not merge the vision faults"
   fi
@@ -124,6 +132,10 @@ if [[ "$closed_loop" == true ]]; then
   python3 "$REEF_ROOT/scripts/x3_merge_params.py" "$run_dir/x3_scenario.yaml" \
     "$REEF_ROOT/src/reef_sim/config/x3_closed_loop.yaml" || fail 2 "could not merge the closed-loop overlay"
   cl_scenario="${REEF_X3_CL_SCENARIO:-nominal}"
+  if [[ "$vision" == true ]]; then   # P08: the closed loop on vision is its own scenario
+    [[ "$cl_scenario" == nominal ]] || fail 2 "REEF_X3_CL_SCENARIO cannot be combined with --vision"
+    cl_scenario=vision
+  fi
   if [[ "$cl_scenario" != nominal ]]; then
     [[ "$cl_scenario" =~ ^[a-z0-9_]+$ ]] || fail 2 "invalid REEF_X3_CL_SCENARIO '$cl_scenario'"
     overlay="$REEF_ROOT/src/reef_sim/config/closed_loop/$cl_scenario.yaml"
@@ -178,6 +190,7 @@ enable_range=true
 world_file=x3_flight.sdf vehicle_model=reef_x3
 [[ "$closed_loop" == true ]] && world_file=x3_closed_loop.sdf
 [[ "$vision" == true ]] && world_file=x3_vision.sdf vehicle_model=reef_x3_rgbd
+[[ "$vision" == true && "$closed_loop" == true ]] && world_file=x3_closed_loop_vision.sdf
 python3 "$REEF_ROOT/scripts/x3_manifest.py" start "$run_dir" "world=$world_file" "vehicle_model=$vehicle_model" \
   "asset_verification=$asset_status" "headless=$headless" "ros_domain_id=$ROS_DOMAIN_ID" \
   "gz_partition=$GZ_PARTITION" "enable_range=$enable_range" "estimator=$estimator" \
@@ -196,7 +209,8 @@ if [[ "$headless" == false ]]; then
 fi
 gui_seen=0
 [[ "$enable_range" == true ]] && required+=("range_sensor")
-[[ "$estimator" == true ]] && required+=("reef_estimator_node" "reef_adapter" "x3_imu_adapter")
+# (vision: no reef_adapter; REEF's horizontal velocity comes from the camera chain)
+[[ "$estimator" == true && "$vision" != true ]] && required+=("reef_estimator_node" "reef_adapter" "x3_imu_adapter")
 [[ "$closed_loop" == true ]] && required+=("reef_control_node" "reef_fc_standin")
 [[ "$vision" == true ]] && required+=("camera_check" "reef_rgbd_odometry" "rgbd_to_velocity_node" "reef_estimator_node" "x3_imu_adapter")
 if [[ "$closed_loop" == true && "$enable_range" != true ]]; then fail 2 "--closed-loop needs the range stream"; fi
@@ -228,7 +242,11 @@ normal_traps
 
 # --- start the owned simulation; signals wait until its session is registered
 defer_traps
-if [[ "$vision" == true ]]; then
+if [[ "$vision" == true && "$closed_loop" == true ]]; then
+  sim_start_session "$run_dir/launch.log" ros2 launch reef_sim x3_closed_loop.launch.py \
+    "output_dir:=$run_dir" "params_file:=$run_dir/x3_scenario.yaml" "headless:=$headless" \
+    "control_params:=$run_dir/reef_control.yaml" "control_respawn:=$control_respawn" "vision:=true"
+elif [[ "$vision" == true ]]; then
   sim_start_session "$run_dir/launch.log" ros2 launch reef_sim x3_vision.launch.py \
     "output_dir:=$run_dir" "params_file:=$run_dir/x3_scenario.yaml" "headless:=$headless" \
     "record_camera:=$( [[ "${REEF_X3_RECORD_CAMERA:-0}" == 1 ]] && echo true || echo false )"

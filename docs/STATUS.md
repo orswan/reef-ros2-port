@@ -87,7 +87,7 @@ wrapper boundary ([INTERFACES.md §1](INTERFACES.md#1-command-interface)).
 | P07 REEF closed loop (stand-in low-level loop) | done, merged: REEF estimator + controller fly the X3 through the stand-in (development tool) on idealized inputs; nominal run 22/22, causality +0.30 m | `reef_check.sh control`, `reef_demo.sh closed-loop`; [ACCEPTANCE §5 control P07](ACCEPTANCE.md), [CONTROL_CHAIN §7](CONTROL_CHAIN.md), [reviews/P07.md](reviews/P07.md) |
 | P07b closed-loop faults and position mode | done, merged: 11 scenarios (estimate dropout short/long, estimator reset, controller restart, stale setpoint, range and velocity loss, pause, stand-in exit, position square with K9, `face_target` K10); crashes documented where the legacy system has no protection (USER) | `reef_check.sh faults`; [ACCEPTANCE §5 P07b](ACCEPTANCE.md), [reviews/P07b.md](reviews/P07b.md) |
 | R2 independent review | **PASS (SELF-REVIEW)**, USER 2026-10-01: an independent Claude session reviewed `p07b-faults-position` (code `bb47cf0`); minor documentation corrections applied (§5k) | [reviews/R2.md](reviews/R2.md), [reviews/R2_packet.md](reviews/R2_packet.md) |
-| P08 RGB-D | **in progress on `p08-rgbd`**: criteria fixed (`2ed22ac`); `rgbd_to_velocity` ported bit-exact (53/53); camera interface; **replacement OpenCV odometry** (rev. 1: 3-D to 3-D motion) open loop and REEF on vision PASS; weak texture, depth loss, delayed and missing frames PASS (§5l). Next: closed loop on vision, capability matrix, `reef_demo.sh vision` | `reef_check.sh vision` (closed loop N/A); [VISION.md](VISION.md) |
+| P08 RGB-D | **implemented on `p08-rgbd`; one judged item open**: `rgbd_to_velocity` ported bit-exact (53/53); camera interface; replacement OpenCV odometry; open loop 20/20; faults 24/24; closed loop on vision: every item passes except staleness (p99 ≤ 20 ms in 2 of 5 runs; **FAIL** in the official `reef_check` run, USER decision needed); capability matrix; `reef_demo.sh vision` | `reef_check.sh vision` (exit 1, §5l); [VISION.md](VISION.md), [reviews/P08.md](reviews/P08.md) |
 | P09 simulation release | not started | |
 | P10–P13 hardware | blocked: target hardware unknown | |
 
@@ -336,6 +336,9 @@ Container commands, headless, idle machine. VERIFIED.
 | same, rev. 1 (`recordings/p08_vision_open2`; `recordings/p08_vision_faults2` with `REEF_X3_VISION_FAULTS=1`) | 0, 0 | 20/20, 24/24 (VISION.md §8) |
 | `shellcheck -x` on `run_x3_scenario.sh`, `reef_check.sh`, `env.sh` | 0 | no findings |
 | `scripts/regress_x3_scenario.sh`, `scripts/regress_clock_check.sh` | 0, 0 | all cases PASS (interruption, ownership, replay, display services untouched) |
+| `scripts/reef_check.sh vision` with the closed-loop step (log `log/checks/reef_check_vision_20261001_212841`, `c8b6a57` + working tree) | **1** | FAIL: everything as above PASS (20/20, 24/24); **closed loop on vision 16/17: staleness p99 24 ms (limit 20)**. Five closed-loop runs: p99 32, 30, 20, 20, 24 ms (VISION.md §8.1) |
+| `scripts/regress_x3_scenario.sh`, `scripts/regress_clock_check.sh` (after the closed-loop and demo changes) | 0, 0 | all cases PASS |
+| `scripts/reef_check.sh control` (`log/checks/reef_check_control_20261001_215352`), `scripts/reef_check.sh faults` (`log/checks/reef_check_faults_20261001_220500`), after the closed-loop launch and analyzer changes | 0, 0 | PASS: P06 parity, P07 nominal and causality; F1–F12 and all 11 P07b scenarios (unchanged behaviour of the P07/P07b paths) |
 
 Key numbers (reef_check run): vision velocity RMSE x 0.0004, y 0.0013 m/s;
 REEF on vision x 0.028, y 0.033 m/s; loss shown −0.90 s (weak texture) and
@@ -344,6 +347,19 @@ USER (2026-10-01): both odometry behaviours outside the judged items are
 kept as documented characterizations V1 (near-zero first sample after a
 recovery) and V2 (intermittent wrong pose just before a depth loss), with no
 suppression logic (VISION.md §8).
+
+## 5m. Capability matrix (P08)
+
+The full matrix is in [INTERFACES.md §5](INTERFACES.md).
+- **Supported in simulation:** IMU, RGB-D velocity (Gazebo camera →
+  replacement odometry → ported `rgbd_to_velocity`), controller velocity
+  mode, scenario setpoints.
+- **Supported with idealized input:** attitude, range, mocap velocity,
+  controller position mode and `face_target`.
+- **Port tested only:** mocap z, RC override switch.
+- **Unsupported/Deferred:** VRPN mocap and joystick teleop (USER); the Astra
+  driver and `demo_rgbd` (replaced); `setpoint_generator` and `dubins_path`;
+  ROSflight firmware and hardware output (P10).
 
 ## 6. Open items and known limits
 
@@ -467,13 +483,28 @@ suppression logic (VISION.md §8).
   `recordings/x3_*` run, and check them against
   [X3_SCENARIO.md](X3_SCENARIO.md). (`feature/x3-sim-dataset` is already
   merged.)
+- **H12 (P08, dev container):** `scripts/reef_check.sh vision` (about 20 min,
+  headless, idle machine). Expect PASS for every step except possibly the
+  closed-loop staleness item (§8). Watch `scripts/reef_demo.sh vision
+  --closed-loop --gui` (informational): the weak-texture segment can end with
+  the vehicle drifting into the wall (VISION.md §8.1).
 
 ## 8. Next milestone
 
-**P08** in progress (branch `p08-rgbd`). Done: converter port, camera
-interface, replacement odometry, open-loop assessment, REEF on vision,
-degraded and fault cases (`reef_check.sh vision` PASS, §5l; USER: dev
-container `vision` PASS); characterizations V1, V2 kept (USER). Next: closed loop on vision
-(REEF controller + stand-in, vision the only horizontal velocity input),
-capability matrix, `reef_demo.sh vision`, P08 evidence
-(`docs/reviews/P08.md`).
+**P08** implemented (branch `p08-rgbd`), not merged. One judged item fails:
+the closed loop on vision meets the P07 staleness limit (estimate age at the
+motor command p99 ≤ 20 ms) in only 2 of 5 runs on this host (32, 30, 20, 20,
+24 ms; P07 without the camera: 12–24 ms). All other P08 items pass
+(VISION.md §8, reviews/P08.md).
+
+**USER decision needed.** Options:
+1. Accept as a documented known limit of the simulation host. The criterion
+   stays, recorded as failing.
+2. Reduce CPU load in the loop's test infrastructure. `closed_loop_runner`
+   uses about 0.7 of a core with a 100 Hz subscription, a likely busy
+   loop (P07 code).
+3. Use the documented fallback camera profile, 160×120 at 10 Hz. Its USER
+   condition is "only if a container cannot hold real time".
+4. A criterion change in a separate, explained commit.
+
+Then the human check (`reef_demo.sh vision --closed-loop --gui`) and merge.

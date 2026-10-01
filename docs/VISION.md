@@ -279,3 +279,64 @@ suppression and no boundary filters) [V]:
   at 94.78 s), nor did faults2 (max 0.008 m/s before its loss at 93.59 s).
 - REEF's error stayed ≤ 0.09 m/s (both samples accepted). The ACCEPTANCE
   0.3 m/s error limit applies to the delayed and missing frame cases only.
+
+### 8.1 Closed loop on vision [V]
+
+Command: `run_x3_scenario.sh --closed-loop --vision`, headless, original
+container. REEF controller + stand-in (development tool) fly on the REEF
+estimate. REEF's horizontal velocity comes from vision only; attitude and
+range are idealized. Profile and definitions: §7. Scored by
+`analyze_closed_loop` (scenario `vision`, `closed_loop_vision.py`).
+
+| Run | Judged | Staleness p99 | Worst velocity RMSE | Max tilt (judged) | Weak texture (characterization) | End |
+|---|---|---|---|---|---|---|
+| `p08_cl_vision1` | 16/17 | **32 ms FAIL** | 0.033 m/s | 0.096 rad | LOST 13.3 s into weak_left; resumed 12.3 s later (in weak_return); σ peak 3.7 m/s | landed, 1.2 m from takeoff |
+| `p08_cl_vision2` | 16/17 | **30 ms FAIL** | 0.045 | 0.099 | LOST 12.6 s in; **never resumed**; σ peak 11.7 m/s; **hit the wall** (−16.5 m/s² at x 3.764 m) and slid along it | landed at (3.97, 6.48) m, 7.6 m from takeoff |
+| `p08_cl_vision3` | **17/17** | 20 ms | 0.039 | 0.086 | LOST 13.6 s in; resumed 12.3 s later; σ peak 3.8 | landed, 1.6 m from takeoff |
+| `p08_cl_vision4` | **17/17** | 20 ms | 0.047 | 0.103 | LOST 13.0 s in; **never resumed**; **hit the wall** (−17.6 m/s² at x 3.764 m) | landed at (3.76, 5.25) m, 6.5 m from takeoff |
+| `reef_check.sh vision` (`log/checks/reef_check_vision_20261001_212841`) | 16/17 | **24 ms FAIL** | 0.042 | 0.102 | LOST 12.6 s in; never resumed | (characterization; see the log) |
+
+Runs 1 and 2 are before the `camera_check` fix; runs 3, 4 and the
+`reef_check` run are after it. **Staleness passes in 2 of 5 runs** (p99 32,
+30, 20, 20, 24 ms); every other judged item passes in all five.
+Every run takes off 4.1–4.2 s after arming. Saturation is ≤ 0.1 %, and there
+are no offboard timeouts.
+
+**Staleness is at the limit.** The estimate age at the motor command is
+measured over the judged window:
+
+| | p99 | > 20 ms | max |
+|---|---|---|---|
+| P07 nominal (no camera) | 12 ms | 0.00 % | 20 ms |
+| runs 1–2 | 30–32 ms | 2.8–3.2 % | 54–60 ms |
+| runs 3–4 | 20 ms | 0.57–0.88 % | 34–52 ms |
+
+- The camera chain adds CPU load on top of the P07 graph: Gazebo rendering
+  in software is about 2 cores, the odometry about 0.4.
+- `camera_check` kept deserializing every image in Python after its ground
+  check (about 0.6 of a core). It now drops its subscriptions once the check
+  is done; that cut the share of late commands by 3–5× and is the
+  difference between runs 1–2 and 3–4.
+- The limit (ACCEPTANCE P07, ≤ 20 ms) is unchanged. On this host the closed
+  loop on vision **does not reliably meet it**: the passes have no margin, on
+  an idle machine (USER, P07). P07 itself was marginal here (p99 12–24 ms).
+- Open for a USER decision (STATUS §8).
+- [A] The remaining tail comes from CPU scheduling of the Python nodes in
+  the IMU path (`imu_noise`, about 0.65 of a core). Rewriting them was ruled
+  out as scope creep (USER, P07).
+
+**Weak-texture characterization** (legacy: no failsafe):
+- The odometry tracks on partial texture until 12.6–13.6 s into weak_left
+  (y 3.57–3.67 m), then is LOST. REEF propagates on the IMU while its σ grows.
+- The controller keeps flying on the drifting estimate. The truth error
+  stays small at first (RMSE ≤ 0.033 m/s in x and 0.057–0.075 m/s in y over
+  weak_left), then grows: 0.11–0.19 m/s in hover_weak, with 0.8–1.0 m of
+  drift from the commanded path there.
+- Two outcomes occurred, two runs each:
+  - **(a) recovery:** the odometry resumes during weak_return as the texture
+    comes back, and the vehicle returns and lands near its start;
+  - **(b) no recovery:** the drift carried the vehicle towards the wall,
+    which stayed too close or too plain for the odometry. REEF's σ reached
+    11.7 m/s, the vehicle flew into the wall at about 0.38 m/s forward while
+    REEF estimated about 0, stayed upright, and landed beside the wall.
+- Which outcome occurs depends on run-to-run timing.

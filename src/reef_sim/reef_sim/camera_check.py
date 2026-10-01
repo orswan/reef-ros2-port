@@ -58,10 +58,11 @@ class CameraCheck(Node):
         self.stamps = []
         self.depth_stamps = []
         self.done = False
-        self.create_subscription(Image, '/x3/camera/image', self.on_img, 5)
-        self.create_subscription(Image, '/x3/camera/depth', self.on_dep, 5)
-        self.create_subscription(CameraInfo, '/x3/camera/camera_info', lambda m: setattr(self, 'info', m), 5)
-        self.create_subscription(Odometry, '/x3/truth/odom', lambda m: setattr(self, 'truth', m), 10)
+        self.subs = [
+            self.create_subscription(Image, '/x3/camera/image', self.on_img, 5),
+            self.create_subscription(Image, '/x3/camera/depth', self.on_dep, 5),
+            self.create_subscription(CameraInfo, '/x3/camera/camera_info', lambda m: setattr(self, 'info', m), 5),
+            self.create_subscription(Odometry, '/x3/truth/odom', lambda m: setattr(self, 'truth', m), 10)]
 
     def now(self):
         return self.get_clock().now().nanoseconds * 1e-9
@@ -168,6 +169,11 @@ def main():
     try:
         while rclpy.ok() and not node.done:
             rclpy.spin_once(node, timeout_sec=0.1)
+        # The check is complete: stop receiving images (deserializing them in Python for the rest of the
+        # run cost about 0.6 of a core, competing with the control loop). The node stays up until shutdown.
+        for sub in node.subs:
+            node.destroy_subscription(sub)
+        node.subs = []
         while rclpy.ok():
             rclpy.spin_once(node, timeout_sec=0.5)
     except (KeyboardInterrupt, rclpy.executors.ExternalShutdownException):

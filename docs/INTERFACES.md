@@ -159,6 +159,19 @@ the **truth** orientation in `/x3/truth/odom`, which is **idealized**. No
 attitude estimator is implemented. The IMU deliberately does not carry
 orientation.
 
+**Closed loop on vision (P08, `run_x3_scenario.sh --closed-loop --vision`).**
+The same loop with `vision:=true`:
+- the world is `x3_closed_loop_vision.sdf`;
+- the camera chain of §2 (RGB-D camera) runs, and the estimator adds
+  `simulation_vision.yaml`;
+- `reef_adapter` is not started, so `/x3/reef/mocap_velocity/body_level_frame`
+  has no publisher;
+- the vision topics are recorded too;
+- the profile is `config/closed_loop/vision.yaml`.
+
+The controller's inputs are as above. The estimator's inputs are checked from
+the ROS graph: horizontal velocity only from `rgbd_to_velocity_node`.
+
 ## 3. REEF estimator node interface (implemented: vertical P04, horizontal P05)
 
 This is the contract for the ROS 2 `reef_estimator` node
@@ -532,3 +545,38 @@ armed state, and motor state. It drives nothing. `hardware:=true` exits 2
 | integer `xIntegrator`/`uIntegrator` silently ignored by roscpp's boolean `getParam` (cfg default true) | rejected (startup error naming the parameter); use true/false |
 | global `face_target`, `fly_fixed_wing` | node parameters (effective values carried over) |
 
+
+## 5. Capability matrix (P08; ACCEPTANCE `vision`)
+
+Every sensing and command mode the legacy stack advertises, as of P08.
+Categories:
+- **Supported in simulation**: exercised end to end with simulated
+  measurements.
+- **Supported with idealized input**: exercised, but the input is derived
+  from truth (labelled in topics and reports).
+- **Port tested only**: ported and covered by fixtures or unit tests, not
+  exercised in a simulated flight.
+- **Unsupported/Deferred**: not available.
+
+Nothing here is hardware evidence: no mode has run on hardware, and the
+dry-run sink refuses `hardware:=true` until P10.
+
+| Mode | Legacy component | Status | Evidence |
+|---|---|---|---|
+| IMU accelerometer and gyro | ROSflight IMU via `rosflight_io` | **supported in simulation**: Gazebo IMU with seeded noise and the vibration assumption (scenario assumption, not a sensor model) | P01, P05; `reef_check.sh estimator` |
+| Attitude for REEF (`imu/data` orientation) | ROSflight attitude estimate | **supported with idealized input**: truth attitude (`x3_imu_adapter`) | P05 |
+| Range (sonar) for altitude | sonar driver | **supported with idealized input**: range from truth geometry with seeded noise (`range_sensor`) | P01, P04, P07 |
+| Mocap z (`mocap_ned`, `enable_mocap_z`) | `ros_vrpn_client` | **port tested only** (fixtures, bit-exact); not flown in simulation | `reef_check.sh baseline` |
+| Mocap body-level velocity | `position_to_velocity` (not ported) | **supported with idealized input**: truth velocity plus noise (`reef_adapter`); the producer is not ported | P05, P07 |
+| RGB-D body-level velocity | `ros_astra_camera` → `demo_rgbd` → `rgbd_to_velocity` | **supported in simulation**: Gazebo `rgbd_camera` → `reef_rgbd_odometry` (a **replacement**, not a port of `demo_rgbd`) → `rgbd_to_velocity` (**ported**, bit-exact). Open loop and closed loop; attitude stays idealized | P08; `reef_check.sh vision`; [VISION.md](VISION.md) |
+| Astra camera driver | `ros_astra_camera` | **Unsupported/Deferred** (hardware; replaced by the Gazebo camera in simulation) | — |
+| `demo_rgbd` (ROS 1, PCL, iSAM) | `demo_rgbd` | **Unsupported/Deferred**: replaced by `reef_rgbd_odometry` (USER option B) | VISION.md §6 |
+| RC mocap-override switch (`rc_raw`) | `rosflight_io` | **port tested only** (unit tests, fixtures); no RC source in simulation | `test_rc_raw`, `reef_check.sh baseline` |
+| VRPN motion capture (pose) | `ros_vrpn_client` | **Unsupported/Deferred** (USER) | — |
+| Controller, velocity mode | `reef_control` | **supported in simulation** (on the idealized estimator inputs, or with vision as the horizontal velocity input) through the stand-in low-level loop | P07, P08; `reef_check.sh control`, `vision` |
+| Controller, position mode (`pose_stamped`) and `face_target` | `reef_control` + mocap | **supported with idealized input**: truth-derived mocap pose | P07b; `reef_check.sh faults` |
+| Setpoints from the scenario runner | (test driver; replaces the legacy sources in simulation) | **supported in simulation** | P07 |
+| Joystick teleop | `reef_teleop` | **Unsupported/Deferred** (USER) | — |
+| Waypoint and path setpoints | `setpoint_generator`, `dubins_path` | **Unsupported/Deferred**: not ported | — |
+| Low-level flight control | ROSflight firmware + `rosflight_io` | **Unsupported/Deferred** (hardware, P10): simulation uses the **stand-in** low-level loop, a development tool (CONTROL_CHAIN §7) | P07 |
+| Hardware command output | `rosflight_io` | **Unsupported/Deferred** (P10): dry-run sink only | P06 |

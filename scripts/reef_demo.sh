@@ -46,21 +46,62 @@ Modes (simulation only):
                       on Gazebo's motor model; IDEALIZED estimator inputs.
                       Records, scores against the P07 criteria, plots
                       (analysis_closed_loop/).
-  vision              NOT IMPLEMENTED (milestone P08)
+  vision [--closed-loop] [--gui]
+                      RGB-D vision (P08): a simulated camera in a procedural
+                      scene -> REPLACEMENT OpenCV odometry (not demo_rgbd) ->
+                      rgbd_to_velocity (ported) -> REEF, whose only horizontal
+                      velocity input is vision (attitude and range stay
+                      IDEALIZED). Default: open loop beside the stock
+                      truth-fed controller (analysis/analysis_vision.json).
+                      --closed-loop: REEF estimator + controller fly through
+                      the STAND-IN low-level loop (development tool, not
+                      ROSflight), including a weak-texture segment where the
+                      legacy system has no failsafe (analysis_closed_loop/).
+                      --gui adds a Gazebo viewer (informational; official
+                      results are headless)
 
 Exit: 0 completed, 1 failed, 2 NOT IMPLEMENTED / BLOCKED / invalid,
 130/143 interrupted.
 EOF
 }
 
-not_implemented() { echo "NOT IMPLEMENTED: demo '$1' is not available yet (milestone $2). Nothing was run."; exit 2; }
 
 mode="${1:-}"
 shift || true
 if [[ -z "$mode" ]]; then usage; echo; echo "missing mode (see above)"; exit 2; fi
 case "$mode" in
   help|-h|--help) usage; exit 0 ;;
-  vision) not_implemented vision P08 ;;
+  vision)
+    args=(--vision)
+    loop=open
+    for a in "$@"; do
+      case "$a" in
+        --gui) args+=(--gui) ;;
+        --closed-loop) args+=(--closed-loop); loop=closed ;;
+        *) echo "invalid option '$a' for 'vision'"; usage; exit 2 ;;
+      esac
+    done
+    python3 "$S/setup_assets.py" --verify >/dev/null 2>&1 \
+      || { echo "BLOCKED: X3 assets missing or modified; run scripts/setup_assets.py"; exit 2; }
+    python3 "$S/make_vision_assets.py" --check >/dev/null 2>&1 \
+      || { echo "BLOCKED: vision assets out of date; run scripts/make_vision_assets.py"; exit 2; }
+    if [[ " ${args[*]} " == *" --gui "* ]] && ! "$S/check_display.sh" >/dev/null 2>&1; then
+      echo "BLOCKED: browser desktop not ready (scripts/check_display.sh)"; exit 2
+    fi
+    echo "SIMULATION: simulated RGB-D camera -> REPLACEMENT odometry (not demo_rgbd) -> rgbd_to_velocity -> REEF;"
+    echo "REEF attitude and range IDEALIZED; vision is REEF's only horizontal velocity input."
+    if [[ "$loop" == closed ]]; then
+      echo "CLOSED LOOP: REEF controller + STAND-IN low-level loop (development tool, not ROSflight). Not hardware evidence."
+    else
+      echo "OPEN LOOP: the stock controller flies on truth; REEF is not in the control loop."
+    fi
+    rc=0
+    "$S/run_x3_scenario.sh" "${args[@]}" || rc=$?
+    case "$rc" in
+      0|130|143) exit "$rc" ;;
+      *) exit 1 ;;
+    esac
+    ;;
 
   stock)
     args=()

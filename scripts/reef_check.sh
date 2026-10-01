@@ -87,7 +87,7 @@ Targets (simulation only; nothing here talks to hardware):
                                 idealized inputs; nominal run scored against the
                                 P07 criteria and a causality run with a range
                                 bias (about 15 min)
-  vision                        P08 RGB-D (in progress): colcon build + tests;
+  vision                        P08 RGB-D: colcon build + tests;
                                 rgbd_to_velocity: the pinned original in a
                                 reference harness vs the port (core and node),
                                 independent model, legacy quirks Q1-Q10,
@@ -96,9 +96,10 @@ Targets (simulation only; nothing here talks to hardware):
                                 stamps); vision flight (open loop): the
                                 replacement odometry and REEF on vision vs
                                 truth, weak texture, depth loss; faults run
-                                (frames delayed 200 ms, missing 1 s). Closed
-                                loop on vision: N/A until implemented
-                                (about 15 min)
+                                (frames delayed 200 ms, missing 1 s); closed
+                                loop on vision (REEF controller + stand-in)
+                                with a weak-texture characterization. Run on
+                                an idle machine (about 20 min)
   release                       NOT IMPLEMENTED (milestone P09)
 
 Exit: 0 PASS, 1 FAIL (executed), 2 BLOCKED / NOT IMPLEMENTED / invalid,
@@ -414,8 +415,13 @@ PY
       env REEF_X3_OUT="$frun" REEF_X3_VISION_FAULTS=1 "$S/run_x3_scenario.sh" --vision
     grep -E '^(PASS|FAIL|REPORTED) +fault|^vision analysis' "$logdir/vision_faults.log" | cut -c1-150 | sed 's/^/     /' || true
     artifacts+=("$frun/analysis")
-    results+=("N/A|closed loop on vision|NOT IMPLEMENTED yet (P08 in progress)")
-    sim_notes+=("fixture time; vision runs in ${vrun#"$REEF_ROOT"/} and ${frun#"$REEF_ROOT"/} (sim time); performance REPORTED in analysis_vision.json")
+    crun="$logdir/x3_closed_loop_vision"
+    run_step "closed loop on vision (REEF controller + stand-in; vision the only horizontal velocity input)" 0 \
+      "$logdir/closed_loop_vision.log" env REEF_X3_OUT="$crun" "$S/run_x3_scenario.sh" --closed-loop --vision
+    grep -E '^(PASS|FAIL) (stability|velocity|saturation|staleness|estimator data)|^REPORTED characterization: (odometry|end)|judged items' \
+      "$logdir/closed_loop_vision.log" | cut -c1-150 | sed 's/^/     /' || true
+    artifacts+=("$crun/analysis_closed_loop")
+    sim_notes+=("fixture time; vision runs in ${vrun#"$REEF_ROOT"/}, ${frun#"$REEF_ROOT"/}, ${crun#"$REEF_ROOT"/} (sim time); performance REPORTED in analysis_vision.json; run on an idle machine (closed-loop staleness, USER P07)")
     artifacts+=("$REEF_ROOT/build/baseline/rgbd/check/results.json")
     ;;
 
