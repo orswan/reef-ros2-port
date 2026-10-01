@@ -120,13 +120,38 @@ commanded displacement), depth loss (back to x ≈ −4.8 m: the wall about
 | Input | `/x3/camera/image` (rgb8 → grey), `/x3/camera/depth` (32FC1 planar m), `/x3/camera/camera_info` (K); RGB and depth paired by identical stamp |
 | Features | Shi-Tomasi corners (≤ 300, quality 0.01, min distance 8 px), replenished below 120 tracks, masked around existing tracks (DEMO's front-end also tracks corners with KLT) |
 | Tracking | pyramidal Lucas–Kanade (21×21, 3 levels) with a forward-backward check (≤ 1 px) |
-| Depth | the previous frame's depth at each track (nearest pixel), valid only if finite and within [near, far] clip (−inf/+inf/NaN never used) |
-| Motion | 3-D (previous frame, back-projected with K and Gazebo's pixel-centre convention, +0.5 px) to 2-D (current) PnP-RANSAC (reprojection 2 px), refined (Levenberg–Marquardt) on the inliers |
+| Depth | **(rev. 1)** bilinear over the 4 neighbouring pixel centres, in the previous and the current frame; rejected if any neighbour is invalid (outside [near, far]: −inf/+inf/NaN never used) or they differ by more than 5 % (a discontinuity). (Rev. 0: the previous frame's nearest pixel.) |
+| Motion | **(rev. 1)** 3-D (previous) to 3-D (current) rigid motion: RANSAC over 3-point samples (Kabsch/Umeyama, 200 iterations, seeded), inlier if the 3-D residual ≤ 0.1 % of the depth (3.9 mm at 3.9 m ≈ 0.28 px laterally), then Kabsch on all inliers. (Rev. 0: 3-D to 2-D PnP-RANSAC, 2 px, LM refine; see the revision note below.) |
 | Pose | chained in the first frame's optical frame (x right, y down, z forward); output in **DEMO's convention** (x left, y up, z forward): p_demo = F p, R_demo = F R F with F = diag(−1, −1, 1); orientation = the camera's orientation in the init frame (the converter's formula turns it into C_init→cam) |
 | Health | LOST if < 40 depth-valid tracks (depth loss), < 25 RANSAC inliers (weak texture), or a step > 0.5 m or > 0.3 rad; while LOST **nothing is published** (no fallback, never truth); publishing resumes after 2 consecutive good frames |
 | Recovery | the motion while LOST is unknown: the chain resumes from the last published pose, so the converter (legacy) computes one low velocity from the first message after a loss (documented; REEF's gate and covariances decide) |
 | Outputs | `cam_to_init` (`nav_msgs/Odometry`, stamp = the frame's stamp); `vo/health` (`diagnostic_msgs/DiagnosticArray`: state, tracks, depth-valid tracks, inliers, reprojection RMS, processing time [wall ms], frame age [sim ms], counters) |
 | Test hooks (labelled, off by default) | `fault_schedule`: `delay PHASE OFFSET SPAN D` holds frames stamped from OFFSET to OFFSET + SPAN s after the start of scenario phase PHASE until stamp + D (sim time); `drop PHASE OFFSET SPAN` discards them (phases from `/x3/scenario/phase`) |
+
+**Revision 1 (2026-10-01, after the first scored run; criteria and limits
+unchanged).** [V] The first run (`recordings/p08_vision_open1`) passed the
+steady-segment limits but failed three degraded-case items. A diagnostic run
+with raw frames (`REEF_X3_RECORD_CAMERA=1`, replayed offline with
+`vo_replay`) showed:
+- Rendering is exact: the red target matches the truth projection at the
+  image stamp within about 2 ms (0.08 px) while moving.
+- Rev. 0 underestimated motion parallel to the image plane: lateral −5 %,
+  ascent −20 %. PnP on the single fronto-parallel wall explained part of the
+  translation as a rotation: a spurious pan of 0.215 °/s × 3.86 m = 0.0145
+  m/s, against a lateral deficit of 0.013 m/s. After a loss, with a small or
+  far feature set, the errors reached 1 m/s.
+- The current frame's depth separates translation from rotation (3-D to 3-D).
+  The inlier threshold must lie below the per-frame motion (≈ 1.6 cm at
+  0.25 m/s and 15 Hz). At 0.5 % of depth a wrong tilt hypothesis won the
+  ascent.
+
+Replay of the same frames, mean error per phase:
+- rev. 0: up to 0.05 m/s (textured) and 1 m/s (after depth loss);
+- rev. 1: ≤ 0.008 m/s in every phase, error std ≤ 0.013 m/s.
+
+**[A] Limitation:** the 0.1 % threshold relies on the simulated depth being
+exact (Gazebo adds no depth noise). A real sensor needs a threshold matched to
+its depth noise. Revision 1 is judged by a fresh live run, not by the replay.
 
 Simulation chain for vision runs: camera → odometry → `rgbd_to_velocity`
 (`config/x3_sim_camera.yaml`) → REEF estimator with `enable_rgbd`,
@@ -156,3 +181,66 @@ Truth is used for scoring and for the scene geometry only.
 | REEF recovered | REEF velocity RMSE per axis over [end + 3 s, end + 4 s] ≤ 0.10 m/s |
 | Faults run | `REEF_X3_VISION_FAULTS=1` merges `config/x3_vision_faults.yaml` (`delay right 0 5 0.2`, `drop left 2 1`). Per window [phase start + offset, + span] extended by 2 s: every vision velocity finite and per-axis error ≤ 0.3 m/s. Latency (bag receive − stamp, both sim) and rate are REPORTED; the nominal items are REPORTED only in that run |
 | REPORTED (never counted as PASS) | noise vs configured covariance, latency, gate and fusion counts, performance (odometry wall ms per frame, processing share of one core, image rate, RTF) |
+
+## 8. Results (P08 steps 4–7, odometry rev. 1) [V]
+
+Container: original (`ros2_novnc_container`), headless, idle machine.
+Branch `p08-rgbd`, uncommitted rev. 1 working tree. The stock controller
+flies on truth; REEF is open loop. REEF's attitude input is the truth
+attitude (idealized); its only horizontal velocity input is vision.
+
+Runs:
+- `recordings/p08_vision_open1`: rev. 0, the first scored run. 17/20: the
+  weak-texture REEF recovery, the depth-loss resume (+1.14 s) and the
+  depth-loss REEF recovery failed.
+- `recordings/p08_vision_open2`: rev. 1, nominal, **20/20**.
+- `recordings/p08_vision_faults2`: rev. 1, faults, **24/24**.
+- `reef_check.sh vision` (`log/checks/reef_check_vision_20261001_193029`): exit 0; its own
+  nominal run 20/20 and faults run 24/24 (vision RMSE x 0.0004, y 0.0013 m/s; REEF
+  x 0.028, y 0.033 m/s; depth-loss resume +0.72 s).
+
+An earlier faults run used the overlay key `reef_rgbd_odometry`, which does
+not reach the node in `/x3/reef`, so the hooks never acted. That analyzer
+version still passed the fault items vacuously. The analyzer now judges
+"the test hook acted" and cross-checks the manifest, which fails that run
+(kept in the scratchpad, not in `recordings/`).
+
+| Item (ACCEPTANCE vision) | Nominal (open2) | Faults run (faults2) |
+|---|---|---|
+| Vision velocity vs truth, steady (RMSE, bias) | x 0.0004 / +0.0000, y 0.0014 / −0.0000 m/s | x 0.0005, y 0.0012 m/s (REPORTED) |
+| Rate in steady segments | 13.61 Hz (≥ 10) | 13.00 Hz |
+| Sign/frame (forward +x, back −x, right +y, left −y) | 4/4 (means ±0.274–0.275 vs truth ±0.274) | 4/4 |
+| REEF on vision only, steady (RMSE) | x 0.031, y 0.030 m/s (≤ 0.10) | x 0.026, y 0.029 m/s |
+| Data path (ROS graph) | REEF fed by `/x3_imu_adapter`, `/range_sensor`, `/x3/reef/rgbd_to_velocity_node` only | same |
+| Weak texture: loss shown / resume / σ grows / REEF recovered | −0.86 s / −6.75 s (on partial texture) / 0.15 → 2.90 m/s / x 0.029, y 0.040 m/s | −0.88 s / −6.91 s / 0.13 → 2.82 / 0.031, 0.035 |
+| Depth loss: loss shown / resume / σ grows / REEF recovered | −0.18 s / +0.49 s / 0.05 → 2.83 / x 0.021, y 0.031 | −0.21 s / +0.45 s / 0.11 → 2.80 / 0.021, 0.020 |
+| No publication while LOST | 0 messages inside 2 LOST intervals | 0 inside 3 |
+| Delay 200 ms (right, 5 s) | — | hook acted (median latency 216 ms); max error 0.021 m/s (≤ 0.3) |
+| Drop 1 s (left) | — | hook acted (15 frames, stamp gap 1.056 s); max error 0.004 m/s |
+
+REPORTED (not counted):
+- **Noise vs covariance.** Measured error std is 0.0004 (x) and 0.0014 (y)
+  m/s; the converter publishes σ = 0.1 m/s (`x/y_vel_covariance` 0.01, the
+  kiwi value), 70–250× conservative for the simulated camera. The REEF error
+  (0.03 m/s) is dominated by REEF, not by the vision input.
+  [A] Contributors: measurement latency (below) and REEF's propagation with
+  the IMU vibration assumption.
+- **Latency** (bag receive − image stamp, sim time): median 102 ms, p99
+  408 ms. Rendering is asynchronous in sim time. REEF fuses each measurement
+  on arrival as current.
+- **Gate counts (nominal):** 1409 gate evaluations, all 1409 accepted (none
+  rejected; `mahalanobis_d_rgbd_velocity` 80), 1373 fused.
+- **Performance:** odometry 9.3 ms mean, p95 15.7 ms per frame wall time;
+  about 11 % of one core; camera 15.2 Hz; odometry 13.5 Hz processed (sim);
+  RTF 0.88.
+
+Findings outside the judged items [V], open for a USER decision:
+1. **Recovery anchor.** The first velocity after a resume is about 0 (the
+   chain resumes from the last published pose; the converter differentiates
+   across the gap). Its error equals the true speed (0.27, 0.36 m/s).
+   REEF's error peaks at 0.39–0.51 m/s within 1 s after the resume, partly
+   drift accumulated while lost, and is below 0.10 m/s within 3 s (judged).
+2. **Last sample before a depth loss.** One sample published about 70 ms
+   before LOST at the far clip had a 0.51 m/s error (y). REEF's error stayed
+   ≤ 0.09 m/s. The ACCEPTANCE 0.3 m/s limit applies to the delay and drop
+   cases only.

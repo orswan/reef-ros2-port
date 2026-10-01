@@ -145,8 +145,21 @@ class CameraCheck(Node):
               f'(1/rate {1 / self.rate:.4f})')
         r.update(projection_error_px=err, wall_depth=float(c), wall_truth=float(wall_depth),
                  fx=k[0], cx=k[2], cy=k[5], frame_id=img.header.frame_id)
+        r['estimator_inputs'] = _estimator_inputs(self)
         r['ok'] = all(ch['ok'] for ch in r['checks'])
         (self.out / 'camera_check.json').write_text(json.dumps(r, indent=1))
+
+
+def _pubs(node, topic):
+    return sorted(f'{i.node_namespace.rstrip("/")}/{i.node_name}' for i in node.get_publishers_info_by_topic(topic))
+
+
+def _estimator_inputs(node):
+    try:
+        subs = node.get_subscriber_names_and_types_by_node('reef_estimator', '/x3/reef')
+    except Exception as e:  # noqa: BLE001  (node not present)
+        return {'error': str(e)}
+    return {t: _pubs(node, t) for t, _ in subs if t != '/parameter_events'}
 
 
 def main():

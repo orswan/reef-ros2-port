@@ -32,7 +32,7 @@ sys.path.insert(0, str(ROOT / 'scripts'))
 import colcon_tree  # noqa: E402
 
 EXPECTED = {'reef_msgs', 'reef_estimator', 'reef_control', 'reef_fc_standin', 'reef_sim', 'reef_x3_adapter',
-            'rgbd_to_velocity', 'rosflight_msgs'}
+            'rgbd_to_velocity', 'reef_rgbd_odometry', 'rosflight_msgs'}
 # package -> (minimum test cases, required result-file kinds)
 MINIMUM = {
     'reef_msgs': (49, {'gtest', 'xunit'}),
@@ -40,7 +40,8 @@ MINIMUM = {
     'reef_control': (20, {'gtest', 'xunit'}),
     'reef_fc_standin': (5, {'gtest'}),
     'rgbd_to_velocity': (4, {'gtest'}),
-    'reef_sim': (15, {'pytest'}),
+    'reef_rgbd_odometry': (4, {'gtest'}),
+    'reef_sim': (19, {'pytest'}),
     'reef_x3_adapter': (2, {'gtest'}),
 }
 BASE = ['--base-paths', 'src']

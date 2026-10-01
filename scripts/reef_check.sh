@@ -93,9 +93,12 @@ Targets (simulation only; nothing here talks to hardware):
                                 independent model, legacy quirks Q1-Q10,
                                 negative control; camera interface in the
                                 vision scene (intrinsics, projection, depth,
-                                stamps). Odometry, REEF on vision, degraded and
-                                closed-loop cases: N/A until implemented
-                                (about 10 min)
+                                stamps); vision flight (open loop): the
+                                replacement odometry and REEF on vision vs
+                                truth, weak texture, depth loss; faults run
+                                (frames delayed 200 ms, missing 1 s). Closed
+                                loop on vision: N/A until implemented
+                                (about 15 min)
   release                       NOT IMPLEMENTED (milestone P09)
 
 Exit: 0 PASS, 1 FAIL (executed), 2 BLOCKED / NOT IMPLEMENTED / invalid,
@@ -401,15 +404,18 @@ PY
     run_step "vision assets generated and up to date" 0 "$logdir/vision_assets.log" \
       python3 "$S/make_vision_assets.py" --check
     vrun="$logdir/x3_vision"
-    run_step "camera interface: rendered RGB-D in the vision scene (stock controller flies)" 0 "$logdir/vision.log" \
-      env REEF_X3_OUT="$vrun" "$S/run_x3_scenario.sh" --vision
-    grep -E '^(PASS|FAIL) camera|^REPORTED invalid' "$logdir/vision.log" | cut -c1-150 | sed 's/^/     /' || true
+    run_step "vision flight (open loop, stock controller flies): camera interface, replacement odometry, REEF on vision, weak texture, depth loss" \
+      0 "$logdir/vision.log" env REEF_X3_OUT="$vrun" "$S/run_x3_scenario.sh" --vision
+    grep -E '^(PASS|FAIL) camera|^REPORTED invalid|^(PASS|FAIL|REPORTED) +[a-zA-Z(]|^vision analysis' "$logdir/vision.log" \
+      | cut -c1-150 | sed 's/^/     /' || true
     artifacts+=("$vrun/camera_check.json" "$vrun/analysis")
-    for part in "replacement odometry vs truth (open loop)" "REEF on vision (open loop)" \
-                "weak texture / depth loss / delayed and missing frames" "closed loop on vision" "performance"; do
-      results+=("N/A|$part|NOT IMPLEMENTED yet (P08 in progress)")
-    done
-    sim_notes+=("fixture time; vision run in ${vrun#"$REEF_ROOT"/} (sim time)")
+    frun="$logdir/x3_vision_faults"
+    run_step "vision faults run (labelled test hooks): frames delayed 200 ms, missing 1 s" 0 "$logdir/vision_faults.log" \
+      env REEF_X3_OUT="$frun" REEF_X3_VISION_FAULTS=1 "$S/run_x3_scenario.sh" --vision
+    grep -E '^(PASS|FAIL|REPORTED) +fault|^vision analysis' "$logdir/vision_faults.log" | cut -c1-150 | sed 's/^/     /' || true
+    artifacts+=("$frun/analysis")
+    results+=("N/A|closed loop on vision|NOT IMPLEMENTED yet (P08 in progress)")
+    sim_notes+=("fixture time; vision runs in ${vrun#"$REEF_ROOT"/} and ${frun#"$REEF_ROOT"/} (sim time); performance REPORTED in analysis_vision.json")
     artifacts+=("$REEF_ROOT/build/baseline/rgbd/check/results.json")
     ;;
 

@@ -1,6 +1,6 @@
 # REEF ROS 2: project status
 
-Updated 2026-10-01 (R2 done, P07b merged). `main` contains P00–P07, P07b,
+Updated 2026-10-01 (R2 done, P07b merged; P08 in progress). `main` contains P00–P07, P07b,
 the R1 fixes, and the R2 documentation corrections, all merged by
 fast-forward at the user's request (P07: §5i, P07b: §5j, R2: §5k).
 Section 3 reconciles
@@ -87,7 +87,7 @@ wrapper boundary ([INTERFACES.md §1](INTERFACES.md#1-command-interface)).
 | P07 REEF closed loop (stand-in low-level loop) | done, merged: REEF estimator + controller fly the X3 through the stand-in (development tool) on idealized inputs; nominal run 22/22, causality +0.30 m | `reef_check.sh control`, `reef_demo.sh closed-loop`; [ACCEPTANCE §5 control P07](ACCEPTANCE.md), [CONTROL_CHAIN §7](CONTROL_CHAIN.md), [reviews/P07.md](reviews/P07.md) |
 | P07b closed-loop faults and position mode | done, merged: 11 scenarios (estimate dropout short/long, estimator reset, controller restart, stale setpoint, range and velocity loss, pause, stand-in exit, position square with K9, `face_target` K10); crashes documented where the legacy system has no protection (USER) | `reef_check.sh faults`; [ACCEPTANCE §5 P07b](ACCEPTANCE.md), [reviews/P07b.md](reviews/P07b.md) |
 | R2 independent review | **PASS (SELF-REVIEW)**, USER 2026-10-01: an independent Claude session reviewed `p07b-faults-position` (code `bb47cf0`); minor documentation corrections applied (§5k) | [reviews/R2.md](reviews/R2.md), [reviews/R2_packet.md](reviews/R2_packet.md) |
-| P08 RGB-D | **in progress on `p08-rgbd`**: criteria fixed (`2ed22ac`); `rgbd_to_velocity` ported bit-exact (history imported, harness, 53/53 incl. Q1–Q10 and negative control); camera, scene, and interface checks pass (projection 0.03 px). Next: the replacement odometry | `reef_check.sh vision` (later parts N/A); [VISION.md](VISION.md) |
+| P08 RGB-D | **in progress on `p08-rgbd`**: criteria fixed (`2ed22ac`); `rgbd_to_velocity` ported bit-exact (53/53); camera interface; **replacement OpenCV odometry** (rev. 1: 3-D to 3-D motion) open loop and REEF on vision PASS; weak texture, depth loss, delayed and missing frames PASS (§5l). Next: closed loop on vision, capability matrix, `reef_demo.sh vision` | `reef_check.sh vision` (closed loop N/A); [VISION.md](VISION.md) |
 | P09 simulation release | not started | |
 | P10–P13 hardware | blocked: target hardware unknown | |
 
@@ -325,6 +325,25 @@ does not model (CONTROL_CHAIN §7, INTERFACES §4.3). [V] The reviewer's
 passed: P06 106/106, nominal closed loop, causality. Findings record:
 [reviews/R2.md](reviews/R2.md). No code changed.
 
+## 5l. Checks run for P08 so far (original container, 2026-10-01, branch `p08-rgbd`)
+
+Container commands, headless, idle machine. VERIFIED.
+
+| Check | Exit | Result |
+|---|---|---|
+| `scripts/reef_check.sh vision` (log `log/checks/reef_check_vision_20261001_193029`, working tree on `f34e043`) | 0 | PASS: colcon (175 test cases; `reef_rgbd_odometry` 4 gtest, `reef_sim` 24 pytest); `rgbd_to_velocity` 53/53; vision assets; **vision flight 20/20** (camera interface, replacement odometry open loop, REEF on vision, weak texture, depth loss); **faults run 24/24** (delay 200 ms, drop 1 s; hooks verified acting); closed loop on vision N/A |
+| `scripts/run_x3_scenario.sh --vision` (`recordings/p08_vision_open1`, odometry rev. 0) | 1 | 17/20: weak-texture REEF recovery, depth-loss resume (+1.14 s), depth-loss REEF recovery FAIL. Led to odometry rev. 1 (VISION.md §6 revision note) |
+| same, rev. 1 (`recordings/p08_vision_open2`; `recordings/p08_vision_faults2` with `REEF_X3_VISION_FAULTS=1`) | 0, 0 | 20/20, 24/24 (VISION.md §8) |
+| `shellcheck -x` on `run_x3_scenario.sh`, `reef_check.sh`, `env.sh` | 0 | no findings |
+| `scripts/regress_x3_scenario.sh`, `scripts/regress_clock_check.sh` | 0, 0 | all cases PASS (interruption, ownership, replay, display services untouched) |
+
+Key numbers (reef_check run): vision velocity RMSE x 0.0004, y 0.0013 m/s;
+REEF on vision x 0.028, y 0.033 m/s; loss shown −0.90 s (weak texture) and
+−0.21 s (depth); resumes −6.90 s and +0.72 s; REEF recovered ≤ 0.042 m/s.
+Open findings for USER (VISION.md §8): the recovery-anchor sample after a
+loss (one sample about 0; REEF error up to 0.5 m/s for < 1 s); one 0.51 m/s
+sample just before a depth loss.
+
 ## 6. Open items and known limits
 
 1. `sim/launch/clock_demo.launch.py` still uses Gazebo's combined GUI mode,
@@ -450,7 +469,10 @@ passed: P06 106/106, nominal closed loop, causality. Findings record:
 
 ## 8. Next milestone
 
-**P08** in progress (branch `p08-rgbd`): next the replacement OpenCV
-odometry and its open-loop assessment (VISION.md §6), then REEF on vision,
-degraded cases, closed loop on vision. Check: `reef_check.sh vision` PASS at
-`7da686a` (converter 53/53, camera interface) with the remaining parts N/A.
+**P08** in progress (branch `p08-rgbd`). Done: converter port, camera
+interface, replacement odometry, open-loop assessment, REEF on vision,
+degraded and fault cases (`reef_check.sh vision` PASS, §5l). Open USER
+decisions: the two findings in VISION.md §8. Next: closed loop on vision
+(REEF controller + stand-in, vision the only horizontal velocity input),
+capability matrix, `reef_demo.sh vision`, P08 evidence
+(`docs/reviews/P08.md`).

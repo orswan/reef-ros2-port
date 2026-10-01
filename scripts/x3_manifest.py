@@ -44,6 +44,8 @@ def start(run_dir, extra):
             'fuel_version': d['fuel_version'], 'source_url': d['source_url'],
             'archive_sha256': d['archive_sha256'], 'license': d['license']['name'],
             'manifest': str(m.relative_to(ROOT)), 'manifest_sha256': sha256(m)}
+    world = 'src/reef_sim/worlds/' + extra.pop('world', 'x3_flight.sdf')
+    vehicle = 'src/reef_sim/models/' + extra.pop('vehicle_model', 'reef_x3') + '/model.sdf'
     image_pkgs = Path('/etc/reef-image-packages.txt')
     dirty = run('git', 'status', '--porcelain')   # includes untracked, excludes ignored
     manifest = {
@@ -64,9 +66,10 @@ def start(run_dir, extra):
             'rosbag2': dpkg_version('ros-jazzy-rosbag2'),
         },
         'model': {
-            'world': 'src/reef_sim/worlds/x3_flight.sdf',
-            'world_sha256': sha256(ROOT / 'src/reef_sim/worlds/x3_flight.sdf'),
-            'vehicle_model_sha256': sha256(ROOT / 'src/reef_sim/models/reef_x3/model.sdf'),
+            'world': world,
+            'world_sha256': sha256(ROOT / world),
+            'vehicle_model': vehicle,
+            'vehicle_model_sha256': sha256(ROOT / vehicle),
             'third_party_assets': asset_manifests,
             'asset_verification': extra.pop('asset_verification', 'unknown'),
             'controller': 'gz-sim MulticopterVelocityControl, fed by SIMULATION TRUTH (not REEF)',

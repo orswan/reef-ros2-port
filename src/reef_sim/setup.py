@@ -41,6 +41,7 @@ setup(
             'scenario_runner = reef_sim.scenario_runner:main',
             'closed_loop_runner = reef_sim.closed_loop_runner:main',
             'camera_check = reef_sim.camera_check:main',
+            'analyze_vision = reef_sim.analyze_vision:main',
             'analyze_closed_loop = reef_sim.analyze_closed_loop:main',
             'analyze_x3_bag = reef_sim.analyze:main',
             'reef_adapter = reef_sim.reef_adapter:main',

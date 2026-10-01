@@ -1,0 +1,7 @@
+# Vision fault run (run_x3_scenario.sh --vision with REEF_X3_VISION_FAULTS=1,
+# P08): labelled TEST HOOKS of the replacement odometry, keyed to scenario
+# phases of config/x3_vision.yaml (ACCEPTANCE.md vision: delayed 200 ms,
+# missing 1 s). Not used in nominal runs.
+/x3/reef/reef_rgbd_odometry:   # the node runs in /x3/reef: the key must be its full name
+  ros__parameters:
+    fault_schedule: ["delay right 0.0 5.0 0.2", "drop left 2.0 1.0"]

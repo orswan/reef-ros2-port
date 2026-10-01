@@ -1,0 +1,10 @@
+# Vision overrides (P08), loaded after estimator_master.yaml and
+# simulation.yaml: the horizontal velocity comes ONLY from the RGB-D chain
+# (camera -> reef_rgbd_odometry (replacement) -> rgbd_to_velocity). The
+# truth-derived mocap velocity is off (and not published in vision runs).
+/**:
+  ros__parameters:
+    enable_mocap_xy: false
+    enable_rgbd: true
+    enable_measurements: true
+    rgbd_twist_topic: rgbd_to_velocity/body_level_frame

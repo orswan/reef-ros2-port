@@ -99,6 +99,24 @@ The full specification is in [X3_SCENARIO.md](X3_SCENARIO.md). Summary:
 15 Hz configured (0.066 s spacing, sim time); RGB and depth share stamps.
 Details and the scene: [VISION.md §5](VISION.md).
 
+Vision chain (P08, open loop beside the stock controller; namespace `/x3/reef`):
+
+| Topic | Type | Producer | Notes |
+|---|---|---|---|
+| `/x3/reef/cam_to_init` | `nav_msgs/Odometry` | `reef_rgbd_odometry` (**REPLACEMENT** odometry, not `demo_rgbd`; [VISION.md §6](VISION.md)) | camera pose in its first frame, DEMO convention (x left, y up, z forward), `cam_init_demo` → `camera_demo`; stamp = image stamp; **not published while LOST**; reliable, depth 10 |
+| `/x3/reef/vo/health` | `diagnostic_msgs/DiagnosticArray` | `reef_rgbd_odometry` | every processed frame (stamp = image stamp): `state` (OK/LOST), `published`, `tracks`, `depth_tracks`, `inliers`, `reprojection_rms_px`, `processing_ms_wall`, `frame_age_ms_sim`, `wall_time_s`, counters (`frames`, `frames_published`, `frames_dropped_by_hook`, `lost_events`) |
+| `/x3/reef/rgbd_to_velocity/body_level_frame` | `reef_msgs/DeltaToVel` | `rgbd_to_velocity_node` (ported, `b7637198`) | REEF's only horizontal velocity input in vision runs; stamp in `vel.header` (the outer `header` stays 0, legacy); reliable, transient local, depth 1 |
+| `/x3/reef/rgbd_to_velocity/init_frame` | `nav_msgs/Odometry` | `rgbd_to_velocity_node` | legacy diagnostic output (Q6) |
+
+Odometry parameters (validated at startup; invalid values are errors):
+`max_features`, `min_features`, `min_depth_tracks`, `min_inliers`,
+`near_clip`, `far_clip`, `recover_frames`, `ransac_distance`,
+`depth_discontinuity`, and the labelled test hook `fault_schedule` (empty by
+default; `config/x3_vision_faults.yaml` sets it for the faults run only).
+REEF in vision runs: `config/simulation_vision.yaml` (`enable_rgbd`,
+`enable_measurements` true, `enable_mocap_xy` false). The truth-derived
+velocity adapter (`reef_adapter`) is not started.
+
 ### REEF-controlled X3 (P07, `run_x3_scenario.sh --closed-loop`)
 
 World `x3_closed_loop.sdf` (no stock controller). Topics in addition to the
@@ -385,7 +403,7 @@ apt index]:
 |---|---|---|---|
 | mocap velocity (`TwistWithCovarianceStamped`, body-level) | `position_to_velocity` (bundle pin `126dae14`, **no longer present upstream**; current HEAD `d61ee3c` inspected): differentiates `pose_stamped`, publishes `velocity/body_level_frame` | the exact type REEF reads | **no ROS 2 port**. The type is compatible; a ROS 2 producer must supply body-level velocity and covariance[0]/[7]. In simulation, `reef_adapter` provides an idealized stand-in from truth |
 | mocap pose (`PoseStamped`, z NED) | `ros_vrpn_client` (bundle pin `f48e2725`) | pose in the mocap frame | ROS 2 mocap drivers exist in Jazzy (`motion_capture_tracking`, `mocap_optitrack`, `mocap4r2`) and publish poses, but not in NED: a frame conversion node is needed. Not exercised |
-| RGB-D velocity (`reef_msgs/DeltaToVel`) | `rgbd_to_velocity` (`b7637198`): from `cam_to_init` (`nav_msgs/Odometry` of an RGB-D odometry) publishes `rgbd_to_velocity/body_level_frame` | `DeltaToVel` (ported in P03) | **no ROS 2 port**; the message type exists. RGB-D odometry in ROS 2 (for example RTAB-Map, in Jazzy) would need an adapter. **Not exercised: the simulated velocity observations are not RGB-D odometry** |
+| RGB-D velocity (`reef_msgs/DeltaToVel`) | `rgbd_to_velocity` (`b7637198`): from `cam_to_init` (`nav_msgs/Odometry` of an RGB-D odometry) publishes `rgbd_to_velocity/body_level_frame` | `DeltaToVel` (ported in P03) | **ported in P08** (`src/rgbd_to_velocity`, bit-exact to the pinned original). Its input in simulation is the **replacement** odometry `reef_rgbd_odometry` (not `demo_rgbd`); exercised in `run_x3_scenario.sh --vision` (open loop). The simulated velocity observations of the other modes (`reef_adapter`) are still not RGB-D odometry |
 | RC switch (`rosflight_msgs/RCRaw`) | `rosflight_io` | `rc_raw` | type vendored from upstream ROS 2 rosflight (P03); hardware path P10+ |
 
 ### 3.11 QoS compatibility and callback ordering (P05)
