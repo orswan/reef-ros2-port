@@ -1,0 +1,23 @@
+{
+ "_comment": "Original sources compiled by the rgbd_to_velocity reference harness (P08). baseline/rgbd/build_rgbd_reference.sh extracts each file from the pinned Git objects and refuses to build if a SHA-256 differs.",
+ "rgbd_to_velocity": {
+  "url": "https://github.com/uf-reef-avl/rgbd_to_velocity.git",
+  "commit": "b76371984b7d18f6ec487655bc7f344a31b7ba68",
+  "source": "hardware bundle (reef_estimator_bundle) pin",
+  "license": "no LICENSE file; package.xml: TODO",
+  "files": {
+   "include/rgbd_to_velocity.h": "9883a86f25d69ff81f00dbd4e382176420b23701e71326a39ac4472cfaff7902",
+   "src/rgbd_to_velocity.cpp": "d8e5398828d6b47064abea5dc96bf95c02d7dabcf2a06da720f1ffee4deed157",
+   "params/kiwi_camera.yaml": "0990edc19f8a201dd9d41e02756d4241eec365a6977f9ca368555e4633c029bc",
+   "params/rgbd_to_velocity_params.yaml": "db08049ac298084d8859f3b41a30ac2827a4b520ebdaa80292d10c94ecb4d8ae"
+  }
+ },
+ "reef_msgs": {
+  "url": "https://github.com/uf-reef-avl/reef_msgs.git",
+  "commit": "7fb63ff93269040316b71d346dbc32919da1f63d",
+  "files": {
+   "include/reef_msgs/matrix_operation.h": "7bb7c8d45c4db89927e90fd50f90256e7d73d57d231481745329b9866b1c84f3",
+   "include/reef_msgs/dynamics.h": "22f9e28e7a9d25c8d0586954a97d3af60864da82e77546d31db3a00f55e80a6c"
+  }
+ }
+}

@@ -101,3 +101,24 @@ with the port's replay tool. Adaptations (the complete list):
 `ROS_ASSERT` failures (a missing required parameter) exit with status 3.
 The ROS 2 `rc_raw` subscription of the original had an empty callback and
 is not driven.
+
+## rgbd_to_velocity reference harness (P08)
+
+`baseline/rgbd/build_rgbd_reference.sh` builds `build/baseline/rgbd/rgbd_ref`
+from `rgbd_to_velocity` `b7637198` (`rgbd_to_velocity.h/.cpp`) and `reef_msgs`
+`7fb63ff9` (`matrix_operation.h`, `dynamics.h`), extracted from the pinned
+Git objects in the original catkin layout (the converter includes reef_msgs
+through `../../reef_msgs/...`) and checked against
+`baseline/rgbd/provenance.json`. `/usr/include/eigen3` is on the include path
+as catkin's `find_package(Eigen)` put it. Event format: top of
+`rgbd/rgbd_ref_main.cpp`; columns: `rgbd/rgbd_columns.txt` (shared with the
+port's replay tool). Adaptations (the complete list):
+
+- **V1:** stand-in headers: the estimator harness's roscpp and message
+  stand-ins (A2; flat parameter names, list parameters), plus
+  `nav_msgs/Odometry` with its ConstPtr typedef and an empty
+  `geometry_msgs/Twist` (included, not used), in `rgbd/shim`.
+- **V2:** the converter object is constructed in zeroed storage (built with
+  `-fno-lifetime-dse`), so members the original prints or reads before
+  setting them are 0. The converter's members are all public; no access
+  relaxation is needed.

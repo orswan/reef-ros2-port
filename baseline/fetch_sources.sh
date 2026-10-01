@@ -23,3 +23,4 @@ need reef_estimator https://github.com/uf-reef-avl/reef_estimator.git \
   e4179f48c3f26e22bd1366b71ee1e117ce2f5f7f 95987b5118b624208910d9e51424300022e1f512
 need reef_msgs https://github.com/uf-reef-avl/reef_msgs.git 7fb63ff93269040316b71d346dbc32919da1f63d
 need reef_control https://github.com/uf-reef-avl/reef_control.git 12237b76b85d755364275ed8c1147f15d8ddf15c
+need rgbd_to_velocity https://github.com/uf-reef-avl/rgbd_to_velocity.git b76371984b7d18f6ec487655bc7f344a31b7ba68
