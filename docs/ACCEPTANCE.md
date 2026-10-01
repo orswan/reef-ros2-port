@@ -385,15 +385,44 @@ locked by SHA-256, plus one stream driven by a recorded X3 estimate run.
 | Dry-run sink | records every command with firmware interpretation (ignore bits, 100 ms offboard timeout, armed); has no hardware output; `hardware:=true` is refused (exit 2, NOT IMPLEMENTED) |
 | Closed loop | **NOT IMPLEMENTED in P06** (P07; reported as N/A, not PASS) |
 
-### `control` (P07): closed loop — draft, to be fixed before P07 scoring
+### `control` (P07): closed loop — fixed 2026-10-01, before any closed-loop run
 
-The stock truth-fed Gazebo outer controller is **disabled** in
-REEF-controlled runs; the low-level loop is the labelled stand-in of
-CONTROL_CHAIN.md §7 (USER, 2026-09-30); there is a causality test
-(perturbing or removing the REEF estimate changes the control path as
-specified); tracking error, overshoot, settling, saturation, and
-estimate-staleness limits are fixed per scenario; there is one physics
-integration and one owner per control layer.
+USER (2026-10-01): close the loop with the stand-in low-level loop of
+CONTROL_CHAIN.md §7 (a development tool, not ROSflight), driving Gazebo's
+motor model directly, with the stock controller removed; record initial
+stability and tracking. Everything here is **simulation with idealized
+inputs** (truth attitude to REEF and to the stand-in, idealized range,
+simulated velocity observations, IMU vibration assumption); it is not
+ROSflight, hardware, or flight evidence.
+
+Scenario `closed_loop` (sim time, 250 Hz IMU): disarmed settle 5 s; arm;
+velocity mode with zero velocity and altitude setpoint z = −1.0 m (REEF
+NED: range sensor 1.0 m above ground) for 20 s (takeoff + hover); forward
+0.3 m/s 6 s; hover 6 s; left 0.3 m/s 6 s; hover 6 s; yaw rate 0.3 rad/s 6 s;
+hover 6 s; climb to z = −1.5 m 10 s; descend to z = −0.6 m 10 s. Gains: the
+shipped quad gains (`config/reef_control_quad.yaml`) unless replaced in a
+separate, explained configuration commit (controller math never changes);
+stand-in gains from CONTROL_CHAIN.md §7, chosen before the first run.
+
+| Criterion | Limit |
+|---|---|
+| Architecture | the world has no `MulticopterVelocityControl` and nothing publishes `/x3/cmd_vel`; the motor command topic has exactly one publisher (the stand-in); one physics engine (Gazebo); every topic, manifest and plot labels the stand-in a development tool |
+| Data path | truth is used only by the documented idealized inputs (REEF attitude, range, velocity observations; stand-in attitude and rates) and for scoring; the controller reads only REEF estimates and the setpoint (checked from the ROS graph: its subscriptions and their publishers) |
+| Takeoff | REEF reports takeoff and the vehicle leaves the ground within 15 s of arming |
+| Stability (every flight phase after takeoff) | finite outputs; \|roll\|, \|pitch\| ≤ 0.35 rad (truth); range-sensor height ≥ 0.25 m; no flip; the run completes |
+| Altitude step response (takeoff to 1.0 m; 1.0 → 1.5 m; 1.5 → 0.6 m) | overshoot ≤ 0.4 m; within ±0.15 m of the setpoint by 15 s after the step and staying there to the end of the phase |
+| Altitude hold (last 4 s of each hover phase) | RMSE of truth sensor height vs setpoint ≤ 0.10 m |
+| Horizontal velocity (last 3 s of each velocity phase; last 4 s of hovers) | RMSE of truth body-level velocity vs command ≤ 0.15 m/s per axis |
+| Yaw rate (last 3 s of the yaw phase) | \|mean truth yaw rate − 0.3\| ≤ 0.1 rad/s |
+| Saturation | throttle command at 0 or 1 for ≤ 5 % of samples after takeoff; motor-speed clamping in ≤ 5 % of stand-in steps after takeoff |
+| Staleness and latency | estimate stamp → motor command, p99 ≤ 20 ms (wall); no offboard timeout after arming |
+| Causality | a second run with a +0.30 m bias on the range measurement (test hook, labelled) holds the truth height lower by 0.30 ± 0.10 m in the first hover than the nominal run: the REEF estimate, not truth, closes the altitude loop |
+| Reproducibility | reported, not judged: a second nominal run (same seeds) and the spread of every metric (Gazebo and ROS timing are not deterministic) |
+| Comparison | the stock (truth-fed) run and the REEF-controlled run are both recorded with manifests and plots; differences are reported, not judged |
+
+Not covered in P07 (later, with their own criteria): RC override, failsafe,
+estimate interruption and restart, landing, position mode (needs a mocap
+input; the controller supports it), wind, sensor faults.
 
 ### `vision` (P08)
 
