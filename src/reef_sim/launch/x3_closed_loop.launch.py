@@ -13,8 +13,8 @@ offline guards, monitoring, manifest, analysis).
 
 Arguments: output_dir:=<dir> (required), params_file:=<merged yaml>,
 headless:=true|false (false adds a separate `gz sim -g` viewer),
-record:=true|false, control_params:=<reef_control yaml> (default: the shipped
-quad gains).
+record:=true|false, control_params:=<reef_control yaml> (default
+reef_control_x3_sim.yaml: the shipped quad gains with dI = 0, see that file).
 The launch shuts down when the scenario runner exits.
 """
 from launch import LaunchDescription
@@ -56,7 +56,7 @@ def generate_launch_description():
         DeclareLaunchArgument('headless', default_value='true'),
         DeclareLaunchArgument('record', default_value='true'),
         DeclareLaunchArgument('control_params', default_value=PathJoinSubstitution(
-            [FindPackageShare('reef_control'), 'config', 'reef_control_quad.yaml'])),
+            [FindPackageShare('reef_control'), 'config', 'reef_control_x3_sim.yaml'])),
         AppendEnvironmentVariable('GZ_SIM_RESOURCE_PATH', PathJoinSubstitution([share, 'models'])),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(gz_launch),

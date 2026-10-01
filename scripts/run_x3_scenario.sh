@@ -22,7 +22,7 @@
 # REEF_X3_RANGE_BIAS=<m> (closed loop, test hook: bias every in-range reading;
 # the causality run), REEF_X3_NOMINAL=<run dir> (closed loop: nominal run the
 # causality analysis compares with), REEF_X3_CONTROL_PARAMS=<yaml> (closed loop:
-# reef_control gains; default src/reef_control/config/reef_control_quad.yaml).
+# reef_control gains; default src/reef_control/config/reef_control_x3_sim.yaml).
 #
 # Every run is isolated (per-run GZ_PARTITION and ROS domain; the scenario
 # requires exactly one publisher per stream) and offline: Gazebo gets an empty
@@ -99,7 +99,7 @@ if [[ "$closed_loop" == true ]]; then
   runner=closed_loop_runner
   python3 "$REEF_ROOT/scripts/x3_merge_params.py" "$run_dir/x3_scenario.yaml" \
     "$REEF_ROOT/src/reef_sim/config/x3_closed_loop.yaml" || fail 2 "could not merge the closed-loop overlay"
-  control_src="${REEF_X3_CONTROL_PARAMS:-$REEF_ROOT/src/reef_control/config/reef_control_quad.yaml}"
+  control_src="${REEF_X3_CONTROL_PARAMS:-$REEF_ROOT/src/reef_control/config/reef_control_x3_sim.yaml}"
   [[ -f "$control_src" ]] || fail 2 "controller parameters not found: $control_src"
   cp "$control_src" "$run_dir/reef_control.yaml"
   if [[ "$range_bias" != 0 ]]; then

@@ -1,0 +1,55 @@
+# reef_control gains for the X3 closed-loop SIMULATION (P07): the shipped
+# quad gains (reef_control_quad.yaml) with ONE change, dI 0.05 -> 0.0.
+# Why (recordings of the first closed-loop run, docs/reviews/P07.md): during
+# the takeoff climb the altitude PID saturates at -0.7 m/s for about 4 s; with
+# dD = 0 the legacy anti-windup never engages (CONTROL_CHAIN.md K2), so the
+# integral winds up, cancels the P term, and holds the vehicle about 0.15-0.19 m
+# above the setpoint for tens of seconds. The REEF estimate was within 1 cm of
+# truth; the climb-rate integrator (wI) carries the hover throttle, so the
+# outer integral is not needed for zero steady-state error. The controller
+# code is unchanged and K2 remains (asserted by reef_check.sh control).
+# Based on: reef_control (P06) parameters: the shipped quad gains of reef_control
+# 12237b76 (config/legacy/quad_pid.yaml), as the original node read them:
+# - face_target and fly_fixed_wing were inside the reef_control_pid
+#   namespace there, where the original did not look (it read them
+#   globally, CONTROL_CHAIN.md K12), so their effective value was false;
+# - xIntegrator/uIntegrator were integers there, which roscpp's boolean
+#   getParam rejected, so the cfg default (true) applied;
+# - gaussian_offset is not a parameter of the original.
+# Ranges: cfg/Gains.cfg; out-of-range values stop the node (K13).
+/**:
+  ros__parameters:
+    kp: 0.8
+    deadzone: 0.1
+    max_vel: 1.5
+    center_point: 1.0
+    alpha: 0.4
+    uP: 0.3
+    uI: 0.025
+    uD: 0.0
+    vP: 0.34
+    vI: 0.03
+    vD: 0.005
+    wP: 0.6
+    wI: 0.2
+    wD: 0.0
+    uvtau: 0.15
+    dP: 0.75
+    dI: 0.0
+    dD: 0.0
+    nedtau: 0.15
+    yawP: 0.7
+    yawI: 0.08
+    yawD: 0.01
+    yawtau: 0.15
+    xIntegrator: true
+    uIntegrator: true
+    max_roll: 0.25
+    max_pitch: 0.25
+    max_yaw_rate: 2.0
+    max_u: 1.0
+    max_v: 1.0
+    max_w: 1.0
+    max_d: 1.0
+    face_target: false
+    fly_fixed_wing: false
