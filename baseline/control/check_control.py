@@ -14,8 +14,10 @@ regenerates the fixtures and checks their lock, then per stream:
 It also runs the parameter cases, the K1-K13 characterizations, a
 determinism rerun, and the negative control (a reference with the D-term
 sign flipped must fail the model and the port comparison).
---stream adds a stream built from a recorded REEF estimate run (CSV with
-columns t_ns or sec/nsec, z, z_dot, x_dot, y_dot; see stream_from_csv).
+--stream adds a stream built from a recorded REEF estimate run: the
+estimates.csv of x3_reef_offline (rows where n_published increments; the
+state after each IMU step) or any CSV with t_ns or sec/nsec, z, z_dot,
+x_dot, y_dot; see stream_from_csv.
 Exit: 0 all PASS, 1 a check failed, 2 blocked (build or input missing).
 """
 import argparse
@@ -296,6 +298,13 @@ def stream_from_csv(path, out_dir):
     if not rows:
         blocked(f'{path}: no rows')
     keys = rows[0].keys()
+    if 'n_published' in keys:   # x3_reef_offline estimates.csv: one row per input event
+        pub, last = [], '0'
+        for r in rows:
+            if r['n_published'] != last:
+                pub.append(r)
+            last = r['n_published']
+        rows = pub
 
     def stamp(r):
         if 't_ns' in keys:
@@ -318,8 +327,8 @@ def stream_from_csv(path, out_dir):
         if i == 3 * n // 4:
             ev.append(fx.des(av=1, pose=(0, 0, -1.0, 0), att=(0.05, -0.05, 0, 0.1)))
         s, ns = stamp(r)
-        ev.append(f'est {s} {ns} {val(r, "z", "z_plus.z")} {val(r, "z_dot", "z_plus.z_dot")} '
-                  f'{val(r, "x_dot", "xy_plus.x_dot")} {val(r, "y_dot", "xy_plus.y_dot")}')
+        ev.append(f'est {s} {ns} {val(r, "z", "z_plus.z")} {val(r, "z_dot", "zdot", "z_plus.z_dot")} '
+                  f'{val(r, "x_dot", "vx", "xy_plus.x_dot")} {val(r, "y_dot", "vy", "xy_plus.y_dot")}')
     (out_dir / 's01_recorded_estimates.params').write_text(fx.params(fx.QUAD))
     (out_dir / 's01_recorded_estimates.events').write_text('\n'.join(ev) + '\n')
     return 's01_recorded_estimates', len(rows)

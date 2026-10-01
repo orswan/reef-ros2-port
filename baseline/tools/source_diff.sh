@@ -6,12 +6,13 @@
 # originals are the files as imported by `git subtree`:
 #   reef_estimator  c80f824  (master e4179f48 minus docs/Partial_Update.pdf)
 #   reef_msgs       d8e3096  (7fb63ff)
+#   reef_control    12237b76 (imported unchanged by git subtree in 8d32197)
 # Exit: 0 written, 2 a required commit or file is missing.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 out="${1:-$ROOT/build/r1}"
 mkdir -p "$out"
-E=c80f824 M=d8e3096
+E=c80f824 M=d8e3096 R=12237b76b85d755364275ed8c1147f15d8ddf15c
 pairs=(
   "$E:src/reef_estimator/upstream/include/estimator.h|HEAD:src/reef_estimator/include/reef_estimator/estimator.h"
   "$E:src/reef_estimator/upstream/src/estimator.cpp|HEAD:src/reef_estimator/src/estimator.cpp"
@@ -27,8 +28,15 @@ pairs=(
   "$M:src/reef_msgs/include/reef_msgs/dynamics.h|HEAD:src/reef_msgs/include/reef_msgs/dynamics.h"
   "$M:src/reef_msgs/src/dynamics.cpp|HEAD:src/reef_msgs/src/dynamics.cpp"
   "$M:src/reef_msgs/include/reef_msgs/matrix_operation.h|HEAD:src/reef_msgs/include/reef_msgs/matrix_operation.h"
+  "$R:include/simple_pid.h|HEAD:src/reef_control/include/reef_control/simple_pid.h"
+  "$R:src/simple_pid.cpp|HEAD:src/reef_control/src/simple_pid.cpp"
+  "$R:include/controller.h|HEAD:src/reef_control/include/reef_control/controller.h"
+  "$R:src/controller.cpp|HEAD:src/reef_control/src/controller.cpp"
+  "$R:include/PID.h|HEAD:src/reef_control/include/reef_control/PID.h"
+  "$R:src/PID.cpp|HEAD:src/reef_control/src/PID.cpp"
+  "$R:src/pid_node.cpp|HEAD:src/reef_control/src/reef_control_node.cpp"
 )
-for m in DeltaToVel XYEstimate ZEstimate XYZEstimate XYDebugEstimate ZDebugEstimate XYZDebugEstimate; do
+for m in DeltaToVel DesiredState DesiredVector XYEstimate ZEstimate XYZEstimate XYDebugEstimate ZDebugEstimate XYZDebugEstimate; do
   pairs+=("$M:src/reef_msgs/msg/$m.msg|HEAD:src/reef_msgs/msg/$m.msg")
 done
 : > "$out/source_diff.patch"

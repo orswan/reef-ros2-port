@@ -70,7 +70,14 @@ Targets (simulation only; nothing here talks to hardware):
   faults                        F1-F12 (ACCEPTANCE.md section 5) on fixtures, the
                                 node, replays, and an own simulation run (about
                                 12 min)
-  control                       NOT IMPLEMENTED (milestones P06-P07)
+  control                       P06 controller fidelity: colcon build + tests;
+                                the pinned original reef_control in a reference
+                                harness vs the port (core and node) on 20
+                                streams, independent model, K1-K12
+                                characterizations, parameter cases, negative
+                                control, plus a stream from an own X3 + REEF run;
+                                dry-run sink in the tests. Closed loop (P07):
+                                NOT IMPLEMENTED, reported N/A (about 8 min)
   vision                        NOT IMPLEMENTED (milestone P08)
   release                       NOT IMPLEMENTED (milestone P09)
 
@@ -156,13 +163,12 @@ for a in "$@"; do
 done
 case "$target" in
   help|-h|--help) usage; exit 0 ;;
-  control) not_implemented control P06-P07 ;;
   vision) not_implemented vision P08 ;;
   release) not_implemented release P09 ;;
-  env|clock|sim-data|baseline|interfaces|estimator|faults) ;;
+  env|clock|sim-data|baseline|interfaces|estimator|faults|control) ;;
   *) echo "unknown target '$target'"; usage; exit 2 ;;
 esac
-if [[ "$target" == env || "$target" == interfaces || "$target" == estimator || "$target" == faults ]] && (( gui || regress || floor )); then
+if [[ "$target" == env || "$target" == interfaces || "$target" == estimator || "$target" == faults || "$target" == control ]] && (( gui || regress || floor )); then
   echo "target '$target' takes no options"; exit 2
 fi
 if [[ "$target" == baseline ]] && (( gui || regress )); then echo "target 'baseline' accepts only --floor"; exit 2; fi
@@ -306,6 +312,33 @@ PY
       _ "$tree" "$S/check_faults.py" "$run"
     grep -E '^(PASS|FAIL) \[(F[0-9]+|determinism)\]|^(PASS|FAIL): ' "$logdir/faults.log" | grep -v 'parity and wrapper' | sed 's/^/     /' || true
     sim_notes+=("fixture time and the simulation run in ${run#"$REEF_ROOT"/}")
+    ;;
+
+  control)
+    tree="$(python3 "$S/colcon_tree.py")"
+    C="$REEF_ROOT/baseline/control"
+    configs+=("$C/provenance.json" "$C/fixtures.lock.json" "$C/fixtures.py" "$C/control_model.py"
+              "$C/check_control.py" "$REEF_ROOT/src/reef_control/config/reef_control_quad.yaml")
+    "$REEF_ROOT/baseline/fetch_sources.sh" >"$logdir/sources_precheck.log" 2>&1 \
+      || blocked "pinned upstream sources unavailable (see ${logdir#"$REEF_ROOT"/}/sources_precheck.log)"
+    python3 "$S/setup_assets.py" --verify >"$logdir/assets_precheck.log" 2>&1 \
+      || blocked "X3 assets missing or modified; run scripts/setup_assets.py"
+    run_step "colcon build + test (package set, minimum test counts)" 0 "$logdir/colcon.log" \
+      python3 "$S/check_colcon.py"
+    grep -E '^reef_control +files=' "$logdir/colcon.log" | sed 's/^/     /' || true
+    run="$logdir/x3_reef"
+    # shellcheck disable=SC2016  # expanded by the inner shell
+    run_step "X3 + REEF run and offline replay (estimate stream)" 0 "$logdir/sim.log" \
+      bash -c 'REEF_X3_OUT="$2" "$3/run_x3_scenario.sh" --estimator && source "$1/install/setup.bash" && ros2 run reef_sim x3_reef_offline "$2"' \
+      _ "$tree" "$run" "$S"
+    # shellcheck disable=SC2016  # expanded by the inner shell
+    run_step "controller: original vs port, model, characterizations" 0 "$logdir/control.log" \
+      bash -c 'source "$1/install/setup.bash" && exec python3 "$2" --port "$1/install/reef_control/lib/reef_control/reef_control_event_replay" --stream "$3/reef_offline/estimates.csv"' \
+      _ "$tree" "$C/check_control.py" "$run"
+    grep -E '^(PASS|FAIL) \[(K|params|negative|cfg)\]|^(PASS|FAIL): ' "$logdir/control.log" | sed 's/^/     /' || true
+    results+=("N/A|closed loop with the stand-in low-level loop|NOT IMPLEMENTED (P07)")
+    sim_notes+=("fixture time; one estimate stream from the run in ${run#"$REEF_ROOT"/}")
+    artifacts+=("$REEF_ROOT/build/baseline/control/check/results.json" "$run/reef_offline/estimates.csv")
     ;;
 
   sim-data)

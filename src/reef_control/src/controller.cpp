@@ -84,6 +84,23 @@ namespace reef_control
     theta_desired = -desired_state_.acceleration.x;
     thrust = -desired_state_.acceleration.z;
 
+    /*
+    accel_out = Eigen::Vector3d(desired_state_.acceleration.x, desired_state_.acceleration.y, desired_state_.acceleration.z );
+    total_accel = sqrt( pow(accel_out.x(),2) + pow(accel_out.y(),2) + pow((1 - accel_out.z()),2) );
+    thrust = total_accel * hover_throttle_ ;
+
+    if(thrust > 0.001)
+    {
+      phi_desired = asin(accel_out.y() / total_accel);
+      theta_desired = -1.0 * asin(accel_out.x() / total_accel);
+    }
+    else
+    {
+        phi_desired = 0;
+        theta_desired = 0;
+    }
+    */
+
     command.mode = Command::MODE_ROLL_PITCH_YAWRATE_THROTTLE;
     command.F = std::min(std::max(thrust, 0.0), 1.0);
     if(!desired_state_.attitude_valid && !desired_state_.altitude_only) {
