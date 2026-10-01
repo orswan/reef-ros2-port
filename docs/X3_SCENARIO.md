@@ -344,3 +344,14 @@ Replays of a recording (IDEALIZED INPUTS as above):
   played topic comes only from the bag player and each REEF input only from
   the adapter (`sources.json`).
 
+## 12. REEF-controlled runs (P07)
+
+`scripts/run_x3_scenario.sh --closed-loop` flies the X3 with the REEF
+estimator and the REEF controller in the loop: world `x3_closed_loop.sdf`
+(this world without `MulticopterVelocityControl`), the stand-in low-level
+loop `reef_fc_standin` (development tool, truth attitude) driving the motor
+model, phases in `config/x3_closed_loop.yaml`, scored by
+`analyze_closed_loop`. Specification: [CONTROL_CHAIN.md §7](CONTROL_CHAIN.md);
+criteria: ACCEPTANCE.md (`control`, P07); topics: INTERFACES.md §2; results:
+[reviews/P07.md](reviews/P07.md).
+

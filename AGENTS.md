@@ -132,6 +132,12 @@ with this file, this file wins.
   tool, CONTROL_CHAIN.md §7), never described as ROSflight or hardware
   evidence. No hardware output exists; the dry-run sink refuses
   `hardware:=true` until P10.
+- Closed loop (P07): after changing `src/reef_fc_standin`, the closed-loop
+  world, launch, runner, analyzer, or controller configuration, run
+  `reef_check.sh control` (nominal and causality runs). Controller gains for
+  simulation change only in explained configuration commits
+  (`reef_control_x3_sim.yaml`); never feed truth to the controller or the
+  estimator beyond the documented idealized inputs.
 
 ## Simulation data rules (`src/reef_sim`, docs/X3_SCENARIO.md)
 
