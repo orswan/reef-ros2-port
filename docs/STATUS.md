@@ -277,10 +277,12 @@ colcon step above). Nothing was run in `reef_ros2_dev` by the implementer (H9).
 
 | Command | Exit | Result |
 |---|---|---|
+| `scripts/reef_check.sh control` (at `85c1108`, after the end-of-run fix; uncommitted: docs only) | 0 | **PASS**, 725 s: P06 106/106; nominal run with return, landing, and disarm: every judged P07 check including the end state (disarmed, motors 0, at rest on the ground); estimate age p99 18–20 ms (at the limit; item 24); causality drop 0.301 m |
 | `scripts/reef_check.sh control` (at `14ebb2b`; uncommitted: docs only) | 0 | **PASS**, 587 s: colcon build + test (reef_control 20, reef_fc_standin 5 cases); P06 fidelity 106/106; closed-loop nominal run: every P07 criterion (takeoff 4.1 s after arming, tilt ≤ 0.09 rad, altitude hold RMSE ≤ 0.016 m, velocity RMSE ≤ 0.009 m/s, yaw rate 0.262 rad/s, no saturation, estimate age p99 12 ms); causality run: +0.30 m range bias lowers the truth hover by 0.301 m |
 | same, at `9fa655e` | 1 | the closed-loop steps passed, but the estimate-stream run also applied the P05 analysis, whose estimate-age limit failed narrowly (p99 20.0 ms), so no stream file existed and `check_control.py` crashed. Fixed in `14ebb2b` (stream run without the P05 analysis; missing stream = FAIL). No limit changed |
 | recorded runs `recordings/p07_*` | — | see [reviews/P07.md](reviews/P07.md): shipped gains 20/22 (K2 windup in the first hover); X3 gains A 21/22 (data-path test bug), B 21/22 (latency p99 24 ms), C 22/22; causality 0.300 m |
 | motor-mapping experiment (stand-in alone, owned session) | — | roll, pitch, yaw-rate signs as designed |
+| end-of-run fly-away (USER, GUI demo) and the stand-in kill test (owned session) | — | cause verified: ROS nodes stop 5 s+ before Gazebo, motor model holds the last speeds; after the fix the stand-in zeroes the motors on shutdown (vehicle falls and rests) and the scenario lands and disarms first (`p07_cl_land_a`: back to 0.018 m from the start, touchdown 0.75 m/s) |
 | `scripts/regress_x3_scenario.sh` | 0 | 13/13 |
 | `scripts/regress_clock_check.sh` (after the `env.sh` change) | 0 | all cases PASS |
 | colcon test `reef_fc_standin`; pytest `test_closed_loop_world.py` | 0 | 5 + 2 cases |
@@ -380,9 +382,10 @@ Nothing was run in `reef_ros2_dev` by the implementer (H10).
 - **H9 (P06):** done. USER: `control` 106/106 and `interfaces` passed in the
   dev container; merged.
 - **H10 (P07, dev container):** `scripts/reef_check.sh control` (expect PASS,
-  about 10–12 min; the first run builds `reef_fc_standin`); optionally
+  about 12–14 min; the first run builds `reef_fc_standin`); optionally
   `scripts/reef_demo.sh closed-loop --gui` to watch REEF fly the X3 at
-  http://127.0.0.1:8081/vnc.html, and the plot
+  http://127.0.0.1:8081/vnc.html: it now returns to the start, lands,
+  and disarms before the run ends (the earlier fly-away is fixed); and the plot
   `recordings/<run>/analysis_closed_loop/closed_loop.png`. Then decide
   whether to merge `p07-closed-loop`.
 - **H3:** open the three plots and `manifest.yaml` of a recent

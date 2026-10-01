@@ -191,6 +191,7 @@ ROSflight, not flight-representative.** As built [V]:
 | Actuators | `actuator_msgs/Actuators` on `/x3/fc/motor_speed` → ros_gz_bridge → `gz.msgs.Actuators` on `/X3/gazebo/command/motor_speed` (the four `MulticopterMotorModel` systems). Motor mapping verified in Gazebo before closing the loop (roll, pitch, yaw signs) |
 | Physics | one owner: Gazebo. `worlds/x3_closed_loop.sdf` = `x3_flight.sdf` without `MulticopterVelocityControl` (test `test_closed_loop_world.py`) |
 | Outputs | `/x3/reef/status` (armed; read by reef_control), `/x3/fc/debug` (per step: mux selection, attitude, torques, motor speeds, saturation, estimate age, timeouts), `/x3/fc/label` |
+| Shutdown | Gazebo's motor model keeps the last commanded speeds (no timeout) and the Gazebo server outlives the ROS nodes by 5 s or more at the end of a launch [V]. The stand-in therefore commands zero motor speeds in a pre-shutdown callback (SIGINT, SIGTERM). Limits: the bridge must still be running; a SIGKILLed stand-in sends nothing. The closed-loop scenario lands and disarms before it ends, so normally the motors are already stopped |
 | Labels | node log, label topic, run manifest, analysis report and plots say "stand-in low-level loop (development tool)" |
 
 What the stand-in does not give: firmware estimator behaviour, RC override,
