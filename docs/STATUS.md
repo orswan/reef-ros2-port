@@ -1,9 +1,8 @@
 # REEF ROS 2: project status
 
-Updated 2026-10-01 (P07 complete on its branch). `main` = `0f2aa63`:
-P00–P06 and the R1 fixes, all merged by fast-forward at the user's request.
-P07 (REEF-driven closed loop with the stand-in low-level loop) is on branch
-`p07-closed-loop` (§5i). Section 3 reconciles
+Updated 2026-10-01 (P07 merged). `main` contains P00–P07 and the R1
+fixes, all merged by fast-forward at the user's request (P07: §5i).
+Section 3 reconciles
 [docs/handoff/](handoff/) (conversation-derived history) with the repository
 and the recorded evidence.
 
@@ -24,7 +23,7 @@ project by the implementer, with logs or manifests in the repository tree.
 | `p05-horizontal-estimator` | `49f7073` | P05: combined estimator, opt-in C1, horizontal fixtures, `baseline`/`estimator`/`faults` targets, R1 packet | yes (fast-forward, 2026-09-30; USER: checks behaved as expected in the dev container) |
 | `r1-fixes` | `1ee999b` | R1 decisions: finding 1 (publish point), C1 default, published-message parity, doc fixes | yes (fast-forward, 2026-09-30; USER: `baseline`, `faults` passed in the dev container) |
 | `p06-controller` | `0f2aa63` | P06: control-chain spec, `reef_control` port (history imported), reference harness, fixtures, model, `control` target, dry-run sink | yes (fast-forward, 2026-10-01; USER: `control` 106/106 and `interfaces` passed in the dev container) |
-| `p07-closed-loop` | this work | P07: criteria, `reef_fc_standin`, closed-loop world/launch/runner/analyzer, recorded runs, `control` closed-loop steps, `reef_demo.sh closed-loop` | no |
+| `p07-closed-loop` | merged | P07: criteria, `reef_fc_standin`, closed-loop world/launch/runner/analyzer, recorded runs, `control` closed-loop steps, `reef_demo.sh closed-loop` | yes (fast-forward, 2026-10-01; USER: headless `control` passed in the dev container) |
 
 No Git remote, pull request, or tag exists; the repository is local. Upstream
 references are pinned in [MIGRATION.md §2](MIGRATION.md): `reef_estimator`
@@ -83,7 +82,7 @@ wrapper boundary ([INTERFACES.md §1](INTERFACES.md#1-command-interface)).
 | P05 combined estimator, faults | done, merged (`49f7073`). F11 failed until R1 (legacy D1); passes with C1, the default since R1 | `reef_check.sh baseline|estimator|faults`; [ACCEPTANCE.md §4d, §5](ACCEPTANCE.md), [reviews/P05.md](reviews/P05.md) |
 | R1 independent review | **SELF-REVIEW at `49f7073` (§5f)**, not independent confirmation. USER decisions (2026-09-30): fix finding 1; approve C1 (default on); defer C2–C6; keep the vibration assumption; fix the stale docs (finding 5). Applied on `r1-fixes` (§5g) | [reviews/R1.md](reviews/R1.md) |
 | P06 controller port and command interface | done, merged (`0f2aa63`): faithful bit-exact port of `reef_control` `12237b76` (USER), dry-run sink, stand-in design. USER: K1–K13 kept for the baseline; `is_flying` unconnected and the hardware throttle check deferred to P10 approved | `reef_check.sh control`; [CONTROL_CHAIN.md](CONTROL_CHAIN.md), [ACCEPTANCE.md §5 control](ACCEPTANCE.md), [INTERFACES.md §4](INTERFACES.md), [reviews/P06.md](reviews/P06.md) |
-| P07 REEF closed loop (stand-in low-level loop) | **done on `p07-closed-loop`**: REEF estimator + controller fly the X3 through the stand-in (development tool) on idealized inputs; nominal run 22/22, causality +0.30 m | `reef_check.sh control`, `reef_demo.sh closed-loop`; [ACCEPTANCE §5 control P07](ACCEPTANCE.md), [CONTROL_CHAIN §7](CONTROL_CHAIN.md), [reviews/P07.md](reviews/P07.md) |
+| P07 REEF closed loop (stand-in low-level loop) | done, merged: REEF estimator + controller fly the X3 through the stand-in (development tool) on idealized inputs; nominal run 22/22, causality +0.30 m | `reef_check.sh control`, `reef_demo.sh closed-loop`; [ACCEPTANCE §5 control P07](ACCEPTANCE.md), [CONTROL_CHAIN §7](CONTROL_CHAIN.md), [reviews/P07.md](reviews/P07.md) |
 | P08 RGB-D | not started | |
 | P09 simulation release | not started | |
 | P10–P13 hardware | blocked: target hardware unknown | |
@@ -355,7 +354,9 @@ Nothing was run in `reef_ros2_dev` by the implementer (H10).
     (FAIL, narrowly) in one run on 2026-10-01. No limit was changed. Options
     if it recurs: the stand-in steps on command arrival as well as on the
     gyro (it now waits up to 4 ms for the next gyro sample); a C++ IMU
-    noise node (the Python node is on the latency path).
+    noise node (the Python node is on the latency path). **USER
+    (2026-10-01): not pursued; official acceptance is headless on an idle
+    machine, GUI runs are informational.**
 25. The closed-loop controller gains are `reef_control_x3_sim.yaml` (the
     shipped quad gains with `dI` = 0, explained in that file and in
     reviews/P07.md); with the shipped gains the first hover fails the
@@ -381,13 +382,11 @@ Nothing was run in `reef_ros2_dev` by the implementer (H10).
   container.
 - **H9 (P06):** done. USER: `control` 106/106 and `interfaces` passed in the
   dev container; merged.
-- **H10 (P07, dev container):** `scripts/reef_check.sh control` (expect PASS,
-  about 12–14 min; the first run builds `reef_fc_standin`); optionally
-  `scripts/reef_demo.sh closed-loop --gui` to watch REEF fly the X3 at
-  http://127.0.0.1:8081/vnc.html: it now returns to the start, lands,
-  and disarms before the run ends (the earlier fly-away is fixed); and the plot
-  `recordings/<run>/analysis_closed_loop/closed_loop.png`. Then decide
-  whether to merge `p07-closed-loop`.
+- **H10 (P07):** done. USER: headless `reef_check.sh control` passed on an
+  idle machine in the dev container; the GUI demo returns, lands, and
+  disarms. A GUI run under other load failed only the latency check (p99
+  24 ms; analysed: CPU contention). USER: GUI runs are informational,
+  headless runs are official; no latency rework. Merged.
 - **H3:** open the three plots and `manifest.yaml` of a recent
   `recordings/x3_*` run, and check them against
   [X3_SCENARIO.md](X3_SCENARIO.md). (`feature/x3-sim-dataset` is already

@@ -438,6 +438,13 @@ zero motor speeds when it shuts down. Existing limits are unchanged; the
 stability and saturation windows end with `descend` because landing
 legitimately goes below 0.25 m and drives the throttle to 0.
 
+USER decision (2026-10-01): **official acceptance comes from headless runs**
+(`reef_check.sh control`) on an otherwise idle machine. GUI runs
+(`reef_demo.sh closed-loop --gui`) are informational only: the software-rendered
+viewer and other host load lengthen the ROS pipeline's scheduling delays,
+which the latency criterion measures (a GUI run on a loaded host gave p99
+24 ms with every other check passing). No latency rework is planned.
+
 Not covered in P07 (later, with their own criteria): RC override, failsafe,
 estimate interruption and restart, landing quality (only reported),
 position mode (needs a mocap input; the controller supports it), wind,
