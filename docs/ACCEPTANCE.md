@@ -415,7 +415,7 @@ stand-in gains from CONTROL_CHAIN.md §7, chosen before the first run.
 | Horizontal velocity (last 3 s of each velocity phase; last 4 s of hovers) | RMSE of truth body-level velocity vs command ≤ 0.15 m/s per axis |
 | Yaw rate (last 3 s of the yaw phase) | \|mean truth yaw rate − 0.3\| ≤ 0.1 rad/s |
 | Saturation | throttle command at 0 or 1 for ≤ 5 % of samples after takeoff; motor-speed clamping in ≤ 5 % of stand-in steps after takeoff |
-| Staleness and latency | estimate stamp → motor command, p99 ≤ 20 ms (wall); no offboard timeout after arming |
+| Staleness and latency | age of the estimate at the motor command (ROS clock, which is sim time, at the stand-in step minus the command's estimate stamp), p99 ≤ 20 ms; no offboard timeout after arming |
 | Causality | a second run with a +0.30 m bias on the range measurement (test hook, labelled) holds the truth height lower by 0.30 ± 0.10 m in the first hover than the nominal run: the REEF estimate, not truth, closes the altitude loop |
 | Reproducibility | reported, not judged: a second nominal run (same seeds) and the spread of every metric (Gazebo and ROS timing are not deterministic) |
 | Comparison | the stock (truth-fed) run and the REEF-controlled run are both recorded with manifests and plots; differences are reported, not judged |
