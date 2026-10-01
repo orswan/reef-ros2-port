@@ -79,6 +79,10 @@ class TestLive(unittest.TestCase):
                 status.publish(s)
                 desired.publish(d)
                 rclpy.spin_once(node, timeout_sec=0.05)
+            # Lockstep: one estimate, then wait for its command. The node's
+            # subscription keeps only the last message (ROS 1 queue size 1),
+            # so a burst under load (colcon runs tests in parallel) may
+            # legitimately drop estimates; lockstep removes that timing.
             sent = set()
             for k in range(50):
                 m = XYZEstimate()
@@ -87,11 +91,11 @@ class TestLive(unittest.TestCase):
                 m.z_plus.z = -0.8
                 est.publish(m)
                 sent.add((1000, 4_000_000 * k))
-                rclpy.spin_once(node, timeout_sec=0.02)
-            end = time.time() + 5
-            while time.time() < end and len(got) < 45:
-                rclpy.spin_once(node, timeout_sec=0.05)
-            self.assertGreaterEqual(len(got), 45)
+                end = time.time() + 1.0
+                while time.time() < end and not any(
+                        (c.header.stamp.sec, c.header.stamp.nanosec) == (1000, 4_000_000 * k) for c in got[-3:]):
+                    rclpy.spin_once(node, timeout_sec=0.01)
+            self.assertEqual(len({(c.header.stamp.sec, c.header.stamp.nanosec) for c in got} & sent), 50)
             for c in got:
                 self.assertIn((c.header.stamp.sec, c.header.stamp.nanosec), sent)
                 self.assertEqual(c.mode, Command.MODE_ROLL_PITCH_YAWRATE_THROTTLE)
@@ -104,7 +108,7 @@ class TestLive(unittest.TestCase):
         events = [r['event'] for r in rows]
         self.assertIn('armed', events)
         cmd = [r for r in rows if r['event'] == 'command']
-        self.assertGreaterEqual(len(cmd), 45)
+        self.assertGreaterEqual(len(cmd), 50)
         self.assertTrue(all(r['src_F'] == 'offboard' and r['motors'] == 'offboard throttle' for r in cmd[-5:]))
         self.assertIn('offboard_timeout', events[events.index('command'):])
         last = rows[-1]
