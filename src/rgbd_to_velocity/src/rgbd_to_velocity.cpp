@@ -41,7 +41,10 @@ namespace rgbd_to_velocity {
         quaternion_body_to_camera = Eigen::VectorXd(4);
         for (int i = 0; i < 4; i++) quaternion_body_to_camera(i) = params.body_to_camera_quat[i];
 
-        translation_body_to_camera = Eigen::VectorXd(3);
+        // The original assigned an uninitialized Eigen::VectorXd(3) here (sized for the ROS 1
+        // parameter helper, which then overwrote it; GCC 13 -Wmaybe-uninitialized). Every element
+        // is set below, so outputs are unchanged (VISION.md section 4, USER 2026-10-01).
+        translation_body_to_camera.setZero();
         for (int i = 0; i < 3; i++) translation_body_to_camera(i) = params.body_to_camera_trans[i];
     }
 

@@ -340,9 +340,10 @@ Container commands, headless, idle machine. VERIFIED.
 Key numbers (reef_check run): vision velocity RMSE x 0.0004, y 0.0013 m/s;
 REEF on vision x 0.028, y 0.033 m/s; loss shown −0.90 s (weak texture) and
 −0.21 s (depth); resumes −6.90 s and +0.72 s; REEF recovered ≤ 0.042 m/s.
-Open findings for USER (VISION.md §8): the recovery-anchor sample after a
-loss (one sample about 0; REEF error up to 0.5 m/s for < 1 s); one 0.51 m/s
-sample just before a depth loss.
+USER (2026-10-01): both odometry behaviours outside the judged items are
+kept as documented characterizations V1 (near-zero first sample after a
+recovery) and V2 (intermittent wrong pose just before a depth loss), with no
+suppression logic (VISION.md §8).
 
 ## 6. Open items and known limits
 
@@ -471,8 +472,8 @@ sample just before a depth loss.
 
 **P08** in progress (branch `p08-rgbd`). Done: converter port, camera
 interface, replacement odometry, open-loop assessment, REEF on vision,
-degraded and fault cases (`reef_check.sh vision` PASS, §5l). Open USER
-decisions: the two findings in VISION.md §8. Next: closed loop on vision
+degraded and fault cases (`reef_check.sh vision` PASS, §5l; USER: dev
+container `vision` PASS); characterizations V1, V2 kept (USER). Next: closed loop on vision
 (REEF controller + stand-in, vision the only horizontal velocity input),
 capability matrix, `reef_demo.sh vision`, P08 evidence
 (`docs/reviews/P08.md`).
