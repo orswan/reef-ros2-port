@@ -581,8 +581,11 @@ USER decisions (2026-10-02):
   a remote exists.
 - **Tag:** local tag `reef-sim-v0.1.0`, applied only after final acceptance
   and never published.
-- **Licence:** the whole release is **internal-only** (the
-  `rgbd_to_velocity` licence is unclarified).
+- **Licence** (changed 2026-10-02, USER): the project is intended for
+  **public open-source distribution**. The `rgbd_to_velocity` repository's
+  own `LICENSE` is MIT, and the bundle's MIT covers the bundle. The
+  internal-only restriction is withdrawn. Licences and evidence are in
+  `NOTICE.md`.
 
 | Area | Judged |
 |---|---|
@@ -594,7 +597,7 @@ USER decisions (2026-10-02):
 | Gates (vision) | core plus `reef_check.sh vision` (20/20, 24/24, 17/17 as at P08) |
 | Code quality | zero compiler warnings in a fresh build of the project's own C++ packages (`src/third_party/` excluded); the AddressSanitizer + UndefinedBehaviorSanitizer build's gtests pass with no sanitizer report; `shellcheck -x` clean on every script; pyflakes clean on the project's Python; every suppression listed with its reason |
 | CI | `scripts/ci.sh` exits nonzero on any failure and writes a summary and a JUnit-style report. By default it covers unit, interface and parity tests plus one short headless scenario; expensive suites are opt-in |
-| Documentation | `docs/RELEASE_SIMULATION.md` with: commit; versions; image package-list hash; gates with exit codes, failures and skips; profiles; capability matrix; limits; troubleshooting. Also: a README quick start (launch, replay, plot, score); `NOTICE.md` (licences and attribution, the `rgbd_to_velocity` flag, internal-only); the H11 procedure with real commands; a review packet |
+| Documentation | `docs/RELEASE_SIMULATION.md` with: commit; versions; image package-list hash; gates with exit codes, failures and skips; profiles; capability matrix; limits; troubleshooting. Also: a README quick start (launch, replay, plot, score); `NOTICE.md` (licences, attribution, and the evidence for each licence); the H11 procedure with real commands; a review packet |
 | Capability matrix | every mode marked supported in simulation / supported with idealized input / port tested only / Unsupported-Deferred, with its profile (core or vision) and evidence links (extends INTERFACES §5) |
 | Human (H11) | the USER builds a fresh image from a separate clone on the Mac without touching the working dev container or the original container, follows the documented steps, and runs one demo and its scorer. The tag is applied only after this |
 
