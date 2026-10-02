@@ -378,8 +378,9 @@ The full matrix is in [INTERFACES.md §5](INTERFACES.md).
 6. `check_clock_demo.sh` and `scripts/sim_lib.sh` duplicate session logic
    (reviewed code left unchanged).
 7. The reef_sim ROS nodes are covered by the scenario checks, not unit tests.
-8. **License of `reef_msgs`** (USER): upstream declares `TODO` and has no
-   license file; the bundle that pins it is MIT. Confirm before publishing.
+8. **License of `reef_msgs`: resolved** (USER 2026-10-02): the bundle's MIT
+   license covers it. The repository itself has no license file
+   (`src/reef_msgs/LICENSE_NOTE.md`, NOTICE.md).
 9. The P04 history import of `reef_estimator` would carry a third-party PDF
    (`docs/Partial_Update.pdf`); decide how to handle it in P04.
 10. The Dockerfile now declares the P03 build dependencies. They are expected
@@ -408,9 +409,9 @@ The full matrix is in [INTERFACES.md §5](INTERFACES.md).
     `e4179f48` minus that file).
 15. The attitude input in simulation is truth (idealized); no attitude
     estimator exists.
-20. **License of `reef_control`** (USER): MIT was added upstream in
-    `43cdee8` (2020), after the ported `12237b76`; applicability assumed
-    [A] (`src/reef_control/LICENSE_NOTE.md`). Confirm before publishing.
+20. **License of `reef_control`: resolved** (USER 2026-10-02): MIT, added
+    upstream in `43cdee8` (2020), applies to the ported `12237b76`
+    (`src/reef_control/LICENSE_NOTE.md`).
 21. Controller legacy behaviour K1–K13 (CONTROL_CHAIN.md §5) is kept by
     USER decision, notably K1 (D term anti-damping), K2 (no effective
     anti-windup), K5 (no output inhibition), K6 (NaN latch), K9 (no heading
@@ -497,7 +498,9 @@ The full matrix is in [INTERFACES.md §5](INTERFACES.md).
 **P08** done and merged (USER 2026-10-02). Accepted by USER:
 - the remaining `/clock` overhead of `imu_noise` and `range_sensor`, with no
   rewrite of P07 code;
-- the `rgbd_to_velocity` license stays flagged internally.
+- the `rgbd_to_velocity` license stays flagged internally. **Superseded**
+  (USER 2026-10-02): it is MIT, the upstream repository's own license, and
+  the project is intended for public open-source distribution (NOTICE.md).
 
 Next: **P09** (simulation release). Plan and criteria are to be presented for
 USER approval before any P09 code.

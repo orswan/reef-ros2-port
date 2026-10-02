@@ -9,7 +9,7 @@
     for the REEF estimator. Faithful to the legacy math (docs/VISION.md).
   </description>
   <maintainer email="orswan@stanford.edu">orswan</maintainer>
-  <license>TODO</license>
+  <license>MIT</license>
   <author>UF REEF Autonomous Vehicles Lab (original ROS 1 package)</author>
   <buildtool_depend>ament_cmake</buildtool_depend>
   <buildtool_depend>eigen3_cmake_module</buildtool_depend>

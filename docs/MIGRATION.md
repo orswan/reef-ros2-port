@@ -600,8 +600,8 @@ the history. `matrixToVector` (no return statement) and `dynamics.h`'s unused
 `<tf/tf.h>` include are dropped. The helpers are bit-identical to the
 original on 2930 recorded cases (`baseline/helper_vectors.sh`).
 [V] The upstream package declares `<license>TODO</license>` and has no
-license file; the bundle that pins it is MIT. **Open (USER):** confirm the
-license with the owners before any publication.
+license file; the bundle that pins it is MIT. **Resolved (USER 2026-10-02):**
+the bundle's MIT license covers it (`src/reef_msgs/LICENSE_NOTE.md`).
 
 **rosflight_msgs.** [V] No Jazzy binary is available from the configured
 apt sources. `RCRaw` is identical in ROS 1 rosflight `44e5f37e` and upstream

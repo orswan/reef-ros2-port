@@ -10,7 +10,7 @@
   <maintainer email="orswan@stanford.edu">orswan</maintainer>
   <!-- Upstream declares license TODO; the reef_estimator_bundle that pins it
        is MIT. See README.md (license status is an open question). -->
-  <license>TODO</license>
+  <license>MIT</license>
   <author>Prashant Ganesh (original ROS 1 package)</author>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
