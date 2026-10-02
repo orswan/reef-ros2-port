@@ -100,16 +100,21 @@ Targets (simulation only; nothing here talks to hardware):
                                 loop on vision (REEF controller + stand-in)
                                 with a weak-texture characterization. Run on
                                 an idle machine (about 20 min)
-  release                       NOT IMPLEMENTED (milestone P09)
+  release [--profile core|vision]
+                                P09 simulation release gate (ACCEPTANCE
+                                release). core (default): environment, pinned
+                                resources, code quality (shellcheck, pyflakes,
+                                suppressions, fresh-build warnings, ASan/UBSan
+                                gtests), then the interfaces, baseline,
+                                estimator and control targets and the
+                                rgbd_to_velocity parity check. vision: core plus
+                                the vision target. Writes release_summary.json.
+                                Idle machine (about 75 min core, 100 min
+                                vision)
 
 Exit: 0 PASS, 1 FAIL (executed), 2 BLOCKED / NOT IMPLEMENTED / invalid,
 130/143 interrupted. Logs: log/checks/reef_check_<target>_<time>/.
 EOF
-}
-
-not_implemented() {  # target milestone
-  echo "NOT IMPLEMENTED: '$1' has no check yet (milestone $2). Nothing was run."
-  exit 2
 }
 
 blocked() { echo "BLOCKED: $*"; echo "Nothing was judged."; exit 2; }
@@ -173,19 +178,27 @@ report() {
 target="${1:-}"
 shift || true
 if [[ -z "$target" ]]; then usage; echo; echo "missing target (see above)"; exit 2; fi
-gui=0 regress=0 floor=0
-for a in "$@"; do
-  case "$a" in
+gui=0 regress=0 floor=0 profile=""
+while (( $# )); do
+  case "$1" in
     --gui) gui=1 ;;
     --regress) regress=1 ;;
     --floor) floor=1 ;;
-    *) echo "invalid option '$a' for target '$target'"; usage; exit 2 ;;
+    --profile) profile="${2:-}"; shift ;;
+    --profile=*) profile="${1#--profile=}" ;;
+    *) echo "invalid option '$1' for target '$target'"; usage; exit 2 ;;
   esac
+  shift
 done
+if [[ -n "$profile" && "$target" != release ]]; then echo "--profile applies only to 'release'"; exit 2; fi
+if [[ "$target" == release ]]; then
+  profile="${profile:-core}"
+  [[ "$profile" == core || "$profile" == vision ]] || { echo "invalid profile '$profile' (core or vision)"; exit 2; }
+  (( gui || regress || floor )) && { echo "target 'release' takes only --profile"; exit 2; }
+fi
 case "$target" in
   help|-h|--help) usage; exit 0 ;;
-  release) not_implemented release P09 ;;
-  env|clock|sim-data|baseline|interfaces|estimator|faults|control|vision) ;;
+  env|clock|sim-data|baseline|interfaces|estimator|faults|control|vision|release) ;;
   *) echo "unknown target '$target'"; usage; exit 2 ;;
 esac
 if [[ "$target" == env || "$target" == interfaces || "$target" == estimator || "$target" == faults || "$target" == control || "$target" == vision ]] && (( gui || regress || floor )); then
@@ -423,6 +436,54 @@ PY
     artifacts+=("$crun/analysis_closed_loop")
     sim_notes+=("fixture time; vision runs in ${vrun#"$REEF_ROOT"/}, ${frun#"$REEF_ROOT"/}, ${crun#"$REEF_ROOT"/} (sim time); performance REPORTED in analysis_vision.json; run on an idle machine (closed-loop staleness, USER P07)")
     artifacts+=("$REEF_ROOT/build/baseline/rgbd/check/results.json")
+    ;;
+
+  release)
+    configs+=("$REEF_ROOT/Dockerfile" "$REEF_ROOT/compose.yaml" "$REEF_ROOT/NOTICE.md" "$REEF_ROOT/docs/ACCEPTANCE.md"
+              "$REEF_ROOT/src/reef_sim/assets/x3_uav_v4.json" "$REEF_ROOT/baseline/provenance.json")
+    echo "profile: $profile"
+    # Pinned resources: present and verified (setup is documented; nothing is fetched here).
+    python3 "$S/setup_assets.py" --verify >"$logdir/assets_precheck.log" 2>&1 \
+      || blocked "X3 assets missing or modified; run scripts/setup_assets.py (see ${logdir#"$REEF_ROOT"/}/assets_precheck.log)"
+    "$REEF_ROOT/baseline/fetch_sources.sh" >"$logdir/sources_precheck.log" 2>&1 \
+      || blocked "pinned upstream sources unavailable; run baseline/fetch_sources.sh (see ${logdir#"$REEF_ROOT"/}/sources_precheck.log)"
+    run_step "environment (check_env.sh)" 0 "$logdir/env.log" "$S/check_env.sh"
+    run_step "pinned resources verified (X3 assets by SHA-256, upstream sources by commit)" 0 "$logdir/resources.log" \
+      cat "$logdir/assets_precheck.log" "$logdir/sources_precheck.log"
+    run_step "code quality (shellcheck, pyflakes, suppressions, fresh-build warnings, ASan/UBSan)" 0 \
+      "$logdir/code_quality.log" "$S/check_code_quality.sh"
+    grep -E '^(PASS|FAIL|BLOCKED)' "$logdir/code_quality.log" | cut -c1-150 | sed 's/^/     /' || true
+    sub=(interfaces baseline estimator control)
+    [[ "$profile" == vision ]] && sub+=(vision)
+    for t in "${sub[@]}"; do
+      run_step "reef_check.sh $t" 0 "$logdir/target_$t.log" "$S/reef_check.sh" "$t"
+      sed -n 's/^reef_check [a-z-]*: logs in //p' "$logdir/target_$t.log" | head -1 | sed "s|^|     logs: |"
+      grep -E '^  (PASS|FAIL|N/A) ' "$logdir/target_$t.log" | cut -c1-140 | sed 's/^/   /' || true
+    done
+    if [[ "$profile" == core ]]; then   # (the vision target runs this check itself)
+      tree="$(python3 "$S/colcon_tree.py")"
+      # shellcheck disable=SC2016  # expanded by the inner shell
+      run_step "rgbd_to_velocity: original vs port, model, quirks Q1-Q10" 0 "$logdir/rgbd.log" \
+        bash -c 'source "$1/install/setup.bash" && exec python3 "$2" --port "$1/install/rgbd_to_velocity/lib/rgbd_to_velocity/rgbd_to_velocity_event_replay"' \
+        _ "$tree" "$REEF_ROOT/baseline/rgbd/check_rgbd.py"
+    fi
+    python3 - "$logdir/release_summary.json" "$profile" "$overall" "${results[@]}" <<'EOF'
+import json, subprocess, sys
+from pathlib import Path
+out, profile, overall, rows = sys.argv[1], sys.argv[2], int(sys.argv[3]), sys.argv[4:]
+git = lambda *a: subprocess.run(['git', *a], capture_output=True, text=True).stdout.strip()
+pk = Path('/etc/reef-image-packages.txt')
+import hashlib
+summary = dict(profile=profile, verdict='PASS' if overall == 0 else 'FAIL', commit=git('rev-parse', 'HEAD'),
+               branch=git('rev-parse', '--abbrev-ref', 'HEAD'), uncommitted=git('status', '--porcelain').splitlines(),
+               image_package_list_sha256=hashlib.sha256(pk.read_bytes()).hexdigest() if pk.exists() else None,
+               gz_sim=subprocess.run(['gz', 'sim', '--versions'], capture_output=True, text=True).stdout.strip(),
+               ros_distro='jazzy',
+               steps=[dict(zip(('verdict', 'name', 'detail'), r.split('|', 2))) for r in rows])
+Path(out).write_text(json.dumps(summary, indent=1))
+EOF
+    artifacts+=("$logdir/release_summary.json")
+    sim_notes+=("release profile $profile: sub-target runs in their own log/checks/ directories (listed above)")
     ;;
 
   sim-data)
