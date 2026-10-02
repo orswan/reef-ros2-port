@@ -5,7 +5,7 @@
   <version>0.1.0</version>
   <description>C++ IMU adapter from the X3 simulation to the REEF estimator (idealized truth attitude)</description>
   <maintainer email="orswan@stanford.edu">orswan</maintainer>
-  <license>Apache-2.0</license>
+  <license>MIT</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
   <depend>rclcpp</depend>

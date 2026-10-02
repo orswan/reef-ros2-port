@@ -33,7 +33,7 @@ setup(
     maintainer='orswan',
     maintainer_email='orswan@stanford.edu',
     description='X3 quadrotor Gazebo scenario and data tools for the REEF estimator port',
-    license='Apache-2.0',
+    license='MIT',
     entry_points={
         'console_scripts': [
             'range_sensor = reef_sim.range_sensor:main',

@@ -9,7 +9,7 @@
     analysis) for porting the REEF estimator.
   </description>
   <maintainer email="orswan@stanford.edu">orswan</maintainer>
-  <license>Apache-2.0</license>
+  <license>MIT</license>
 
   <exec_depend>rclpy</exec_depend>
   <exec_depend>launch</exec_depend>
