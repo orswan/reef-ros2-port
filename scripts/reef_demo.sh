@@ -157,7 +157,7 @@ case "$mode" in
         tree="$(python3 "$S/colcon_tree.py")"
         [[ -f "$tree/install/setup.bash" ]] || { echo "BLOCKED: build first (scripts/reef_check.sh estimator or run_x3_scenario.sh --estimator)"; exit 2; }
         set +u
-        # shellcheck disable=SC1091
+        # shellcheck disable=SC1091  # colcon setup file, generated at build time
         source "$tree/install/setup.bash"
         set -u
         echo "SIMULATION REPLAY (offline, deterministic) of $run: IDEALIZED INPUTS."

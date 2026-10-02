@@ -33,8 +33,8 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 sys.path.insert(0, str(HERE))
-import control_model as cm  # noqa: E402
-import fixtures as fx  # noqa: E402
+import control_model as cm  # noqa: E402  (imported after the sys.path insert above)
+import fixtures as fx  # noqa: E402  (imported after the sys.path insert above)
 
 COLUMNS = (HERE / 'control_columns.txt').read_text().split()
 INT_COLS = {'idx', 'n_command', 'n_controller_state', 'cmd_sec', 'cmd_nsec', 'cmd_mode', 'cmd_ignore',
@@ -168,7 +168,7 @@ def step_rows(rows):
 
 
 def characterize(ref, params):
-    F = lambda r, c: float(r[c])  # noqa: E731
+    F = lambda r, c: float(r[c])  # noqa: E731  (a one-line accessor)
 
     # K1: D enters with a plus sign on the derivative of the state.
     rows = [r for r in step_rows(ref['c03_velocity_mode'])[1:] if abs(F(r, 'ds_acc_x')) < F(r, 'u_max')]
@@ -374,9 +374,9 @@ def main():
         c = run([port, p, e, paths['core']])
         nd = run([port, p, e, paths['node'], '--mode', 'node'])
         c2 = run([port, p, e, paths['core2']])
-        if r.returncode or c.returncode or nd.returncode:
-            record('parity', name, False, f'exit reference {r.returncode}, core {c.returncode}, node {nd.returncode}: '
-                   f'{(r.stderr + c.stderr + nd.stderr).strip()[-300:]}')
+        if r.returncode or c.returncode or nd.returncode or c2.returncode:
+            record('parity', name, False, f'exit reference {r.returncode}, core {c.returncode}, node {nd.returncode}, '
+                   f'core re-run {c2.returncode}: {(r.stderr + c.stderr + nd.stderr + c2.stderr).strip()[-300:]}')
             continue
         ref_rows = read_rows(paths['ref'])
         ref[name] = ref_rows

@@ -17,7 +17,7 @@ kind="${2:-clock}"
 [[ "$kind" == clock || "$kind" == imu ]] || { echo "kind must be clock or imu"; exit 2; }
 tree="$(python3 "$REEF_ROOT/scripts/colcon_tree.py")"
 set +u
-# shellcheck disable=SC1091
+# shellcheck disable=SC1091  # colcon setup file, generated at build time
 source "$tree/install/setup.bash" 2>/dev/null || source /opt/ros/jazzy/setup.bash
 set -u
 domain="$(( RANDOM % 101 + 1 ))"   # safe DDS range; the replay refuses a busy domain anyway

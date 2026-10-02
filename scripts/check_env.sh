@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Checks below are strings evaluated by check(), single-quoted on purpose.
-# shellcheck disable=SC2016
+# shellcheck disable=SC2016  # check strings are evaluated later by check()
 # Print and sanity-check the explicit environment used by project scripts.
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/env.sh"

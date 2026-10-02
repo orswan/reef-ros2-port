@@ -15,7 +15,6 @@ With --check, compares instead of writing (exit 1 if anything differs).
 PNGs are written by a minimal encoder (zlib, no metadata) so the bytes do
 not depend on library versions. See docs/VISION.md section 5.
 """
-import math
 import random
 import struct
 import sys

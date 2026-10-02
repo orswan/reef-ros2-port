@@ -7,6 +7,6 @@
 # Scripts in /root/ros2_ws/reef_ros2/scripts set up their own environment and
 # do not depend on this file.
 if [ -r /opt/ros/jazzy/setup.bash ]; then
-  # shellcheck disable=SC1091
+  # shellcheck disable=SC1091  # ROS setup file, outside the repository
   . /opt/ros/jazzy/setup.bash
 fi

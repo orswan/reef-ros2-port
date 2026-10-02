@@ -25,8 +25,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'baseline' / 'tools'))
-import check_port as cp  # noqa: E402
-import runs  # noqa: E402
+import check_port as cp  # noqa: E402  (imported after the sys.path insert above)
+import runs  # noqa: E402  (imported after the sys.path insert above)
 
 T0 = 1_000_000_000
 H = 4.8   # T_HOVER of the fixture generators

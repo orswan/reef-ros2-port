@@ -32,8 +32,8 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import independent as ind  # noqa: E402
-import runs  # noqa: E402
+import independent as ind  # noqa: E402  (imported after the sys.path insert above)
+import runs  # noqa: E402  (imported after the sys.path insert above)
 
 ROOT, BUILD = runs.ROOT, runs.BUILD
 B = ROOT / 'baseline'

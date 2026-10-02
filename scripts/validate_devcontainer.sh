@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The check functions below are invoked indirectly via check "$@", so the
 # linter would report them as unreachable.
-# shellcheck disable=SC2317
+# shellcheck disable=SC2317  # check functions are called indirectly via check "$@"
 # Validate the REEF dev container from inside it (container terminal):
 #   scripts/validate_devcontainer.sh          # environment, desktop, clock checks (~1 min)
 #   scripts/validate_devcontainer.sh --full   # also the clock and X3 regression suites (~9 min;

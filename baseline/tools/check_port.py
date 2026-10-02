@@ -47,8 +47,8 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import independent as ind  # noqa: E402
-import runs  # noqa: E402
+import independent as ind  # noqa: E402  (imported after the sys.path insert above)
+import runs  # noqa: E402  (imported after the sys.path insert above)
 
 ROOT, BUILD = runs.ROOT, runs.BUILD
 B = ROOT / 'baseline'
@@ -270,7 +270,7 @@ def main():
         cprob, _ = compare_published(read(out_dir / 'port' / f'{safe}.published.csv'),
                                      read(out_dir / 'node' / f'{safe}.published.csv'))
         # C1 (default): the port's default output against the independent model with C1.
-        dflt = run_port(args.port, params, events, out_dir / 'default' / f'{safe}.csv')
+        run_port(args.port, params, events, out_dir / 'default' / f'{safe}.csv')   # raises on failure
         pp, ee = runs.parse_params(params), runs.parse_events(events)
         # the model is first checked against the original (C1 off), then used for C1
         st0 = ind.verify_run('master', pp, ee, runs.read_rows(out_dir / 'ref' / f'{safe}.csv'), c1=False)

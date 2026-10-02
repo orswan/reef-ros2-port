@@ -123,7 +123,7 @@ def flight(name, doc, segments, h0=0.12, roll=None, accel_bias_z=None, g=G, imu_
     dt = 1.0 / imu_hz
     h, v, x, vx = h0, 0.0, 0.0, 0.0
     t_primer = None
-    i, t_seg = 0, 0.0
+    i = 0
     for dur, a_up, a_x in segs:
         n = round(dur * imu_hz)
         for _ in range(n):

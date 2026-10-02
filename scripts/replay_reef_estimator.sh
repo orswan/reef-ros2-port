@@ -46,7 +46,7 @@ mkdir -p "$REEF_ROOT/log"
   --build-base "$tree/build" --install-base "$tree/install" --packages-up-to reef_sim \
   >"$REEF_ROOT/log/reef_replay_build.log" 2>&1) || { tail -n 20 "$REEF_ROOT/log/reef_replay_build.log"; fail 2 "colcon build failed"; }
 set +u
-# shellcheck disable=SC1091
+# shellcheck disable=SC1091  # colcon setup file, generated at build time
 source "$tree/install/setup.bash"
 set -u
 

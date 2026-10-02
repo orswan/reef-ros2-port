@@ -185,6 +185,9 @@ TEST_F(Node, ResetMakesTheNodeBehaveLikeAFreshOne)
   EXPECT_EQ(used->core().estimateCount(), 0);
   std::vector<reef_msgs::msg::XYZEstimate> after, fresh;
   stream(*used, 1000, 150, &after);
+  // Destroy the used node first: two live nodes with the same name make rcl leak one /rosout
+  // publisher ("Publisher already registered", LeakSanitizer, P09 sanitizer profile).
+  used.reset();
   auto clean = make({kMaster, kSim});
   stream(*clean, 1000, 150, &fresh);
   ASSERT_EQ(after.size(), fresh.size());

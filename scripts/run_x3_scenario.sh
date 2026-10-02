@@ -87,7 +87,7 @@ if ! (cd "$REEF_ROOT" && colcon --log-base "$tree/log" build --base-paths src --
 fi
 install_setup="$tree/install/setup.bash"
 set +u
-# shellcheck disable=SC1090,SC1091
+# shellcheck disable=SC1090,SC1091  # colcon setup file, chosen at run time
 source "$install_setup"
 set -u
 

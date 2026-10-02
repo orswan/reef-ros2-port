@@ -27,7 +27,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import fixtures as f  # noqa: E402
+import fixtures as f  # noqa: E402  (imported after the sys.path insert above)
 
 H = f.T_HOVER
 

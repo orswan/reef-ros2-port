@@ -29,7 +29,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
-import colcon_tree  # noqa: E402
+import colcon_tree  # noqa: E402  (imported after the sys.path insert above)
 
 EXPECTED = {'reef_msgs', 'reef_estimator', 'reef_control', 'reef_fc_standin', 'reef_sim', 'reef_x3_adapter',
             'rgbd_to_velocity', 'reef_rgbd_odometry', 'rosflight_msgs'}

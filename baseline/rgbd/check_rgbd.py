@@ -26,8 +26,8 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 sys.path.insert(0, str(HERE))
-import fixtures as fx  # noqa: E402
-import rgbd_model as rm  # noqa: E402
+import fixtures as fx  # noqa: E402  (imported after the sys.path insert above)
+import rgbd_model as rm  # noqa: E402  (imported after the sys.path insert above)
 
 COLUMNS = (HERE / 'rgbd_columns.txt').read_text().split()
 INT_COLS = {'idx', 'n_init', 'n_body', 'counter', 'msg_sec', 'msg_nsec', 'init_sec', 'init_nsec'}
