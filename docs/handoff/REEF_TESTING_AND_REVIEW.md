@@ -163,6 +163,25 @@ Follow the new-user instructions from a separate clone and a freshly built devel
 
 Run one representative demo and its scorer using only the documented steps. Confirm a second person could find logs, interpret failure and reproduce the result. Verify source/dependency versions, licensing notices, requirements, limitations and recording manifests are included. A simulation release can be complete while hardware work is explicitly deferred.
 
+**Actual commands (added at P09).**
+- Mac terminal, in a separate clone:
+  - `docker compose --env-file docker/h11.env build --no-cache`
+  - `docker compose --env-file docker/h11.env up -d`
+  - `docker compose --env-file docker/h11.env exec dev bash`
+
+  This is instance `reef_ros2_h11` on port 8082; the working `reef_ros2_dev`
+  is untouched.
+- Container terminal:
+  - `scripts/setup_assets.py`
+  - `baseline/fetch_sources.sh`
+  - `scripts/reef_check.sh release`
+  - `scripts/reef_demo.sh closed-loop`
+
+  The scorer output is `recordings/<run>/analysis_closed_loop/report.txt`.
+- The agent-side fresh-clone and offline run is `scripts/reproduce_release.sh`.
+- Checklist and results: `docs/RELEASE_SIMULATION.md` §6. Steps: README
+  "Reproducing the release".
+
 ### H12 — actual hardware definition and review (P10)
 
 With the REEF team, fill in the real vehicle/flight-controller board, firmware/version, companion computer/OS/architecture, sensors, transport, frame conventions, RC/mode behavior and command semantics. Use current documentation for that exact system. A ROS message definition compiling is not evidence that firmware accepts its values in the intended mode.

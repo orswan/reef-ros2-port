@@ -5,14 +5,49 @@ stack (UF REEF AVL, ROS 1 / catkin) to **ROS 2 Jazzy** with **Gazebo Harmonic**
 simulation.
 
 **Current status, evidence, and next milestone: [docs/STATUS.md](docs/STATUS.md).**
-Estimator baseline (master `e4179f48`) and its reference harness:
-[docs/BASELINE_DECISION.md](docs/BASELINE_DECISION.md), [baseline/](baseline/README.md).
-Acceptance criteria: [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md). Interfaces:
-[docs/INTERFACES.md](docs/INTERFACES.md). Source audit and plan:
-[docs/MIGRATION.md](docs/MIGRATION.md). Ported so far: `reef_msgs` (messages and
-helpers, P03) and the complete `reef_estimator` node (vertical P04, horizontal
-P05), bit-identical to master on 50 event streams. Review packet for R1:
-[docs/reviews/R1_packet.md](docs/reviews/R1_packet.md).
+**Simulation release** (P09: what is supported, tested versions, gates):
+[docs/RELEASE_SIMULATION.md](docs/RELEASE_SIMULATION.md). Licences and
+attribution: [NOTICE.md](NOTICE.md).
+
+What runs, in simulation only:
+- the ported REEF estimator (`reef_estimator`, bit-identical to master
+  `e4179f48`) and controller (`reef_control`, bit-identical to `12237b76`),
+  flying a Gazebo X3 through a stand-in low-level loop (a development tool,
+  not ROSflight);
+- the RGB-D path: the ported `rgbd_to_velocity` (bit-identical to
+  `b7637198`) fed by a replacement OpenCV odometry (not `demo_rgbd`).
+
+REEF's attitude and range inputs are idealized (derived from simulation
+truth). Hardware support is pending (P10). Supported and unsupported modes:
+[docs/INTERFACES.md §5](docs/INTERFACES.md). Criteria:
+[docs/ACCEPTANCE.md](docs/ACCEPTANCE.md). Source audit and pins:
+[docs/MIGRATION.md](docs/MIGRATION.md).
+
+## Quick start (simulation release)
+
+**Container terminal**, from the repository root, in the dev container
+(`Dockerfile`; see "Dev container" below). Setup is the only step that needs
+the network; everything after it runs offline.
+
+```bash
+scripts/setup_assets.py
+baseline/fetch_sources.sh
+scripts/reef_check.sh release
+scripts/reef_demo.sh closed-loop
+scripts/reef_demo.sh vision --closed-loop
+```
+
+- `setup_assets.py` downloads the pinned X3 model (SHA-256 checked) into
+  `assets/`. `fetch_sources.sh` clones the pinned upstream sources for the
+  reference tests into `reference/`. Both are ignored by Git.
+- `reef_check.sh release` is the release gate, core profile (about 75 min,
+  idle machine); `--profile vision` adds the RGB-D gates.
+- Each demo records into `recordings/<run>/`: `manifest.yaml`, `bag/`, and an
+  `analysis*/` directory with scores and plots.
+- Replay a recording: `scripts/reef_demo.sh replay recordings/<run>`.
+  Re-score one: `scripts/reef_demo.sh estimator --offline recordings/<run>`.
+- Fast local CI: `scripts/ci.sh` (about 30 min). Fresh-clone, offline
+  reproduction of the release: `scripts/reproduce_release.sh`.
 
 ## Checks and demos
 
@@ -28,21 +63,24 @@ scripts/reef_check.sh baseline
 scripts/reef_check.sh interfaces
 scripts/reef_check.sh estimator
 scripts/reef_check.sh faults
+scripts/reef_check.sh control
+scripts/reef_check.sh vision
+scripts/reef_check.sh release --profile core
 scripts/reef_demo.sh help
 scripts/reef_demo.sh stock --gui
 scripts/reef_demo.sh replay recordings/<run>
 scripts/reef_demo.sh estimator
 scripts/reef_demo.sh estimator --offline recordings/<run>
+scripts/reef_demo.sh closed-loop --gui
+scripts/reef_demo.sh vision --closed-loop --gui
 ```
 
 Exit status: 0 PASS, 1 FAIL (the check ran and failed), 2 BLOCKED / NOT
-IMPLEMENTED / invalid invocation, 130/143 interrupted. Targets for later
-milestones (`estimator`, `faults`, `control`, `vision`, `release`;
-demos `estimator`, `closed-loop`, `vision`) print NOT IMPLEMENTED and exit 2.
-Each check prints the source revision, configuration hashes, assertions, wall
-and sim time, and artifact paths. See
-[docs/INTERFACES.md §1](docs/INTERFACES.md#1-command-interface). The
-individual scripts listed below remain available.
+IMPLEMENTED / invalid invocation, 130/143 interrupted. Each check prints the
+source revision, configuration hashes, assertions, wall and sim time, and
+artifact paths ([docs/INTERFACES.md §1](docs/INTERFACES.md#1-command-interface)).
+Official results are headless runs on an idle machine; `--gui` runs are
+informational. The individual scripts listed below remain available.
 
 Every command below is labelled with where it runs:
 
@@ -57,9 +95,10 @@ Every command below is labelled with where it runs:
 
 | Path | Purpose |
 |---|---|
-| `src/` | ROS 2 packages (colcon source space): `reef_sim` (X3 scenario), `reef_msgs` (messages, helpers), `reef_estimator` (estimator node, parameters, configuration), `reef_x3_adapter` (C++ IMU adapter for the X3 simulation), `third_party/rosflight_ros_pkgs/rosflight_msgs` (unmodified upstream, for `RCRaw`) |
+| `src/` | ROS 2 packages (colcon source space): ports `reef_msgs`, `reef_estimator`, `reef_control`, `rgbd_to_velocity`; new `reef_sim` (X3 scenarios, analyzers), `reef_x3_adapter`, `reef_fc_standin` (stand-in low-level loop, development tool), `reef_rgbd_odometry` (replacement odometry); `third_party/rosflight_ros_pkgs/rosflight_msgs` (unmodified upstream) |
 | `sim/` | Gazebo worlds and launch files for demos/tests |
 | `scripts/` | Launch and check scripts; they set up their own environment |
+| `baseline/` | Reference harnesses: the pinned original sources compiled unmodified, fixtures, independent models |
 | `docs/` | Migration notes; `docs/setup/` has the original container recipe |
 | `Dockerfile`, `compose.yaml`, `.devcontainer/`, `docker/` | Dev container definition |
 | `reference/` | Upstream ROS 1 clones for reading only. Ignored by Git; `COLCON_IGNORE` keeps colcon out |
@@ -323,6 +362,38 @@ docker compose exec -T dev cat /etc/reef-image-packages.txt > /tmp/reef-new-pack
 diff <(grep -v '^#' docker/original-packages.txt) /tmp/reef-new-packages.txt | less
 ```
 
+## Reproducing the release (H11)
+
+A fresh image from a separate clone, without touching the working dev
+container (`reef_ros2_dev`, port 8081) or `ros2_novnc_container`.
+`docker/h11.env` gives the second instance its own project, image tag,
+container name, port 8082 and model-cache volume.
+
+**Mac terminal** (the release tag or commit is in
+[docs/RELEASE_SIMULATION.md](docs/RELEASE_SIMULATION.md)):
+
+```bash
+git clone ~/ros2_ws/reef_ros2 ~/reef_h11/reef_ros2
+cd ~/reef_h11/reef_ros2
+docker compose --env-file docker/h11.env build --no-cache
+docker compose --env-file docker/h11.env up -d
+docker compose --env-file docker/h11.env exec dev bash
+```
+
+**Container terminal** (inside `reef_ros2_h11`):
+
+```bash
+scripts/setup_assets.py
+baseline/fetch_sources.sh
+scripts/reef_check.sh release
+scripts/reef_demo.sh closed-loop
+```
+
+Browser: http://127.0.0.1:8082/vnc.html. To finish, **Mac terminal**, in
+`~/reef_h11/reef_ros2`: `docker compose --env-file docker/h11.env down`.
+The working dev container is unaffected throughout. The full checklist is in
+RELEASE_SIMULATION.md §6.
+
 ## Environment knobs
 
 | Variable | Default | Used by |
@@ -343,6 +414,10 @@ diff <(grep -v '^#' docker/original-packages.txt) /tmp/reef-new-packages.txt | l
 | `REEF_ASSETS_DIR` | `assets/models` | asset location (`setup_assets.py`, `run_x3_scenario.sh`) |
 | `REEF_X3_ENABLE_RANGE` | `1` | test-only: `0` omits the range stream |
 | `REEF_REPLAY_DOMAIN` | random 1–101 | `reef_demo.sh replay` ROS domain |
+| `REEF_OFFLINE` | unset | `1`: block downloads for the process tree (dead HTTP(S) proxies, Git `https://` rewritten to an invalid host); the P09 offline gate |
+| `REEF_SHELLCHECK` | `shellcheck` on `PATH` | `check_code_quality.sh`, `ci.sh`: path to a shellcheck binary (the original container has none installed) |
+| `REEF_X3_VISION_FAULTS`, `REEF_X3_RECORD_CAMERA` | unset | `run_x3_scenario.sh --vision`: frame delay/drop test hooks; raw-frame recording (diagnostic) |
+| `REEF_COMPOSE_PROJECT`, `REEF_IMAGE`, `REEF_CONTAINER`, `REEF_VNC_PORT`, `REEF_GZ_VOLUME` | the working dev container's values | `compose.yaml` (**Mac terminal**): a second, separate instance, e.g. `docker/h11.env` |
 
 `check_clock_demo.sh` isolates itself with a per-run Gazebo partition and ROS
 topic, and fails if its own launch dies. Exit codes are 0 pass, 1 clock check
