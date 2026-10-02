@@ -267,7 +267,7 @@ def run_checks(a, types, result, params):
     tilt = np.degrees(np.arccos(np.clip(cos_tilt, -1, 1)))
     c.add('range geometry note', True,
           f'max tilt {tilt.max():.1f} deg; max slant - vertical height {np.max(slant[both] - height[both]) * 1e3:.1f} mm',
-          'informational')
+          'REPORTED')   # a measurement, not a check: never counted as PASS (P09)
 
     # 7. Truth self-consistency: odom twist (rotated to world) vs d(position)/dt.
     dt = np.diff(to)
@@ -399,7 +399,13 @@ def main():
     (out / 'validation.json').write_text(json.dumps(
         dict(ok=checks.ok, scenario_status=result.get('status'), checks=checks.items), indent=2))
     for i in checks.items:
-        print(f"{'PASS' if i['ok'] else 'FAIL'} {i['name']}: {i['detail']}  [{i['criterion']}]")
+        if i['criterion'] == 'REPORTED':
+            print(f"REPORTED {i['name']}: {i['detail']}")
+        else:
+            print(f"{'PASS' if i['ok'] else 'FAIL'} {i['name']}: {i['detail']}  [{i['criterion']}]")
+    judged = [i for i in checks.items if i['criterion'] != 'REPORTED']
+    print(f"{sum(i['ok'] for i in judged)}/{len(judged)} judged items PASS ({len(checks.items) - len(judged)} REPORTED, "
+          'not counted)')
     print('ANALYSIS PASSED' if checks.ok else 'ANALYSIS FAILED')
     return 0 if checks.ok else 1
 

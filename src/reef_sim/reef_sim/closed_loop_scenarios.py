@@ -128,6 +128,8 @@ def evaluate(scenario, chk, metrics, tr, data, result, phases, run):
     c = Ctx(tr, data, result, phases)
     crit = f'ACCEPTANCE P07b {scenario}'
     char = 'CHARACTERIZATION: '
+    # Items whose criterion is 'REPORTED' are measurements that cannot fail: they are printed as
+    # REPORTED and never counted as PASS (P09 test accounting).
     faults = result.get('faults') or []
     m = metrics.setdefault('scenario', {'name': scenario})
     if scenario in FAULTS and scenario != 'setpoint_stale':   # the stale case injects no fault
@@ -202,7 +204,7 @@ def evaluate(scenario, chk, metrics, tr, data, result, phases, run):
         m.update(command_gap=gap, process_starts=starts, min_height=hmin, altitude_loss=1.0 - hmin,
                  max_tilt=c.max_tilt('fault', 'recover'), recovery_s=rec, crashed=hmin < 0.1)
         chk.add(char + 'integrators restart from 0: altitude loss and recovery reported', True,
-                f'min height {hmin:.3f} m (loss {1.0 - hmin:.3f} m), recovery {rec} s, crashed {hmin < 0.1}', crit)
+                f'min height {hmin:.3f} m (loss {1.0 - hmin:.3f} m), recovery {rec} s, crashed {hmin < 0.1}', 'REPORTED')
     elif scenario == 'setpoint_stale':
         m['max_tilt'] = add_tilt(chk, c, 'takeoff_hover', 'land', crit)
         end_state(chk, metrics, c, crit)
@@ -224,7 +226,7 @@ def evaluate(scenario, chk, metrics, tr, data, result, phases, run):
         zerr = float(np.max(np.abs(-c.est_z[we] - zi[we])))
         m.update(max_height_deviation=dev, max_estimate_error=zerr)
         chk.add(char + 'altitude from the IMU only during the range loss (reported)', True,
-                f'max |h - 1.0| {dev:.3f} m, max |REEF -z - h| {zerr:.3f} m over 10 s', crit)
+                f'max |h - 1.0| {dev:.3f} m, max |REEF -z - h| {zerr:.3f} m over 10 s', 'REPORTED')
     elif scenario == 'velocity_loss':
         dbgm = data.get('/x3/reef/xyz_debug_estimate', [])
         ts = np.array([stamp(mm.header) for _, mm in dbgm])
@@ -246,7 +248,7 @@ def evaluate(scenario, chk, metrics, tr, data, result, phases, run):
         p = tr['pos'][wt, :2]
         drift = float(np.linalg.norm(p[-1] - p[0])) if len(p) else float('nan')
         m['drift'] = drift
-        chk.add(char + 'horizontal drift during the loss (reported)', True, f'{drift:.3f} m in 10 s', crit)
+        chk.add(char + 'horizontal drift during the loss (reported)', True, f'{drift:.3f} m in 10 s', 'REPORTED')
     elif scenario == 'pause_resume':
         to = c.timeouts_after_arm()
         chk.add('no offboard timeout', to == 0, f'{to} timeouts', crit)
