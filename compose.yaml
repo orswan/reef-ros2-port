@@ -4,7 +4,14 @@
 #
 # It is separate from the original ros2_novnc_container: different container
 # name, image, network, and host port (8081, not 8080).
-name: reef_ros2
+#
+# Instance variables (P09; the defaults are the working dev container). A
+# second instance, for example the H11 fresh-image reproduction, sets all five
+# so that it shares nothing with the working one:
+#   docker compose --env-file docker/h11.env build --no-cache
+#   docker compose --env-file docker/h11.env up -d
+# REEF_COMPOSE_PROJECT, REEF_IMAGE, REEF_CONTAINER, REEF_VNC_PORT, REEF_GZ_VOLUME.
+name: ${REEF_COMPOSE_PROJECT:-reef_ros2}
 
 services:
   dev:
@@ -12,14 +19,14 @@ services:
       context: .
       dockerfile: Dockerfile
       platforms: ["linux/amd64"]
-    image: reef_ros2_dev:jazzy
+    image: ${REEF_IMAGE:-reef_ros2_dev:jazzy}
     platform: linux/amd64
-    container_name: reef_ros2_dev
+    container_name: ${REEF_CONTAINER:-reef_ros2_dev}
     hostname: reef-ros2-dev
     init: true            # tini as PID 1 reaps orphaned processes
     ports:
       # Browser desktop: http://127.0.0.1:8081/vnc.html on the Mac.
-      - "127.0.0.1:8081:6080"
+      - "127.0.0.1:${REEF_VNC_PORT:-8081}:6080"
     volumes:
       # Project source (this directory) at the same path as in the original
       # container. Everything else under /root is container-local.
@@ -37,4 +44,4 @@ services:
 
 volumes:
   gz-data:
-    name: reef_ros2_gz    # fixed name, independent of the compose project name
+    name: ${REEF_GZ_VOLUME:-reef_ros2_gz}    # fixed name, independent of the compose project name

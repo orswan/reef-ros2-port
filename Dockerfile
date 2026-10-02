@@ -30,7 +30,12 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 #   procps      pgrep/pkill/ps (process ownership and cleanup)
 #   util-linux  setsid/flock (session-based teardown, single supervisor)
 #   curl        noVNC readiness probe
-#   shellcheck  lint for the project's shell scripts
+#   shellcheck, python3-pyflakes
+#               lint for the project's shell and Python code (P09
+#               scripts/check_code_quality.sh, scripts/ci.sh)
+#   ros-jazzy-cv-bridge, libopencv-dev
+#               P08 reef_rgbd_odometry (present via ros-gz dependencies;
+#               listed because package.xml declares them)
 #   g++, libeigen3-dev, libboost-dev
 #               P02 reference harness: builds the pinned original estimator
 #               sources (present in the base image or as dependencies; listed
@@ -63,6 +68,9 @@ RUN apt-get update \
         util-linux \
         curl \
         shellcheck \
+        python3-pyflakes \
+        ros-jazzy-cv-bridge \
+        libopencv-dev \
         g++ \
         libeigen3-dev \
         libboost-dev \
