@@ -63,7 +63,7 @@ when convenient (no functional need).
 | Independent review of Dockerfile changes | prompt supplied, no result | **none performed** | — |
 | X3 quadrotor, sensors, recordings (P01) | not established | **implemented** on `feature/x3-sim-dataset`. `regress_x3_scenario.sh` 13/13 in the dev container at `9af00d2`; user saw the drone fly in the browser | USER; VERIFIED (manifests `log/checks/regress_x3_20260929_223324/`) |
 | P01 human check H3 (plots, manifest inspection) | — | **partly done**: user watched the GUI flight; plots and manifest not yet reported as reviewed | USER |
-| REEF messages, estimator, controller, RGB-D, hardware | not established | not started | — |
+| REEF messages, estimator, controller, RGB-D, hardware | not established | **done** in simulation: messages and helpers (P03), estimator (P04, P05), controller and closed loop (P06, P07, P07b), RGB-D (P08); all merged. Hardware **not started**: P10 is blocked until the target hardware is known | §4; reviews/P03–P08 |
 | Replacement name and port | "must be read from files" | `reef_ros2_dev`, `127.0.0.1:8081` | `compose.yaml` |
 | 95987b51 full SHA | to resolve | `95987b5118b624208910d9e51424300022e1f512` | MIGRATION §2 |
 
@@ -88,7 +88,7 @@ wrapper boundary ([INTERFACES.md §1](INTERFACES.md#1-command-interface)).
 | P07b closed-loop faults and position mode | done, merged: 11 scenarios (estimate dropout short/long, estimator reset, controller restart, stale setpoint, range and velocity loss, pause, stand-in exit, position square with K9, `face_target` K10); crashes documented where the legacy system has no protection (USER) | `reef_check.sh faults`; [ACCEPTANCE §5 P07b](ACCEPTANCE.md), [reviews/P07b.md](reviews/P07b.md) |
 | R2 independent review | **PASS (SELF-REVIEW)**, USER 2026-10-01: an independent Claude session reviewed `p07b-faults-position` (code `bb47cf0`); minor documentation corrections applied (§5k) | [reviews/R2.md](reviews/R2.md), [reviews/R2_packet.md](reviews/R2_packet.md) |
 | P08 RGB-D | **done, merged** (USER 2026-10-02: H12 dev-container `vision` PASS; cleared to merge): `rgbd_to_velocity` ported bit-exact (53/53); camera interface; replacement OpenCV odometry; open loop 20/20; faults 24/24; closed loop on vision 17/17 (staleness p99 14 ms after the `/clock` fixes, USER option 2); capability matrix; `reef_demo.sh vision` | `reef_check.sh vision` PASS (§5l); [VISION.md](VISION.md), [reviews/P08.md](reviews/P08.md) |
-| P09 simulation release | not started | |
+| P09 simulation release | **in progress on `p09-release`**: criteria `6313a57`, licence change `7d59ab7` (public open source, USER); release gate, code quality, CI and fresh-clone reproduction implemented; verification running; H11 pending | ACCEPTANCE `release`; [RELEASE_SIMULATION.md](RELEASE_SIMULATION.md) |
 | P10–P13 hardware | blocked: target hardware unknown | |
 
 ## 5. Checks run for P00 (original container, 2026-09-29, base `9af00d2`)
@@ -100,8 +100,8 @@ Details are in [reviews/P00.md](reviews/P00.md).
 |---|---|---|
 | `reef_check.sh help`, `reef_demo.sh help` | 0 | usage |
 | `reef_check.sh` / `reef_demo.sh` with no argument, unknown target or mode, or invalid option | 2 | usage, error |
-| `reef_check.sh baseline\|estimator\|faults\|control\|vision\|release` | 2 | NOT IMPLEMENTED |
-| `reef_demo.sh estimator\|closed-loop\|vision` | 2 | NOT IMPLEMENTED |
+| `reef_check.sh baseline\|estimator\|faults\|control\|vision\|release` | 2 | NOT IMPLEMENTED at P00 (all implemented since: §4) |
+| `reef_demo.sh estimator\|closed-loop\|vision` | 2 | NOT IMPLEMENTED at P00 (all implemented since: §4) |
 | `reef_check.sh env` | 0 | PASS (check_env, check_display) |
 | `reef_check.sh clock` | 0 | PASS: headless sim time 0.002 → 4.998 s; negative case exited 1 as required |
 | `reef_check.sh clock --gui` | 0 | PASS (headless, GUI, negative) |
@@ -148,8 +148,8 @@ image). Fix: `check_colcon.py` now builds in `build/colcon_check/<env>/`
 (keyed by a hash of the installed package list), and the stale
 `build/`/`install/` outputs of the three new packages were removed. After the
 fix, in the original container: PASS 5/5 (tree `build/colcon_check/bfcf57e680be`),
-with the shared tree deliberately left stale. The dev-container rerun is
-pending (H5).
+with the shared tree deliberately left stale. The dev-container rerun was
+pending at the time (H5; since done, §7).
 
 Not rerun: `reef_check.sh baseline`, because no file it uses changed since
 `04c9b19` (only the new `baseline/helper_vectors.*` were added). Nothing in
@@ -191,7 +191,7 @@ estimator stage p99 4 ms. Fix (`3edbd95`): the IMU path moved to a C++ node
 directly. The limit was not changed. Rerun here after the fix: `estimator`
 PASS 6/6 (age p99 8 ms, adapter stage p99 4 ms), `faults` 35/36 (F11 only),
 `interfaces` PASS, `regress_x3_scenario.sh` 13/13. The dev-container rerun
-is pending (H7).
+was pending at the time (H7; since done, §7).
 
 Nothing in P05 was run inside `reef_ros2_dev` by the implementer.
 
@@ -310,7 +310,7 @@ Nothing was run in `reef_ros2_dev` by the implementer (H10).
 Not run: `reef_check.sh estimator`, `baseline`, `interfaces` (the IMU
 adapter changed only by a test hook that is off by default; the estimator
 is unchanged); GUI demos (informational, USER); nothing in `reef_ros2_dev`
-by the implementer (H11).
+by the implementer (the P07b faults check, §7).
 
 ## 5k. R2 review (SELF-REVIEW) and documentation corrections (2026-10-01)
 
@@ -480,10 +480,14 @@ The full matrix is in [INTERFACES.md §5](INTERFACES.md).
   disarms. A GUI run under other load failed only the latency check (p99
   24 ms; analysed: CPU contention). USER: GUI runs are informational,
   headless runs are official; no latency rework. Merged.
-- **H11 (P07b, dev container):** `scripts/reef_check.sh faults` (expect
-  PASS: F1–F12 36/36 and 11 closed-loop scenarios, about 30 min, headless,
-  idle machine). Not yet run in the dev container (R2 relied on the
-  implementer's run).
+- **P07b faults check (dev container; formerly listed here as H11, renamed
+  because H11 is the P09 release reproduction in the testing guide):**
+  `scripts/reef_check.sh faults` (expect PASS: F1–F12 36/36 and 11
+  closed-loop scenarios, about 30 min, headless, idle machine). Not yet run
+  in the dev container (R2 relied on the implementer's run). It is not part
+  of either release profile; recommended once before the tag.
+- **H11 (P09, Mac + fresh image):** the release reproduction,
+  [RELEASE_SIMULATION.md §6](RELEASE_SIMULATION.md). Pending.
 - **H3:** open the three plots and `manifest.yaml` of a recent
   `recordings/x3_*` run, and check them against
   [X3_SCENARIO.md](X3_SCENARIO.md). (`feature/x3-sim-dataset` is already
@@ -494,6 +498,36 @@ The full matrix is in [INTERFACES.md §5](INTERFACES.md).
   the vehicle drifting into the wall (VISION.md §8.1).
 
 ## 8. Next milestone
+
+**P09** in progress on `p09-release` (verification running; H11 pending).
+
+**After P09 (USER, 2026-10-02):**
+
+1. Finish P09 as planned: strict bit-exact parity, every legacy behaviour
+   kept. The approvals to retain legacy behaviour applied to this baseline
+   only.
+2. Tag the checkpoint `sim-baseline-v0.1.0` (annotated), with no permanent
+   legacy branch. The release notes state the exact legacy configuration
+   (RELEASE_SIMULATION.md §1b).
+3. **P09.5 Modernization** on `main`: fix the documented legacy defects
+   systematically (controller K1–K13; also the estimator's D-items and the
+   `rgbd_to_velocity` Q-items where they fall under a phase).
+   - **Phase 1, safety:** invalid and NaN input handling, covariance
+     validation, controller output inhibition, stale estimate and setpoint
+     handling.
+   - **Phase 2, control logic:** D-term anti-damping (K1), ineffective
+     anti-windup (K2), heading wrapping (K9), differentiator and reset
+     behaviour (K3, K4, K6, K11).
+4. **Testing methodology for corrections.** Never overwrite the legacy golden
+   outputs or reference tests; they stay as historical evidence that the
+   original behaviour is reproduced. Each correction gets:
+   - a reproducing case;
+   - a justified expected result;
+   - a focused regression test, separate from the legacy tests;
+   - a before/after comparison.
+
+   AGENTS.md (which still says K1–K13 and the D-items stay) is to be updated
+   for P09.5 when it starts.
 
 **P08** done and merged (USER 2026-10-02). Accepted by USER:
 - the remaining `/clock` overhead of `imu_noise` and `range_sensor`, with no

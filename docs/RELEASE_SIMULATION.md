@@ -1,14 +1,27 @@
-# REEF ROS 2 simulation release `reef-sim-v0.1.0`
+# REEF ROS 2 simulation baseline release `sim-baseline-v0.1.0`
 
 Status: **PENDING**. The release gates were run in the original container
-(§4), and the human reproduction H11 is pending (§6). The local tag
-`reef-sim-v0.1.0` is applied only after H11 is accepted, and is never
-published (USER, P09).
+(§4), and the human reproduction H11 is pending (§6). The annotated tag
+`sim-baseline-v0.1.0` is applied only after H11 is accepted (USER, P09).
 
-Licence: open source. The project's own packages are MIT or Apache-2.0; the
-UF REEF AVL ports are MIT; the vendored `rosflight_msgs` is BSD-3-Clause; the
-X3 model is CC BY 4.0. [NOTICE.md](../NOTICE.md) lists every component and
-the evidence for its licence.
+This checkpoint is the **faithful baseline**. The ported components
+reproduce the original code bit for bit, including its documented legacy
+defects (§1a, §1b). The tag preserves it; there is no separate legacy branch
+(USER). Corrections of the legacy behaviour follow in **P09.5
+Modernization** on `main`. Each correction keeps the legacy tests and golden
+outputs as historical evidence and adds distinct corrected tests.
+
+Licence: open source, MIT, Copyright (c) 2026 Hunter Swan
+([LICENSE](../LICENSE)), for the repository and its new packages. Components
+under their own licences:
+- the UF REEF AVL ports: MIT, Copyright (c) 2020 University of Florida REEF
+  Autonomous Vehicles Lab;
+- the vendored `rosflight_msgs`: BSD-3-Clause;
+- the X3 model and its derivatives: CC BY 4.0;
+- the Gazebo-derived worlds: Apache-2.0.
+
+[NOTICE.md](../NOTICE.md) lists every component with the evidence for its
+licence.
 
 **Simulation only.** No mode has run on hardware. Physical-drone support is
 pending until P10 supplies the target hardware.
@@ -17,10 +30,47 @@ pending until P10 supplies the target hardware.
 
 | | |
 |---|---|
-| Version | `reef-sim-v0.1.0` (local tag, after H11) |
+| Version | `sim-baseline-v0.1.0` (annotated tag, after H11) |
 | Commit | PENDING (the commit the §4 gates ran on) |
 | Criteria | [ACCEPTANCE.md `release` (P09)](ACCEPTANCE.md) |
 | Evidence | §4, [reviews/P09.md](reviews/P09.md), review packet [reviews/P09_packet.md](reviews/P09_packet.md) |
+
+## 1a. What "bit-exact parity" covers
+
+Bit-exact parity holds only for the **ported** components. Each is compared
+with the pinned original source, compiled unmodified in a reference
+harness: every output field, on locked fixtures, as both the ROS-free core
+and the ROS node.
+
+| Component | Reference | Parity evidence |
+|---|---|---|
+| `reef_estimator` | master `e4179f48` | 50 event streams, all Z and XY fields, with `correction_c1_clear_xy_flag: false` (master semantics). The default output (C1 on) is checked against an independent model |
+| `reef_control` | `12237b76` | 20 streams plus a recorded stream; K1–K12 asserted |
+| `rgbd_to_velocity` | `b7637198` | 53 assertions; Q1–Q10 asserted |
+| `reef_msgs` helpers | `7fb63ff9` | 2930 recorded helper cases |
+
+The other components are **not** ports and claim no parity:
+- **`reef_rgbd_odometry`** is a **modern replacement** for `demo_rgbd` (an
+  OpenCV front-end of our own, not a port). It is judged against simulation
+  truth (VISION.md §6–8).
+- **`reef_fc_standin`** is a **stand-in** for the ROSflight firmware's command
+  mux, attitude loop and mixer: a development tool, not ROSflight. It is
+  judged by the closed-loop criteria (CONTROL_CHAIN.md §7).
+- **`reef_sim`** and **`reef_x3_adapter`** provide the simulation and its
+  idealized inputs. They are judged against truth and their interface
+  checks.
+
+## 1b. Legacy configuration of this checkpoint
+
+| Item | Setting in this release |
+|---|---|
+| Estimator correction **C1** (`correction_c1_clear_xy_flag`) | **`true` by default** (approved at R1). It corrects legacy defect **D1** (after a partial XY update the last measurement was re-fused at every IMU step). **`false`** reproduces master exactly; every parity run uses `false` |
+| Estimator corrections C2–C6 | **not implemented** (deferred). Legacy behaviour D2–D9 is kept: Z/XY bias sign convention, hard-coded g = 9.81, no airborne start, gates on the previous R, no tilt compensation of range, float32 truncations, NaN-check of acceleration only, double dt after a NaN |
+| Controller legacy behaviour **K1–K12** | **kept and asserted** (CONTROL_CHAIN.md §5): D term on the state with the wrong sign (K1), ineffective anti-windup (K2), first-sample derivative kick and huge first dt (K3, K4), no output inhibition (K5), a NaN latched in the differentiator (K6), heading without wrapping (K9), no integrator or differentiator resets (K11), and the rest |
+| `rgbd_to_velocity` legacy behaviour **Q1–Q9** | **kept and asserted** (VISION.md §3) |
+| Invalid parameters (D10, K13, Q10) | the **only behavioural deviations** from the originals, by the project rule "invalid parameters are errors at startup". The originals left a wrong-length matrix uninitialized (D10), clamped out-of-range gains silently (K13), or used zeros for missing extrinsics (Q10); the ports exit with an error naming the parameter |
+| Odometry characterizations V1, V2 | kept, documented (VISION.md §8) |
+| Simulation | IMU vibration assumption on (`x3_reef_overlay.yaml`); `enable_mocap_switch: false`; X3 controller gains `reef_control_x3_sim.yaml` (`dI` = 0) |
 
 ## 2. Tested configuration
 
@@ -79,9 +129,59 @@ min), `vision`, the GUI demos.
 
 ## 4. Gates and results
 
-PENDING: the commands, exit codes and logs of the release runs (core,
-vision), the fresh-clone reproduction and CI, filled in from their
-`release_summary.json` and `reproduction_summary.txt`.
+### Test accounting
+
+Every reported item belongs to one of three classes, counted separately:
+
+| Class | Meaning | Can it fail? | Counted as |
+|---|---|---|---|
+| **Acceptance check** | a criterion from ACCEPTANCE.md or a test of required behaviour: parity, limits, data paths, unit tests | yes | PASS / FAIL |
+| **Characterization assertion** | asserts that a documented legacy behaviour is reproduced (D-, K-, Q-items, the P07b "CHARACTERIZATION" items). It is evidence of faithfulness, not of correctness, and is expected to change in P09.5 | yes: it fails if the behaviour changes | separately, as "characterizations asserted" |
+| **REPORTED** | a measurement with no limit (noise, latency, performance, drift, the weak-texture outcome) | no | never counted as PASS |
+
+An item that cannot fail is never counted as PASS. At P09 four such items
+were found, each recorded as PASS by its check: the "range geometry note"
+(`analyze_x3_bag`), and three "(reported)" items in the P07b scenarios
+`controller_restart`, `range_loss` and `velocity_loss`. They are now
+REPORTED (`e61c2ba`). A fifth suspect, `check_control.py`'s "recorded
+estimate stream", is a real check: it fails when the stream is missing.
+
+| Check (release run) | Items | Acceptance | Characterizations asserted | REPORTED (not counted) |
+|---|---|---|---|---|
+| P02 reference harness (`check_baseline.py`) | 36 | 29 | 7 (legacy D-items: bias sign, g = 9.81, re-fusion, outliers, airborne start, …) | — |
+| estimator parity (`check_port.py`, 50 streams) | 253 | 252 | 1 (D1 re-fusion counted with C1 off) | — |
+| estimator, recorded stream | 5 | 5 | — | — |
+| controller (`check_control.py`) | 106 | 93 | 13 (K1–K13) | — |
+| `rgbd_to_velocity` (`check_rgbd.py`) | 53 | 43 | 10 (Q1–Q10) | — |
+| P07 closed loop: nominal / causality | 26 / 19 | 26 / 19 | — | — |
+| vision: open loop / faults run / closed loop | 20 / 24 / 17 | 20 / 24 / 17 | — | 4 / 6 / 9 |
+| P07b scenarios (`faults`, 11 runs) | 90 before the fix | 81 | 6 (dropout_long, estimator_reset, setpoint_stale, standin_exit, position_square, face_target) | 3 (since `e61c2ba`) |
+| stock flight (`analyze_x3_bag`) | 30 | 29 | — | 1 (since `e61c2ba`) |
+
+The colcon unit, interface and launch tests (175 test cases) are acceptance
+tests.
+
+Container commands, original container, headless, idle machine.
+
+| Gate | Command | Exit | Result | Log |
+|---|---|---|---|---|
+| release, **vision** profile (includes every core gate) | `scripts/reef_check.sh release --profile vision` | **0** | PASS, 68 min, on `9ca23eb` plus 13 uncommitted licence and doc paths (no functional change) | `log/checks/reef_check_release_20261002_031331` |
+| ↳ environment, pinned resources | (inside) | 0, 0 | PASS | |
+| ↳ code quality | `scripts/check_code_quality.sh` | 0 | shellcheck 28 scripts, pyflakes 59 files, 69 suppressions with reasons, **0 compiler warnings** (fresh build, 9 packages), **130 ASan/UBSan gtests clean** | |
+| ↳ `interfaces` | | 0 | 5/5 (vendored pin plus negative, helper vectors, colcon 175 test cases, golden unchanged) | `log/checks/reef_check_interfaces_20261002_032232` |
+| ↳ `baseline` | | 0 | P02 36/36; port vs original 253/253 (50 streams, 282 490 events) | `log/checks/reef_check_baseline_20261002_032444` |
+| ↳ `estimator` | | 0 | 6/6: plausibility vs truth, recorded-stream parity 5/5, replays | `log/checks/reef_check_estimator_20261002_035022` |
+| ↳ `control` | | 0 | controller 106/106; P07 closed loop 26/26 (staleness p99 20 ms, at the limit); causality 19/19 (p99 14 ms) | `log/checks/reef_check_control_20261002_035732` |
+| ↳ `vision` | | 0 | `rgbd_to_velocity` 53/53; open loop 20/20; faults 24/24; closed loop on vision 17/17 (staleness p99 16 ms) | `log/checks/reef_check_vision_20261002_040857` |
+| fast CI | `scripts/ci.sh` | 0 | 6/6, about 30 min | `log/ci/ci_20261002_023200` |
+| regressions | `scripts/regress_clock_check.sh`, `scripts/regress_x3_scenario.sh` | 0, 0 | all cases PASS (after the `env.sh` change) | |
+| fresh-clone reproduction, core, offline | `scripts/reproduce_release.sh` | PENDING | | |
+| `faults` (11 P07b scenarios; not in a profile) | `scripts/reef_check.sh faults` | PENDING (after the accounting fix) | | |
+| H11 (fresh image, Mac) | §6 | PENDING | | |
+
+Skipped: none of the gates above. The P07 staleness at the limit (20 ms)
+matches earlier P07 runs (12–24 ms) and is the documented idle-host
+dependence (§5).
 
 ## 5. Known limits
 
