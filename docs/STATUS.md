@@ -1,6 +1,6 @@
 # REEF ROS 2: project status
 
-Updated 2026-10-02 (R2 done, P07b merged; P08 done on its branch). `main` contains P00–P07, P07b,
+Updated 2026-10-02 (R2 done, P07b and P08 merged). `main` contains P00–P07, P07b,
 the R1 fixes, and the R2 documentation corrections, all merged by
 fast-forward at the user's request (P07: §5i, P07b: §5j, R2: §5k).
 Section 3 reconciles
@@ -87,7 +87,7 @@ wrapper boundary ([INTERFACES.md §1](INTERFACES.md#1-command-interface)).
 | P07 REEF closed loop (stand-in low-level loop) | done, merged: REEF estimator + controller fly the X3 through the stand-in (development tool) on idealized inputs; nominal run 22/22, causality +0.30 m | `reef_check.sh control`, `reef_demo.sh closed-loop`; [ACCEPTANCE §5 control P07](ACCEPTANCE.md), [CONTROL_CHAIN §7](CONTROL_CHAIN.md), [reviews/P07.md](reviews/P07.md) |
 | P07b closed-loop faults and position mode | done, merged: 11 scenarios (estimate dropout short/long, estimator reset, controller restart, stale setpoint, range and velocity loss, pause, stand-in exit, position square with K9, `face_target` K10); crashes documented where the legacy system has no protection (USER) | `reef_check.sh faults`; [ACCEPTANCE §5 P07b](ACCEPTANCE.md), [reviews/P07b.md](reviews/P07b.md) |
 | R2 independent review | **PASS (SELF-REVIEW)**, USER 2026-10-01: an independent Claude session reviewed `p07b-faults-position` (code `bb47cf0`); minor documentation corrections applied (§5k) | [reviews/R2.md](reviews/R2.md), [reviews/R2_packet.md](reviews/R2_packet.md) |
-| P08 RGB-D | **done on `p08-rgbd`, not merged**: `rgbd_to_velocity` ported bit-exact (53/53); camera interface; replacement OpenCV odometry; open loop 20/20; faults 24/24; closed loop on vision 17/17 (staleness p99 14 ms after the `/clock` fixes, USER option 2); capability matrix; `reef_demo.sh vision` | `reef_check.sh vision` PASS (§5l); [VISION.md](VISION.md), [reviews/P08.md](reviews/P08.md) |
+| P08 RGB-D | **done, merged** (USER 2026-10-02: H12 dev-container `vision` PASS; cleared to merge): `rgbd_to_velocity` ported bit-exact (53/53); camera interface; replacement OpenCV odometry; open loop 20/20; faults 24/24; closed loop on vision 17/17 (staleness p99 14 ms after the `/clock` fixes, USER option 2); capability matrix; `reef_demo.sh vision` | `reef_check.sh vision` PASS (§5l); [VISION.md](VISION.md), [reviews/P08.md](reviews/P08.md) |
 | P09 simulation release | not started | |
 | P10–P13 hardware | blocked: target hardware unknown | |
 
@@ -487,23 +487,17 @@ The full matrix is in [INTERFACES.md §5](INTERFACES.md).
   `recordings/x3_*` run, and check them against
   [X3_SCENARIO.md](X3_SCENARIO.md). (`feature/x3-sim-dataset` is already
   merged.)
-- **H12 (P08, dev container):** `scripts/reef_check.sh vision` (about 25 min,
-  headless, idle machine). Expect PASS on every step, including the
-  closed-loop staleness item (p99 14 ms here). Watch `scripts/reef_demo.sh vision
+- **H12 (P08, dev container):** done. USER (2026-10-02): `scripts/reef_check.sh
+  vision` passed in the dev container. Watch `scripts/reef_demo.sh vision
   --closed-loop --gui` (informational): the weak-texture segment can end with
   the vehicle drifting into the wall (VISION.md §8.1).
 
 ## 8. Next milestone
 
-**P08** done on branch `p08-rgbd`, not merged. `reef_check.sh vision`
-passes (§5l). The closed-loop staleness failure was fixed with the
-USER-approved option 2: the runner and `camera_check` no longer follow
-`/clock`; p99 is 14 ms against the 20 ms limit, which is unchanged.
+**P08** done and merged (USER 2026-10-02). Accepted by USER:
+- the remaining `/clock` overhead of `imu_noise` and `range_sensor`, with no
+  rewrite of P07 code;
+- the `rgbd_to_velocity` license stays flagged internally.
 
-Next:
-- the human checks H12 (dev-container `reef_check.sh vision`, about 25 min,
-  idle machine; the GUI demo, informational);
-- USER clearance to merge `p08-rgbd` into `main`;
-- then **P09** (simulation release: a fresh clone and image reproduce a
-  representative scenario offline; the capability matrix, INTERFACES §5,
-  feeds it).
+Next: **P09** (simulation release). Plan and criteria are to be presented for
+USER approval before any P09 code.
