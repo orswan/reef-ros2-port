@@ -1,7 +1,8 @@
 # REEF ROS 2 simulation baseline release `sim-baseline-v0.1.0`
 
-Status: **PENDING**. The release gates were run in the original container
-(§4), and the human reproduction H11 is pending (§6). The annotated tag
+Status: **gates PASS, H11 pending**. The release gates, the fresh-clone
+offline reproduction and `faults` passed in the original container (§4).
+The human reproduction H11 on a fresh image is pending (§6). The annotated tag
 `sim-baseline-v0.1.0` is applied only after H11 is accepted (USER, P09).
 
 This checkpoint is the **faithful baseline**. The ported components
@@ -31,7 +32,7 @@ pending until P10 supplies the target hardware.
 | | |
 |---|---|
 | Version | `sim-baseline-v0.1.0` (annotated tag, after H11) |
-| Commit | PENDING (the commit the §4 gates ran on) |
+| Commit | code verified at **`132c27c`** (the fresh-clone reproduction, §4). The later commits on `p09-release` change documentation only |
 | Criteria | [ACCEPTANCE.md `release` (P09)](ACCEPTANCE.md) |
 | Evidence | §4, [reviews/P09.md](reviews/P09.md), review packet [reviews/P09_packet.md](reviews/P09_packet.md) |
 
@@ -175,9 +176,23 @@ Container commands, original container, headless, idle machine.
 | ↳ `vision` | | 0 | `rgbd_to_velocity` 53/53; open loop 20/20; faults 24/24; closed loop on vision 17/17 (staleness p99 16 ms) | `log/checks/reef_check_vision_20261002_040857` |
 | fast CI | `scripts/ci.sh` | 0 | 6/6, about 30 min | `log/ci/ci_20261002_023200` |
 | regressions | `scripts/regress_clock_check.sh`, `scripts/regress_x3_scenario.sh` | 0, 0 | all cases PASS (after the `env.sh` change) | |
-| fresh-clone reproduction, core, offline | `scripts/reproduce_release.sh` | PENDING | | |
-| `faults` (11 P07b scenarios; not in a profile) | `scripts/reef_check.sh faults` | PENDING (after the accounting fix) | | |
+| **fresh-clone reproduction**, core, **offline** | `scripts/reproduce_release.sh` | **0** | PASS, 75 min. Clone of `132c27c` (0 uncommitted paths; no build, assets, recordings or reference clones). Setup online by the documented steps. Offline guard proven (Git, curl, Python blocked). Release gate core PASS: code quality as above, interfaces, baseline 36/36 and 253/253, estimator, control 106/106 + 26/26 + 19/19, `rgbd_to_velocity` 53/53. No download during the offline phase | `build/release_repro/20261002_052145/reproduction_summary.txt` |
+| `faults` (11 P07b scenarios; not in a profile), after the accounting fix | `scripts/reef_check.sh faults` | **0** | PASS: F1–F12 36/36; the 11 scenarios 87 judged (81 acceptance + 6 characterizations) + 3 REPORTED | `log/checks/reef_check_faults_20261002_044924` |
+| `regress_x3_scenario.sh` (after the `reef_sim` accounting change) | | 0 | all cases PASS | |
 | H11 (fresh image, Mac) | §6 | PENDING | | |
+
+Representative scenario, P07 closed-loop nominal (REPORTED; simulation
+timing is not deterministic):
+
+| Metric | Clone (`132c27c`) | Reference run |
+|---|---|---|
+| judged items | 26/26 | 26/26 |
+| REEF takeoff after arming | 4.15 s | 4.15 s |
+| max tilt | 0.090 rad | 0.085 rad |
+| worst velocity RMSE | 0.0088 m/s | 0.0085 m/s |
+| worst altitude-hold RMSE | 0.015 m | 0.017 m |
+| estimate age p99 | 16 ms | 20 ms |
+| yaw rate (command 0.3) | 0.262 rad/s | 0.262 rad/s |
 
 Skipped: none of the gates above. The P07 staleness at the limit (20 ms)
 matches earlier P07 runs (12–24 ms) and is the documented idle-host

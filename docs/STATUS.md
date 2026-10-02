@@ -88,7 +88,7 @@ wrapper boundary ([INTERFACES.md §1](INTERFACES.md#1-command-interface)).
 | P07b closed-loop faults and position mode | done, merged: 11 scenarios (estimate dropout short/long, estimator reset, controller restart, stale setpoint, range and velocity loss, pause, stand-in exit, position square with K9, `face_target` K10); crashes documented where the legacy system has no protection (USER) | `reef_check.sh faults`; [ACCEPTANCE §5 P07b](ACCEPTANCE.md), [reviews/P07b.md](reviews/P07b.md) |
 | R2 independent review | **PASS (SELF-REVIEW)**, USER 2026-10-01: an independent Claude session reviewed `p07b-faults-position` (code `bb47cf0`); minor documentation corrections applied (§5k) | [reviews/R2.md](reviews/R2.md), [reviews/R2_packet.md](reviews/R2_packet.md) |
 | P08 RGB-D | **done, merged** (USER 2026-10-02: H12 dev-container `vision` PASS; cleared to merge): `rgbd_to_velocity` ported bit-exact (53/53); camera interface; replacement OpenCV odometry; open loop 20/20; faults 24/24; closed loop on vision 17/17 (staleness p99 14 ms after the `/clock` fixes, USER option 2); capability matrix; `reef_demo.sh vision` | `reef_check.sh vision` PASS (§5l); [VISION.md](VISION.md), [reviews/P08.md](reviews/P08.md) |
-| P09 simulation release | **in progress on `p09-release`**: criteria `6313a57`, licence change `7d59ab7` (public open source, USER); release gate, code quality, CI and fresh-clone reproduction implemented; verification running; H11 pending | ACCEPTANCE `release`; [RELEASE_SIMULATION.md](RELEASE_SIMULATION.md) |
+| P09 simulation release | **gates PASS on `p09-release`; H11 pending** (code `132c27c`): release vision profile PASS; fresh-clone offline reproduction PASS; `faults` PASS; CI 6/6; code quality (0 warnings, ASan/UBSan clean). Licence: public open source (MIT, Hunter Swan; ports MIT UF REEF AVL) | `reef_check.sh release`; [RELEASE_SIMULATION.md](RELEASE_SIMULATION.md), [reviews/P09.md](reviews/P09.md) |
 | P10–P13 hardware | blocked: target hardware unknown | |
 
 ## 5. Checks run for P00 (original container, 2026-09-29, base `9af00d2`)
@@ -499,7 +499,10 @@ The full matrix is in [INTERFACES.md §5](INTERFACES.md).
 
 ## 8. Next milestone
 
-**P09** in progress on `p09-release` (verification running; H11 pending).
+**P09**: every gate passed on `p09-release` (code `132c27c`;
+RELEASE_SIMULATION.md §4). Waiting for the USER's **H11** fresh-image
+reproduction. After H11 is accepted: merge into `main`, then the annotated
+tag `sim-baseline-v0.1.0`.
 
 **After P09 (USER, 2026-10-02):**
 
