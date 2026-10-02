@@ -16,6 +16,8 @@ import argparse
 import csv
 import json
 import math
+import os
+import signal
 import subprocess
 import sys
 import tempfile
@@ -177,6 +179,33 @@ def f8(c, out, tree):
           f'{n} tests passed' + ('' if r.returncode == 0 else f'; {r.stdout[-300:]}'))
 
 
+def run_own_session(cmd, timeout):
+    """Run cmd in a session of its own; on timeout stop that whole session (it was created here).
+
+    `ros2 run` starts the node as its child, so subprocess.run(timeout=...) would kill only the
+    wrapper and orphan the node (an orphaned F9 node was found in the original container).
+    Exit 124 on timeout: the node started, so the invalid value was not rejected.
+    """
+    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True)
+    try:
+        out, err = p.communicate(timeout=timeout)
+        return subprocess.CompletedProcess(cmd, p.returncode, out, err)
+    except subprocess.TimeoutExpired:
+        for sig, wait in ((signal.SIGTERM, 5), (signal.SIGKILL, 5)):
+            try:
+                os.killpg(p.pid, sig)   # pgid == p.pid: the session created by start_new_session
+            except ProcessLookupError:
+                break
+            try:
+                out, err = p.communicate(timeout=wait)
+                break
+            except subprocess.TimeoutExpired:
+                continue
+        else:
+            out, err = '', ''
+        return subprocess.CompletedProcess(cmd, 124, out or '', err or '')
+
+
 def f9(c, out):
     # A second params file that CHANGES the type of a key set by an earlier file
     # is silently ignored by ROS 2's parameter-file merge (the node never sees
@@ -192,12 +221,8 @@ def f9(c, out):
             ('negative variance', "/**:\n  ros__parameters:\n    z_R0: [-0.04]\n", 'z_R0(0,0) is negative')):
         bad = out / f"bad_{name.replace(' ', '_')}.yaml"
         bad.write_text(yaml_text)
-        try:
-            r = subprocess.run(['ros2', 'run', 'reef_estimator', 'reef_estimator_node', '--ros-args', '-r', '__ns:=/faults_f9',
-                                '--params-file', str(base), '--params-file', str(bad)],
-                               capture_output=True, text=True, timeout=30)
-        except subprocess.TimeoutExpired as e:   # the node started: the invalid value was not rejected
-            r = subprocess.CompletedProcess(e.cmd, 124, e.stdout or '', e.stderr or '')
+        r = run_own_session(['ros2', 'run', 'reef_estimator', 'reef_estimator_node', '--ros-args', '-r', '__ns:=/faults_f9',
+                             '--params-file', str(base), '--params-file', str(bad)], timeout=30)
         c.add('F9', f'parameter failure exits 1 naming the parameter ({name})', r.returncode == 1 and want in r.stderr + r.stdout,
               f'exit {r.returncode}; message contains "{want}": {want in r.stderr + r.stdout}')
 
