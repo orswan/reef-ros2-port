@@ -563,9 +563,41 @@ velocity off).
 Wrappers: `reef_check.sh vision`, `reef_demo.sh vision [--gui]`. Official
 results headless on an idle machine (USER, P07).
 
-### `release` (P09)
+### `release` (P09) — fixed 2026-10-02, before any P09 code
 
 A fresh clone and a freshly built image, following documented steps only,
 reproduce a representative scenario and its scores. The run works offline
 after asset setup. The capability matrix separates simulation-only,
 untested, and unsupported features.
+
+USER decisions (2026-10-02):
+- **Profiles:** **core** (idealized sensors) is the default release gate;
+  **vision** is a separately invoked gate.
+- **Compose and Dockerfile:** `compose.yaml` may take environment variables
+  for the container name, ports and volumes (defaults unchanged), so that an
+  H11 instance does not collide with the working dev container. The
+  Dockerfile may add CI and lint tools.
+- **CI:** local only (`scripts/ci.sh`), with no GitHub Actions workflow until
+  a remote exists.
+- **Tag:** local tag `reef-sim-v0.1.0`, applied only after final acceptance
+  and never published.
+- **Licence:** the whole release is **internal-only** (the
+  `rgbd_to_velocity` licence is unclarified).
+
+| Area | Judged |
+|---|---|
+| Fresh clone (agent) | a clone of the release commit into an empty directory, following documented steps only, builds and passes `reef_check.sh release --profile core`. It uses no earlier build output, no fixtures Git ignores, no `reference/` and no caches: a fresh build tree, an empty Gazebo model cache, and checks that `/root/ros2_ws/install` and the original clone's trees are not used |
+| Pinned resources | setup fetches every external resource (X3 model, upstream reference sources) by pin, verified by checksum or commit; a missing or modified resource stops the run (exit 2) |
+| Offline | after setup, a simulation run and the core profile pass with network access blocked; zero download attempts recorded |
+| Representative scores | in the clone, the P07 closed-loop nominal run passes all its judged items. Its metrics are reported beside the reference release run (reported, not judged: simulation timing is not deterministic) |
+| Gates (core) | colcon build and every test (minimum counts as now); estimator, controller and `rgbd_to_velocity` parity bit-exact; estimator plausibility; closed-loop nominal |
+| Gates (vision) | core plus `reef_check.sh vision` (20/20, 24/24, 17/17 as at P08) |
+| Code quality | zero compiler warnings in a fresh build of the project's own C++ packages (`src/third_party/` excluded); the AddressSanitizer + UndefinedBehaviorSanitizer build's gtests pass with no sanitizer report; `shellcheck -x` clean on every script; pyflakes clean on the project's Python; every suppression listed with its reason |
+| CI | `scripts/ci.sh` exits nonzero on any failure and writes a summary and a JUnit-style report. By default it covers unit, interface and parity tests plus one short headless scenario; expensive suites are opt-in |
+| Documentation | `docs/RELEASE_SIMULATION.md` with: commit; versions; image package-list hash; gates with exit codes, failures and skips; profiles; capability matrix; limits; troubleshooting. Also: a README quick start (launch, replay, plot, score); `NOTICE.md` (licences and attribution, the `rgbd_to_velocity` flag, internal-only); the H11 procedure with real commands; a review packet |
+| Capability matrix | every mode marked supported in simulation / supported with idealized input / port tested only / Unsupported-Deferred, with its profile (core or vision) and evidence links (extends INTERFACES §5) |
+| Human (H11) | the USER builds a fresh image from a separate clone on the Mac without touching the working dev container or the original container, follows the documented steps, and runs one demo and its scorer. The tag is applied only after this |
+
+Wrappers: `reef_check.sh release [--profile core|vision]`,
+`scripts/reproduce_release.sh`, `scripts/ci.sh`. Physical-drone support stays
+pending until P10.
