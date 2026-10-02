@@ -579,8 +579,10 @@ USER decisions (2026-10-02):
   Dockerfile may add CI and lint tools.
 - **CI:** local only (`scripts/ci.sh`), with no GitHub Actions workflow until
   a remote exists.
-- **Tag:** local tag `reef-sim-v0.1.0`, applied only after final acceptance
-  and never published.
+- **Tag** (renamed 2026-10-02, USER): annotated tag `sim-baseline-v0.1.0`,
+  applied only after final acceptance. It preserves the faithful baseline
+  (bit-exact ports, legacy behaviour kept), with no separate legacy branch.
+  It is not pushed anywhere unless the USER asks.
 - **Licence** (changed 2026-10-02, USER): the project is intended for
   **public open-source distribution**. The `rgbd_to_velocity` repository's
   own `LICENSE` is MIT, and the bundle's MIT covers the bundle. The
