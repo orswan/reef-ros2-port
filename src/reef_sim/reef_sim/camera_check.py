@@ -28,6 +28,7 @@ import numpy as np
 import rclpy
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
+from rclpy.parameter import Parameter
 from sensor_msgs.msg import CameraInfo, Image
 
 T = np.array([[0, 1, 0], [1, 0, 0], [0, 0, -1]], float)
@@ -169,11 +170,13 @@ def main():
     try:
         while rclpy.ok() and not node.done:
             rclpy.spin_once(node, timeout_sec=0.1)
-        # The check is complete: stop receiving images (deserializing them in Python for the rest of the
-        # run cost about 0.6 of a core, competing with the control loop). The node stays up until shutdown.
+        # The check is complete: stop receiving images and stop following sim time (with use_sim_time the
+        # node processes every /clock message, about 500 Hz; together that cost about a core of Python
+        # for the rest of the run, competing with the control loop, P08). The node stays up until shutdown.
         for sub in node.subs:
             node.destroy_subscription(sub)
         node.subs = []
+        node.set_parameters([Parameter('use_sim_time', Parameter.Type.BOOL, False)])
         while rclpy.ok():
             rclpy.spin_once(node, timeout_sec=0.5)
     except (KeyboardInterrupt, rclpy.executors.ExternalShutdownException):

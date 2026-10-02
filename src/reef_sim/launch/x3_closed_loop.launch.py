@@ -67,7 +67,8 @@ def generate_launch_description():
                         PathJoinSubstitution([reef_config, 'simulation.yaml'])]
     runner = Node(
         package='reef_sim', executable='closed_loop_runner', name='closed_loop_runner', output='screen',
-        parameters=[params_file, sim_time, {
+        # no use_sim_time: the runner reads sim time from the truth odometry stamps (see its docstring)
+        parameters=[params_file, {
             'result_file': PathJoinSubstitution([output_dir, 'scenario_result.json']),
             'record_topics': PythonExpression(
                 [f'({TOPICS!r} + ({VISION_TOPICS!r} if "', vision, '" == "true" else [])) if "', record,

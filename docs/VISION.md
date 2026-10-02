@@ -295,35 +295,49 @@ range are idealized. Profile and definitions: §7. Scored by
 | `p08_cl_vision3` | **17/17** | 20 ms | 0.039 | 0.086 | LOST 13.6 s in; resumed 12.3 s later; σ peak 3.8 | landed, 1.6 m from takeoff |
 | `p08_cl_vision4` | **17/17** | 20 ms | 0.047 | 0.103 | LOST 13.0 s in; **never resumed**; **hit the wall** (−17.6 m/s² at x 3.764 m) | landed at (3.76, 5.25) m, 6.5 m from takeoff |
 | `reef_check.sh vision` (`log/checks/reef_check_vision_20261001_212841`) | 16/17 | **24 ms FAIL** | 0.042 | 0.102 | LOST 12.6 s in; never resumed | (characterization; see the log) |
+| `reef_check.sh vision` (`log/checks/reef_check_vision_20261001_235509`, after the runner and `/clock` fixes) | **17/17** | **14 ms** | 0.047 | 0.092 | LOST 13.3 s in; resumed 13.6 s later; σ peak 4.1 m/s | landed, 1.4 m from takeoff |
 
-Runs 1 and 2 are before the `camera_check` fix; runs 3, 4 and the
-`reef_check` run are after it. **Staleness passes in 2 of 5 runs** (p99 32,
-30, 20, 20, 24 ms); every other judged item passes in all five.
+Runs 1 and 2 are before the `camera_check` fix; runs 3, 4 and the first
+`reef_check` run are after it. Staleness passed in 2 of those 5 runs (p99
+32, 30, 20, 20, 24 ms). The last `reef_check` run is after the `/clock`
+fixes below: **17/17, staleness p99 14 ms**. Every other judged item passes
+in all runs.
 Every run takes off 4.1–4.2 s after arming. Saturation is ≤ 0.1 %, and there
 are no offboard timeouts.
 
-**Staleness is at the limit.** The estimate age at the motor command is
+**Staleness: cause and fix.** The estimate age at the motor command is
 measured over the judged window:
 
 | | p99 | > 20 ms | max |
 |---|---|---|---|
 | P07 nominal (no camera) | 12 ms | 0.00 % | 20 ms |
 | runs 1–2 | 30–32 ms | 2.8–3.2 % | 54–60 ms |
-| runs 3–4 | 20 ms | 0.57–0.88 % | 34–52 ms |
+| runs 3–4 (`camera_check` stops receiving images) | 20 ms | 0.57–0.88 % | 34–52 ms |
+| final `reef_check` run (runner and `camera_check` off `/clock`) | **14 ms** | 0.03 % | 28 ms |
 
-- The camera chain adds CPU load on top of the P07 graph: Gazebo rendering
-  in software is about 2 cores, the odometry about 0.4.
-- `camera_check` kept deserializing every image in Python after its ground
-  check (about 0.6 of a core). It now drops its subscriptions once the check
-  is done; that cut the share of late commands by 3–5× and is the
-  difference between runs 1–2 and 3–4.
-- The limit (ACCEPTANCE P07, ≤ 20 ms) is unchanged. On this host the closed
-  loop on vision **does not reliably meet it**: the passes have no margin, on
-  an idle machine (USER, P07). P07 itself was marginal here (p99 12–24 ms).
-- Open for a USER decision (STATUS §8).
-- [A] The remaining tail comes from CPU scheduling of the Python nodes in
-  the IMU path (`imu_noise`, about 0.65 of a core). Rewriting them was ruled
-  out as scope creep (USER, P07).
+- The camera chain adds CPU load to the P07 graph: Gazebo software rendering
+  about 2 cores, the odometry about 0.4.
+- [V] A Python node with `use_sim_time` processes every `/clock` message
+  (499 Hz here), which costs about **half a core per node**.
+  - `camera_check` with no subscriptions left still used 49 %; after it
+    stops following sim time it used 0 %.
+  - `closed_loop_runner` used 75–77 %. A persistent executor did not change
+    that (measured, reverted).
+- Fixes:
+  - `camera_check` drops its image subscriptions and sets `use_sim_time`
+    false once its ground check is done.
+  - `closed_loop_runner` (P07 test code, USER-approved option 2) reads sim
+    time from the `/x3/truth/odom` stamps (100 Hz) instead of `/clock` and
+    blocks between messages instead of polling every 2 ms. Its CPU fell to
+    23 %.
+  - Phase changes now land within one truth sample (10 ms) of their
+    scheduled times; recorded boundaries stay the scheduled times.
+    `reef_check.sh control` and `faults` pass with it.
+- The limit (ACCEPTANCE P07, ≤ 20 ms) is unchanged. Official results still
+  need an idle machine (USER, P07).
+- [A] `imu_noise` and `range_sensor` still pay the `/clock` cost (about 0.6–0.7
+  of a core each). They need sim time, and rewriting them was ruled out
+  (USER, P07).
 
 **Weak-texture characterization** (legacy: no failsafe):
 - The odometry tracks on partial texture until 12.6–13.6 s into weak_left
@@ -339,4 +353,5 @@ measured over the judged window:
     which stayed too close or too plain for the odometry. REEF's σ reached
     11.7 m/s, the vehicle flew into the wall at about 0.38 m/s forward while
     REEF estimated about 0, stayed upright, and landed beside the wall.
-- Which outcome occurs depends on run-to-run timing.
+- Which outcome occurs depends on run-to-run timing. The final `reef_check`
+  run recovered, like (a).

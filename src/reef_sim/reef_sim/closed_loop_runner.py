@@ -1,6 +1,12 @@
 """Closed-loop X3 scenario (P07): setpoints for reef_control and arming of the
 stand-in low-level loop, phase by phase in simulation time.
 
+Simulation time is read from the stamps of /x3/truth/odom (100 Hz), not from
+/clock: the node runs without use_sim_time, because following /clock (about
+500 Hz) cost a Python node about half a core and competed with the control
+loop (P08). Phase changes therefore land within one truth sample (10 ms) of
+their scheduled times; the recorded boundaries are the scheduled times.
+
 REEF is IN the control loop here: the stand-in (reef_fc_standin, a
 development tool) drives the motors from reef_control's commands, and
 reef_control uses only the REEF estimate and these setpoints. Nothing
@@ -47,6 +53,8 @@ class ClosedLoopRunner(Node):
 
     def __init__(self):
         super().__init__('closed_loop_runner')
+        if self.get_parameter('use_sim_time').value:
+            raise ValueError('closed_loop_runner reads sim time from /x3/truth/odom stamps; run it without use_sim_time')
         p = self.declare_parameter
         self.setpoint_rate = p('setpoint_rate_hz', 50.0).value
         self.startup_timeout = p('startup_timeout_s', 90.0).value
@@ -92,7 +100,10 @@ class ClosedLoopRunner(Node):
         self.truth = msg
 
     def now_s(self):
-        return self.get_clock().now().nanoseconds * 1e-9
+        """Simulation time [s]: the stamp of the latest truth odometry (0 before the first)."""
+        if self.truth is None:
+            return 0.0
+        return self.truth.header.stamp.sec + self.truth.header.stamp.nanosec * 1e-9
 
     def spin_until(self, pred, wall_limit):
         deadline = time.monotonic() + wall_limit
@@ -154,7 +165,7 @@ class ClosedLoopRunner(Node):
         if not ph['setpoint']:
             return   # P07b stale-setpoint case: the controller keeps the last one
         d = DesiredState()
-        d.header.stamp = self.get_clock().now().to_msg()
+        d.header.stamp = self.truth.header.stamp   # sim time (read by no consumer)
         d.pose.z = ph['z']
         if ph['mode'] == 'position':
             d.position_valid = True
@@ -247,7 +258,7 @@ class ClosedLoopRunner(Node):
                 if now >= next_arm:
                     self.arm(ph['armed'])
                     next_arm = now + 0.1
-                rclpy.spin_once(self, timeout_sec=0.002)
+                rclpy.spin_once(self, timeout_sec=0.05)   # wakes on the next truth sample (100 Hz)
             boundaries.append(dict(ph, t_start=t_start, t_end=t_end))
             t_start = t_end
         self.phase_pub.publish(String(data='end'))
