@@ -498,6 +498,8 @@ The full matrix is in [INTERFACES.md §5](INTERFACES.md).
   confirms a stall only after draining pending input (unit tests
   `test_stall.py`). [V] reef_sim pytest 28/28; `regress_x3_scenario.sh
   --no-gui` exit 1, with every case PASS except case 3 (GUI, skipped by `--no-gui`).
+  `reef_check.sh control` exit 0, all 5 assertions PASS
+  (`log/checks/reef_check_control_20261003_185954`).
   H11 must be re-run on the fixed commit before the tag.
 - **H3:** open the three plots and `manifest.yaml` of a recent
   `recordings/x3_*` run, and check them against
