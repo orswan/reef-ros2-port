@@ -44,6 +44,8 @@ from reef_msgs.msg import DesiredState
 from std_msgs.msg import Bool, String
 from std_srvs.srv import Trigger
 
+from reef_sim.stall import StallWatch
+
 REQUIRED = ['/clock', '/x3/truth/odom', '/x3/imu', '/x3/range', '/x3/reef/xyz_estimate',
             '/x3/reef/command', '/x3/fc/motor_speed', '/x3/reef/status']
 FORBIDDEN = ['/x3/cmd_vel']   # the stock controller's command: must have no publisher
@@ -243,15 +245,13 @@ class ClosedLoopRunner(Node):
             if ph['fault']:
                 self.inject(ph)
             next_sp = t_start
-            last_sim, last_wall = self.now_s(), time.monotonic()
+            watch = StallWatch(self.stall_timeout)
             while True:
+                if watch.stalled(self.now_s, lambda: rclpy.spin_once(self, timeout_sec=0.05)):
+                    return 3, f'sim time stalled at {self.now_s():.3f} s', boundaries
                 now = self.now_s()
                 if now >= t_end:
                     break
-                if now > last_sim:
-                    last_sim, last_wall = now, time.monotonic()
-                elif time.monotonic() - last_wall > self.stall_timeout:
-                    return 3, f'sim time stalled at {now:.3f} s', boundaries
                 if now >= next_sp:
                     self.publish(ph)
                     next_sp = max(next_sp + period, now)

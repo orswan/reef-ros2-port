@@ -24,6 +24,8 @@ from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from std_msgs.msg import String
 
+from reef_sim.stall import StallWatch
+
 REQUIRED_PUBLISHED = ['/clock', '/x3/truth/odom', '/x3/imu']
 
 
@@ -106,15 +108,13 @@ class ScenarioRunner(Node):
             self.get_logger().info(
                 f"phase {ph['name']}: {ph['duration']:.1f} s, v=({ph['vx']}, {ph['vy']}, {ph['vz']})")
             next_cmd = t_start
-            last_sim, last_wall = self.now_s(), time.monotonic()
+            watch = StallWatch(self.stall_timeout)
             while True:
+                if watch.stalled(self.now_s, lambda: rclpy.spin_once(self, timeout_sec=0.005)):
+                    return 3, f'sim time stalled at {self.now_s():.3f} s', boundaries
                 now = self.now_s()
                 if now >= t_end:
                     break
-                if now > last_sim:
-                    last_sim, last_wall = now, time.monotonic()
-                elif time.monotonic() - last_wall > self.stall_timeout:
-                    return 3, f'sim time stalled at {now:.3f} s', boundaries
                 if now >= next_cmd:
                     self.publish_cmd(ph)
                     next_cmd += period

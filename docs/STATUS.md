@@ -487,7 +487,18 @@ The full matrix is in [INTERFACES.md §5](INTERFACES.md).
   in the dev container (R2 relied on the implementer's run). It is not part
   of either release profile; recommended once before the tag.
 - **H11 (P09, Mac + fresh image):** the release reproduction,
-  [RELEASE_SIMULATION.md §6](RELEASE_SIMULATION.md). Pending.
+  [RELEASE_SIMULATION.md §6](RELEASE_SIMULATION.md). First attempt
+  (USER, 2026-10-02, `7b42ed9`, Mac under heavy load; transcript
+  `log/h11_release_output.txt`): `reef_check.sh release` exit 1. Only the
+  closed-loop nominal run failed (`sim time stalled at 59.090 s`); the
+  causality run, which is the same scenario, passed right after it. [A] The
+  host froze the container for more than 20 s, and the runners called
+  that a stall before reading the truth samples that had queued up (the run
+  directory stayed in the H11 clone and was not inspected). Fix: `reef_sim/stall.py`
+  confirms a stall only after draining pending input (unit tests
+  `test_stall.py`). [V] reef_sim pytest 28/28; `regress_x3_scenario.sh
+  --no-gui` exit 1, with every case PASS except case 3 (GUI, skipped by `--no-gui`).
+  H11 must be re-run on the fixed commit before the tag.
 - **H3:** open the three plots and `manifest.yaml` of a recent
   `recordings/x3_*` run, and check them against
   [X3_SCENARIO.md](X3_SCENARIO.md). (`feature/x3-sim-dataset` is already
