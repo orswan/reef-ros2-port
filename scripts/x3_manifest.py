@@ -35,6 +35,15 @@ def sha256(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+def controller_label(extra):
+    # What commands the motors. In a closed-loop run the stock controller is
+    # absent from the world (x3_closed_loop*.sdf) and REEF flies the vehicle.
+    if extra.get('closed_loop') == 'true':
+        return ('REEF controller -> STAND-IN low-level loop (development tool, not ROSflight); '
+                'the stock gz-sim MulticopterVelocityControl is absent from this world')
+    return 'gz-sim MulticopterVelocityControl, fed by SIMULATION TRUTH (not REEF)'
+
+
 def start(run_dir, extra):
     params = yaml.safe_load((run_dir / 'x3_scenario.yaml').read_text())
     asset_manifests = {}
@@ -72,7 +81,7 @@ def start(run_dir, extra):
             'vehicle_model_sha256': sha256(ROOT / vehicle),
             'third_party_assets': asset_manifests,
             'asset_verification': extra.pop('asset_verification', 'unknown'),
-            'controller': 'gz-sim MulticopterVelocityControl, fed by SIMULATION TRUTH (not REEF)',
+            'controller': controller_label(extra),
         },
         'seeds': {
             'imu_noise': params['imu_noise']['ros__parameters']['seed'],
