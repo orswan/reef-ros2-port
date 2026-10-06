@@ -1,0 +1,52 @@
+{
+ "profile": "core",
+ "verdict": "PASS",
+ "commit": "09b9a5e433a66f42d7549d21b5cd6b193fc1ef50",
+ "branch": "p09-release",
+ "uncommitted": [],
+ "image_package_list_sha256": "8a574d1a79f7cf2e50183042eec18d2b4b3f04366ba098ffbe349af6ecea2413",
+ "gz_sim": "8.15.0",
+ "ros_distro": "jazzy",
+ "steps": [
+  {
+   "verdict": "PASS",
+   "name": "environment (check_env.sh)",
+   "detail": "exit 0 (expected 0), wall 2 s"
+  },
+  {
+   "verdict": "PASS",
+   "name": "pinned resources verified (X3 assets by SHA-256, upstream sources by commit)",
+   "detail": "exit 0 (expected 0), wall 0 s"
+  },
+  {
+   "verdict": "PASS",
+   "name": "code quality (shellcheck, pyflakes, suppressions, fresh-build warnings, ASan/UBSan)",
+   "detail": "exit 0 (expected 0), wall 691 s"
+  },
+  {
+   "verdict": "PASS",
+   "name": "reef_check.sh interfaces",
+   "detail": "exit 0 (expected 0), wall 741 s"
+  },
+  {
+   "verdict": "PASS",
+   "name": "reef_check.sh baseline",
+   "detail": "exit 0 (expected 0), wall 20032 s"
+  },
+  {
+   "verdict": "PASS",
+   "name": "reef_check.sh estimator",
+   "detail": "exit 0 (expected 0), wall 384 s"
+  },
+  {
+   "verdict": "PASS",
+   "name": "reef_check.sh control",
+   "detail": "exit 0 (expected 0), wall 614 s"
+  },
+  {
+   "verdict": "PASS",
+   "name": "rgbd_to_velocity: original vs port, model, quirks Q1-Q10",
+   "detail": "exit 0 (expected 0), wall 41 s"
+  }
+ ]
+}

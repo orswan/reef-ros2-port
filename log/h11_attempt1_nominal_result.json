@@ -1,0 +1,167 @@
+{
+  "exit_code": 3,
+  "status": "sim time stalled at 59.090 s",
+  "phases": [
+    {
+      "name": "settle",
+      "duration": 5.0,
+      "armed": false,
+      "z": -1.0,
+      "vx": 0.0,
+      "vy": 0.0,
+      "yaw_rate": 0.0,
+      "mode": "velocity",
+      "px": 0.0,
+      "py": 0.0,
+      "heading": 0.0,
+      "setpoint": true,
+      "fault": "",
+      "t_start": 1.8900000000000001,
+      "t_end": 6.890000000000001
+    },
+    {
+      "name": "takeoff_hover",
+      "duration": 20.0,
+      "armed": true,
+      "z": -1.0,
+      "vx": 0.0,
+      "vy": 0.0,
+      "yaw_rate": 0.0,
+      "mode": "velocity",
+      "px": 0.0,
+      "py": 0.0,
+      "heading": 0.0,
+      "setpoint": true,
+      "fault": "",
+      "t_start": 6.890000000000001,
+      "t_end": 26.89
+    },
+    {
+      "name": "forward",
+      "duration": 6.0,
+      "armed": true,
+      "z": -1.0,
+      "vx": 0.3,
+      "vy": 0.0,
+      "yaw_rate": 0.0,
+      "mode": "velocity",
+      "px": 0.0,
+      "py": 0.0,
+      "heading": 0.0,
+      "setpoint": true,
+      "fault": "",
+      "t_start": 26.89,
+      "t_end": 32.89
+    },
+    {
+      "name": "hover_fwd",
+      "duration": 6.0,
+      "armed": true,
+      "z": -1.0,
+      "vx": 0.0,
+      "vy": 0.0,
+      "yaw_rate": 0.0,
+      "mode": "velocity",
+      "px": 0.0,
+      "py": 0.0,
+      "heading": 0.0,
+      "setpoint": true,
+      "fault": "",
+      "t_start": 32.89,
+      "t_end": 38.89
+    },
+    {
+      "name": "left",
+      "duration": 6.0,
+      "armed": true,
+      "z": -1.0,
+      "vx": 0.0,
+      "vy": -0.3,
+      "yaw_rate": 0.0,
+      "mode": "velocity",
+      "px": 0.0,
+      "py": 0.0,
+      "heading": 0.0,
+      "setpoint": true,
+      "fault": "",
+      "t_start": 38.89,
+      "t_end": 44.89
+    },
+    {
+      "name": "hover_left",
+      "duration": 6.0,
+      "armed": true,
+      "z": -1.0,
+      "vx": 0.0,
+      "vy": 0.0,
+      "yaw_rate": 0.0,
+      "mode": "velocity",
+      "px": 0.0,
+      "py": 0.0,
+      "heading": 0.0,
+      "setpoint": true,
+      "fault": "",
+      "t_start": 44.89,
+      "t_end": 50.89
+    },
+    {
+      "name": "back",
+      "duration": 6.0,
+      "armed": true,
+      "z": -1.0,
+      "vx": -0.3,
+      "vy": 0.3,
+      "yaw_rate": 0.0,
+      "mode": "velocity",
+      "px": 0.0,
+      "py": 0.0,
+      "heading": 0.0,
+      "setpoint": true,
+      "fault": "",
+      "t_start": 50.89,
+      "t_end": 56.89
+    }
+  ],
+  "final_truth": {
+    "t": 59.09,
+    "x": 0.03527369280266406,
+    "y": 0.018994280528760402,
+    "z": 1.0596021176067627
+  },
+  "scenario_duration_s": 131.0,
+  "mode": "closed_loop",
+  "graph": {
+    "controller_inputs": {
+      "/clock": [
+        "/x3_bridge"
+      ],
+      "/parameter_events": [
+        "/closed_loop_runner",
+        "/imu_noise",
+        "/range_sensor",
+        "/reef_adapter",
+        "/reef_fc_standin",
+        "/x3/reef/reef_control_pid",
+        "/x3/reef/reef_estimator",
+        "/x3_bridge",
+        "/x3_imu_adapter"
+      ],
+      "/x3/reef/desired_state": [
+        "/closed_loop_runner"
+      ],
+      "/x3/reef/is_flying": [],
+      "/x3/reef/pose_stamped": [],
+      "/x3/reef/status": [
+        "/reef_fc_standin"
+      ],
+      "/x3/reef/xyz_estimate": [
+        "/x3/reef/reef_estimator"
+      ]
+    },
+    "motor_command_publishers": [
+      "/reef_fc_standin"
+    ],
+    "stock_command_publishers": []
+  },
+  "faults": []
+}

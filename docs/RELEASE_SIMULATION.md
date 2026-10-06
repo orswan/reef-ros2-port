@@ -1,9 +1,11 @@
 # REEF ROS 2 simulation baseline release `sim-baseline-v0.1.0`
 
-Status: **gates PASS, H11 pending**. The release gates, the fresh-clone
-offline reproduction and `faults` passed in the original container (§4).
-The human reproduction H11 on a fresh image is pending (§6). The annotated tag
-`sim-baseline-v0.1.0` is applied only after H11 is accepted (USER, P09).
+Status: **every gate PASS, including H11**. The release gates, the
+fresh-clone offline reproduction and `faults` passed in the original
+container (§4), and the human reproduction H11 passed on a fresh image on the
+Mac (USER, 2026-10-06, commit `09b9a5e`, §4 and §6). The annotated tag
+`sim-baseline-v0.1.0` is applied after the manifest-label fix `e743179` is
+confirmed by a short demo re-check (USER, P09).
 
 This checkpoint is the **faithful baseline**. The ported components
 reproduce the original code bit for bit, including its documented legacy
@@ -87,7 +89,7 @@ packages as the dev image but is not built from the `Dockerfile`:
 | rosbag2 | 0.26.11 (MCAP storage) |
 | Compiler | GCC 13.3.0 |
 | OpenCV, Eigen, NumPy | 4.6.0, 3.4.0, 1.26.4 |
-| Dev image | `Dockerfile` (base `ros:jazzy@sha256:c3706ef0…`); its exact package list is recorded at build time in `/etc/reef-image-packages.txt`. The H11 image's package-list hash: PENDING (§6) |
+| Dev image | `Dockerfile` (base `ros:jazzy@sha256:c3706ef0…`); its exact package list is recorded at build time in `/etc/reef-image-packages.txt`. The H11 image's package-list hash: `8a574d1a79f7cf2e50183042eec18d2b4b3f04366ba098ffbe349af6ecea2413` (USER, 2026-10-06; identical to the image built on 2026-10-02 from the same `Dockerfile`, so the `--no-cache` rebuild resolved the same package set) |
 
 Every run records its own versions and inputs in its outputs (§7).
 
@@ -179,7 +181,7 @@ Container commands, original container, headless, idle machine.
 | **fresh-clone reproduction**, core, **offline** | `scripts/reproduce_release.sh` | **0** | PASS, 75 min. Clone of `132c27c` (0 uncommitted paths; no build, assets, recordings or reference clones). Setup online by the documented steps. Offline guard proven (Git, curl, Python blocked). Release gate core PASS: code quality as above, interfaces, baseline 36/36 and 253/253, estimator, control 106/106 + 26/26 + 19/19, `rgbd_to_velocity` 53/53. No download during the offline phase | `build/release_repro/20261002_052145/reproduction_summary.txt` |
 | `faults` (11 P07b scenarios; not in a profile), after the accounting fix | `scripts/reef_check.sh faults` | **0** | PASS: F1–F12 36/36; the 11 scenarios 87 judged (81 acceptance + 6 characterizations) + 3 REPORTED | `log/checks/reef_check_faults_20261002_044924` |
 | `regress_x3_scenario.sh` (after the `reef_sim` accounting change) | | 0 | all cases PASS | |
-| H11 (fresh image, Mac) | §6 | PENDING | | |
+| **H11 (fresh image, Mac)**, core, offline | §6 | **0** | **PASS** (USER, 2026-10-05/06). Fresh clone and `--no-cache` image of `09b9a5e`; `release_summary.json` verdict PASS, 0 uncommitted paths. Closed-loop nominal 26/26 (estimate age p99 **10 ms**), causality 19/19 (p99 10 ms): the attempt-1 stall did not recur. Demo `reef_demo.sh closed-loop` 26/26, p99 14 ms. REPORTED: the run took **6 h 15 min**, all of it in `baseline` (20032 s vs 1429 s on 2026-10-02; P02 harness 11296 s, port build 3136 s, parity 5598 s) while `control` at the end was normal (614 s) — a loaded or throttled host overnight, which the deterministic parity checks do not depend on | `log/checks/reef_check_release_20261005_211208` (in the H11 clone); summary and demo report here: `log/h11_release_summary.json`, `log/h11_demo_report.txt` |
 
 Representative scenario, P07 closed-loop nominal (REPORTED; simulation
 timing is not deterministic):

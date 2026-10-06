@@ -1,6 +1,6 @@
 # REEF ROS 2: project status
 
-Updated 2026-10-02 (R2 done, P07b and P08 merged). `main` contains P00–P07, P07b,
+Updated 2026-10-06 (P09 H11 PASS; manifest-label fix). `main` contains P00–P07, P07b,
 the R1 fixes, and the R2 documentation corrections, all merged by
 fast-forward at the user's request (P07: §5i, P07b: §5j, R2: §5k).
 Section 3 reconciles
@@ -88,7 +88,7 @@ wrapper boundary ([INTERFACES.md §1](INTERFACES.md#1-command-interface)).
 | P07b closed-loop faults and position mode | done, merged: 11 scenarios (estimate dropout short/long, estimator reset, controller restart, stale setpoint, range and velocity loss, pause, stand-in exit, position square with K9, `face_target` K10); crashes documented where the legacy system has no protection (USER) | `reef_check.sh faults`; [ACCEPTANCE §5 P07b](ACCEPTANCE.md), [reviews/P07b.md](reviews/P07b.md) |
 | R2 independent review | **PASS (SELF-REVIEW)**, USER 2026-10-01: an independent Claude session reviewed `p07b-faults-position` (code `bb47cf0`); minor documentation corrections applied (§5k) | [reviews/R2.md](reviews/R2.md), [reviews/R2_packet.md](reviews/R2_packet.md) |
 | P08 RGB-D | **done, merged** (USER 2026-10-02: H12 dev-container `vision` PASS; cleared to merge): `rgbd_to_velocity` ported bit-exact (53/53); camera interface; replacement OpenCV odometry; open loop 20/20; faults 24/24; closed loop on vision 17/17 (staleness p99 14 ms after the `/clock` fixes, USER option 2); capability matrix; `reef_demo.sh vision` | `reef_check.sh vision` PASS (§5l); [VISION.md](VISION.md), [reviews/P08.md](reviews/P08.md) |
-| P09 simulation release | **gates PASS on `p09-release`; H11 pending** (code `132c27c`): release vision profile PASS; fresh-clone offline reproduction PASS; `faults` PASS; CI 6/6; code quality (0 warnings, ASan/UBSan clean). Licence: public open source (MIT, Hunter Swan; ports MIT UF REEF AVL) | `reef_check.sh release`; [RELEASE_SIMULATION.md](RELEASE_SIMULATION.md), [reviews/P09.md](reviews/P09.md) |
+| P09 simulation release | **every gate PASS on `p09-release`, H11 included** (gates at `132c27c`, H11 at `09b9a5e`, manifest fix `e743179`; §5n): release vision profile PASS; fresh-clone offline reproduction PASS; `faults` PASS; CI 6/6; code quality (0 warnings, ASan/UBSan clean). Licence: public open source (MIT, Hunter Swan; ports MIT UF REEF AVL) | `reef_check.sh release`; [RELEASE_SIMULATION.md](RELEASE_SIMULATION.md), [reviews/P09.md](reviews/P09.md) |
 | P10–P13 hardware | blocked: target hardware unknown | |
 
 ## 5. Checks run for P00 (original container, 2026-09-29, base `9af00d2`)
@@ -365,6 +365,51 @@ The full matrix is in [INTERFACES.md §5](INTERFACES.md).
   driver and `demo_rgbd` (replaced); `setpoint_generator` and `dubins_path`;
   ROSflight firmware and hardware output (P10).
 
+## 5n. H11 release reproduction and the manifest fix (2026-10-05/06)
+
+**H11** (USER, Mac, fresh clone and `--no-cache` image of `09b9a5e`, core
+profile, offline): `scripts/reef_check.sh release` **exit 0**,
+`release_summary.json` verdict PASS, 0 uncommitted paths, all 8 steps PASS
+(`log/checks/reef_check_release_20261005_211208` in the H11 clone;
+`log/h11_release_summary.json` and `log/h11_demo_report.txt` here). Closed-loop nominal 26/26, estimate age p99 10 ms;
+causality 19/19, p99 10 ms. `reef_demo.sh closed-loop` 26/26, p99 14 ms.
+Image package list `8a574d1a79f7…`, identical to the 2026-10-02 image.
+REPORTED: the run took 6 h 15 min, all of the excess in `baseline`
+(20032 s vs 1429 s on 2026-10-02) while `control` at the end was normal
+(614 s); a loaded host overnight, which the deterministic parity checks do
+not depend on. The documented ~65 min is not a promise on a busy Mac.
+
+**Attempt 1** (2026-10-02, `7b42ed9`) failed only the closed-loop nominal run
+(`sim time stalled at 59.090 s`). Its run directory has now been inspected
+(`log/h11_attempt1_nominal_result.json`; full logs kept outside Git):
+- [V] every topic ran at its nominal sim-time rate to the end (`/clock`
+  498/s, `/x3/imu` 249.6/s, `/x3/truth/odom` 99.6/s), with phases at ~real
+  time: no degradation, an abrupt stop.
+- [V] the runner was not scheduled for ~136 s: the last log line and the
+  stall error are 156 s apart in wall time, against a 20 s timeout.
+- [V] the bag ends at sim 59.436 s while the runner gave up at 59.090 s, so
+  unprocessed samples were queued — the precondition `stall.py` needs.
+- [V] Gazebo needed SIGTERM escalation after SIGINT while the other nine
+  processes exited cleanly: starved, not crashed.
+- [A] cause: host load froze the container's VM. Sim time never advanced
+  past 59.436 s afterwards, so it is not proven that this run would have
+  completed; the fix (`23376fd`) turns a certain false failure into a
+  re-check, and a genuinely wedged simulation still fails 20 s later.
+
+**Manifest fix** (`e743179`, found by the USER while reading `manifest.yaml`
+for H11 step 4): `model.controller` claimed the stock truth-fed controller in
+closed-loop runs. Checks after the fix, original container:
+
+| Check | Exit | Result |
+|---|---|---|
+| `scripts/regress_x3_scenario.sh` (full, GUI case included) | 0 | 13/13 PASS (`log/checks/regress_x3_20261006_041439`, repeated with the exit code recorded) |
+| `scripts/reef_check.sh control` | 0 | 5/5 assertions; closed loop 26/26 and 19/19 (`log/checks/reef_check_control_20261006_043047`); both closed-loop manifests name the REEF controller and the stand-in |
+| `reef_sim` pytest | 0 | 31/31 (28 before; `test/test_manifest.py` adds 3) |
+
+Not re-run for the fix: the release gate itself. The delta from the H11
+commit is one manifest string and one test file, and the gate's own runs
+produce the corrected label.
+
 ## 6. Open items and known limits
 
 1. `sim/launch/clock_demo.launch.py` still uses Gazebo's combined GUI mode,
@@ -456,6 +501,16 @@ The full matrix is in [INTERFACES.md §5](INTERFACES.md).
     altitude-hold criterion because of K2.
 26. The stand-in uses truth attitude and rates, linear thrust, and no
     attitude integrators; it is not ROSflight (CONTROL_CHAIN.md §7).
+29. `src/reef_sim/worlds/x3_closed_loop_vision.sdf` is **not well-formed
+    XML**: its generated header comment contains `--headless-rendering`, and
+    `--` is illegal inside an XML comment, so `ElementTree.parse` fails at
+    line 4. Gazebo's TinyXML2 accepts it, which is why no check has failed.
+    The text comes from `scripts/make_vision_assets.py`; fixing it
+    regenerates both vision worlds and changes their SHA-256s, so it is
+    deferred past the tag (`src/reef_sim/test/test_manifest.py` strips
+    comments before parsing rather than depending on the defect).
+30. (resolved, `e743179`) `manifest.yaml` named the stock truth-fed
+    controller in closed-loop runs.
 
 ## 7. Human checks still needed
 
@@ -486,21 +541,20 @@ The full matrix is in [INTERFACES.md §5](INTERFACES.md).
   closed-loop scenarios, about 30 min, headless, idle machine). Not yet run
   in the dev container (R2 relied on the implementer's run). It is not part
   of either release profile; recommended once before the tag.
-- **H11 (P09, Mac + fresh image):** the release reproduction,
-  [RELEASE_SIMULATION.md §6](RELEASE_SIMULATION.md). First attempt
-  (USER, 2026-10-02, `7b42ed9`, Mac under heavy load; transcript
-  `log/h11_release_output.txt`): `reef_check.sh release` exit 1. Only the
-  closed-loop nominal run failed (`sim time stalled at 59.090 s`); the
-  causality run, which is the same scenario, passed right after it. [A] The
-  host froze the container for more than 20 s, and the runners called
-  that a stall before reading the truth samples that had queued up (the run
-  directory stayed in the H11 clone and was not inspected). Fix: `reef_sim/stall.py`
-  confirms a stall only after draining pending input (unit tests
-  `test_stall.py`). [V] reef_sim pytest 28/28; `regress_x3_scenario.sh
-  --no-gui` exit 1, with every case PASS except case 3 (GUI, skipped by `--no-gui`).
-  `reef_check.sh control` exit 0, all 5 assertions PASS
-  (`log/checks/reef_check_control_20261003_185954`).
-  H11 must be re-run on the fixed commit before the tag.
+- **H11 (P09, Mac + fresh image):** **done, PASS** (USER, 2026-10-05/06,
+  `09b9a5e`): `reef_check.sh release` exit 0, verdict PASS, 0 uncommitted
+  paths, closed loop 26/26 and 19/19. Details, the 6 h 15 min duration and
+  the attempt-1 analysis are in §5n. The first attempt (2026-10-02,
+  `7b42ed9`, transcript `log/h11_release_output.txt`) failed only the
+  closed-loop nominal run (`sim time stalled at 59.090 s`); the fix is
+  `reef_sim/stall.py` (`23376fd`), which confirms a stall only after draining
+  pending input, and the archived run directory
+  (`log/h11_attempt1_nominal_result.json`) shows the queued samples the
+  drain needs.
+- **H11b (P09, Mac, about 5 min):** demo re-check of the manifest-label fix
+  `e743179` in the H11 container: `git pull --ff-only` in the H11 clone, then
+  `scripts/reef_demo.sh closed-loop`, and confirm `manifest.yaml` names the
+  REEF controller and the stand-in. The release gate is not re-run (§5n).
 - **H3:** open the three plots and `manifest.yaml` of a recent
   `recordings/x3_*` run, and check them against
   [X3_SCENARIO.md](X3_SCENARIO.md). (`feature/x3-sim-dataset` is already
@@ -512,10 +566,18 @@ The full matrix is in [INTERFACES.md §5](INTERFACES.md).
 
 ## 8. Next milestone
 
-**P09**: every gate passed on `p09-release` (code `132c27c`;
-RELEASE_SIMULATION.md §4). Waiting for the USER's **H11** fresh-image
-reproduction. After H11 is accepted: merge into `main`, then the annotated
-tag `sim-baseline-v0.1.0`.
+**P09**: every gate passed on `p09-release`, **H11 included** (gates at
+`132c27c`, H11 at `09b9a5e`; §5n, RELEASE_SIMULATION.md §4). One item is
+outstanding before the tag: a short demo re-check of the manifest-label fix
+`e743179` in the H11 container (`reef_demo.sh closed-loop`, about 5 min; the
+6 h 15 min gate stays valid at `09b9a5e`). Then: merge into `main` and apply
+the annotated tag `sim-baseline-v0.1.0`.
+
+Open USER decisions for the tag: whether to run `reef_check.sh faults` once
+in a container first (§7, in neither release profile); whether the seven R2
+code follow-ups (item 28) go in before the tag or into P09.5; and open item
+29 (the invalid XML in the generated vision world), which is recommended for
+after the tag.
 
 **After P09 (USER, 2026-10-02):**
 

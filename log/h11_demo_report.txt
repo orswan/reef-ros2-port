@@ -1,0 +1,31 @@
+REEF-controlled X3 with the STAND-IN low-level loop (development tool, not ROSflight); idealized inputs (truth attitude, idealized range, simulated velocity observations, IMU vibration assumption). Simulation only.
+
+REPORTED return and landing: distance_after_hover_back 0.028, distance_at_end 0.024, touchdown_after_land_start 0.950, touchdown_vertical_speed -0.868
+PASS architecture: no stock controller; the stand-in alone commands the motors: stock command publishers [], messages 0; motor command publishers ['/reef_fc_standin']  [ACCEPTANCE P07 architecture]
+PASS data path: the controller reads only the REEF estimate, the setpoint, and the armed status: controller inputs and their publishers: {'/clock': ['/x3_bridge'], '/x3/reef/desired_state': ['/closed_loop_runner'], '/x3/reef/is_flying': [], '/x3/reef/pose_stamped': [], '/x3/reef/status': ['/reef_fc_standin'], '/x3/reef/xyz_estimate': ['/x3/reef/reef_estimator']}  [ACCEPTANCE P07 data path]
+PASS stand-in labelled a development tool: STAND-IN LOW-LEVEL LOOP (DEVELOPMENT TOOL), not ROSflight: firmware command mux,  [ACCEPTANCE P07 architecture]
+PASS takeoff within 15 s of arming (REEF and truth): {"reef_takeoff_after_arm": 4.156000000000001, "leaves_ground_after_arm": 3.8599999999999994}  [ACCEPTANCE P07 takeoff]
+PASS stability: finite, tilt <= 0.35 rad (to the end of land), height >= 0.25 m (takeoff to end of descend), run completed: max tilt 0.089 rad, min height 0.255 m, finite True, completed  [ACCEPTANCE P07 stability]
+PASS altitude step takeoff to 1.0 m: overshoot <= 0.4 m, in +-0.15 m from 15 s to phase end: overshoot -0.004 m, in band True, first in band after 9.53 s  [ACCEPTANCE P07 altitude step]
+PASS altitude step 1.0 -> 1.5 m: overshoot <= 0.4 m, in +-0.15 m from 15 s to phase end: overshoot 0.020 m, in band True, first in band after 1.3900000000000148 s  [ACCEPTANCE P07 altitude step]
+PASS altitude step 1.5 -> 0.6 m: overshoot <= 0.4 m, in +-0.15 m from 15 s to phase end: overshoot 0.017 m, in band True, first in band after 2.230000000000004 s  [ACCEPTANCE P07 altitude step]
+PASS velocity takeoff_hover (last 4 s): RMSE <= 0.15 m/s per axis: x 0.003, y 0.007 m/s (mean -0.000, +0.001; command +0.00, +0.00)  [ACCEPTANCE P07 horizontal velocity]
+PASS altitude hold takeoff_hover (last 4 s): RMSE <= 0.10 m: RMSE 0.015 m, mean error -0.014 m  [ACCEPTANCE P07 altitude hold]
+PASS velocity hover_fwd (last 4 s): RMSE <= 0.15 m/s per axis: x 0.005, y 0.002 m/s (mean +0.002, -0.001; command +0.00, +0.00)  [ACCEPTANCE P07 horizontal velocity]
+PASS altitude hold hover_fwd (last 4 s): RMSE <= 0.10 m: RMSE 0.011 m, mean error +0.004 m  [ACCEPTANCE P07 altitude hold]
+PASS velocity hover_left (last 4 s): RMSE <= 0.15 m/s per axis: x 0.006, y 0.005 m/s (mean +0.002, +0.001; command +0.00, +0.00)  [ACCEPTANCE P07 horizontal velocity]
+PASS altitude hold hover_left (last 4 s): RMSE <= 0.10 m: RMSE 0.010 m, mean error +0.008 m  [ACCEPTANCE P07 altitude hold]
+PASS velocity hover_back (last 4 s): RMSE <= 0.15 m/s per axis: x 0.004, y 0.006 m/s (mean -0.003, +0.004; command +0.00, +0.00)  [ACCEPTANCE P07 horizontal velocity]
+PASS altitude hold hover_back (last 4 s): RMSE <= 0.10 m: RMSE 0.013 m, mean error -0.002 m  [ACCEPTANCE P07 altitude hold]
+PASS velocity hover_yaw (last 4 s): RMSE <= 0.15 m/s per axis: x 0.002, y 0.004 m/s (mean -0.001, +0.001; command +0.00, +0.00)  [ACCEPTANCE P07 horizontal velocity]
+PASS altitude hold hover_yaw (last 4 s): RMSE <= 0.10 m: RMSE 0.011 m, mean error +0.001 m  [ACCEPTANCE P07 altitude hold]
+PASS velocity forward (last 3 s): RMSE <= 0.15 m/s per axis: x 0.009, y 0.006 m/s (mean +0.292, -0.000; command +0.30, +0.00)  [ACCEPTANCE P07 horizontal velocity]
+PASS velocity left (last 3 s): RMSE <= 0.15 m/s per axis: x 0.004, y 0.003 m/s (mean +0.003, -0.298; command +0.00, -0.30)  [ACCEPTANCE P07 horizontal velocity]
+PASS velocity back (last 3 s): RMSE <= 0.15 m/s per axis: x 0.005, y 0.007 m/s (mean -0.298, +0.293; command -0.30, +0.30)  [ACCEPTANCE P07 horizontal velocity]
+PASS velocity yaw (last 3 s): RMSE <= 0.15 m/s per axis: x 0.006, y 0.006 m/s (mean -0.004, +0.000; command +0.00, +0.00)  [ACCEPTANCE P07 horizontal velocity]
+PASS yaw rate (last 3 s of yaw): |mean - 0.3| <= 0.1 rad/s: mean +0.262 rad/s (command +0.30)  [ACCEPTANCE P07 yaw rate]
+PASS saturation, takeoff to end of descend: throttle at 0/1 <= 5 %, motor clamping <= 5 %: throttle 0.0 %, motors 0.0 %  [ACCEPTANCE P07 saturation]
+PASS estimate age at the motor command p99 <= 20 ms; no offboard timeout after arming: p50 0.008, p99 0.0140 s, max 0.044; offboard timeouts 0  [ACCEPTANCE P07 staleness and latency]
+PASS end state (last 1 s of disarmed): disarmed, motors 0, on the ground (h <= 0.05 m, speed <= 0.05 m/s, tilt <= 0.1 rad): armed False, max motor command 0.0 rad/s, height -0.000 m, speed 0.000 m/s, tilt 0.000 rad (249 stand-in steps)  [ACCEPTANCE P07 end state]
+26/26 judged items PASS (0 REPORTED, not counted)
+ANALYSIS PASSED
