@@ -620,9 +620,30 @@ code. Kickoff status:
    boundary; **staged activation** — every correction lands with its toggle
    default false and a capstone commit flips the phase-1 defaults; the third
    pass is a targeted confirmation of the fallback contracts only.
-   **Blocked on**: that targeted confirmation
-   ([reviews/Codex_Phase1_Confirmation_Packet.md](reviews/Codex_Phase1_Confirmation_Packet.md))
-   and the USER's approval of the revision-3 criteria before any code.
+   **Revision 4 (2026-10-06)** after the targeted confirmation pass
+   ([reviews/Codex_Phase1_Review_V3.md](reviews/Codex_Phase1_Review_V3.md)),
+   which accepted contract B1 for simulation and **withheld final
+   confirmation**: the arming contract needed amendment ("losing
+   arming-status messages during established flight must not immediately cut
+   thrust"), and the termination publication, landing criterion and timing
+   measurements needed reconciliation. Rev 4 carries those amendments and
+   restructures nothing: NC1a (the receiver gap is scored directly rather
+   than summed with its components, the design bound is two timer periods,
+   and `M` is a fixed reserve), NC1b (five explicit clock-discontinuity
+   rules), NC1c (a deterministic fallback table, delivered rotor force
+   reported separately from requested collective force, a range-based
+   landing *criterion* rather than proof of contact, `descent_max_s` as an
+   emergency-action budget, a single validated transition command before
+   suppression, and a disarm request with acknowledgment and priority), and
+   KC5a (the arming contract **split by history**, so a status dropout in
+   established flight continues a bounded emergency policy instead of
+   cutting lift). Two new tasks: NC1a-I, receipt-time instrumentation in the
+   stand-in, because [V] `cmd_age` is source age and not an inter-arrival
+   gap; and the descent-versus-suppression evidence that gates the
+   simulation default.
+   **Blocked on**: sign-off of the amendments
+   ([reviews/Codex_Phase1_Amendments.md](reviews/Codex_Phase1_Amendments.md))
+   and the USER's approval of the revision-4 criteria before any code.
 
 Methodology, unchanged from the USER's 2026-10-02 decision: the legacy
 goldens and reference tests are never overwritten. They stay as historical

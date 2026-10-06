@@ -211,3 +211,66 @@ See [Codex_Phase1_Confirmation_Packet.md](Codex_Phase1_Confirmation_Packet.md):
 the fallback contracts only — terminal semantics and termination, the
 invalid-command path and UNCONTAINED, arming-status states, and the timing
 budget.
+
+---
+
+# Pass 3 resolutions (revision 3 → revision 4)
+
+Review: [Codex_Phase1_Review_V3.md](Codex_Phase1_Review_V3.md) (independent,
+Codex, 2026-10-06, against HEAD `617b2a6`), the **targeted confirmation** of
+the five fallback contracts. Outcome: **B1 accepted for simulation; final
+confirmation withheld** pending a D1 amendment and reconciliation of C's
+termination publication and landing criterion with E's timing measurements.
+Pass 3 states no wider architectural review is needed for these amendments.
+The reviewer again ran nothing and changed no files; its [A] assumptions are
+that the stand-in's attitude loop stays operational and hardware output stays
+blocked until P10.
+
+Both code claims were re-checked here. Both confirmed.
+
+## 1. Contract outcomes
+
+| Contract | Outcome | Amendment in rev 4 |
+|---|---|---|
+| **A** terminal action | implementable **with** an envelope and comparative evidence | activation of the simulation default now requires descent cases recorded alongside command-suppression cases from equivalent initial conditions, inside a stated finite envelope and duration; "no commanded climb" is downgraded to an intent statement; requested collective force and delivered rotor forces are reported separately |
+| **B** invalid-command path | **B1 accepted** for the simulation stand-in; B2 needs a table | UNCONTAINED suppresses actuator publication, latches, continues health reporting, cancels scheduled republication, never revives a cached command, and is recorded as an *uncontained failure*; an explicit deterministic **fallback table** replaces "capability-compatible fallback" |
+| **C** contact and disarm | implementable after clarification | renamed a **range-based landing criterion** with prerequisites and a dwell requirement; `descent_max_s` is an emergency-action budget, not time-to-landing; absolute timers; a separate timeout for failing to obtain the criterion; termination publishes a **single validated transition command** then suppresses; disarm has a recipient, acknowledgment by fresh status, bounded retries and priority over a scenario runner's arm request; zero collective is not evidence of stopped motors |
+| **D** arming states | **not implementable as written** | split by history: never-armed or last-disarmed → no flight commands; **previously confirmed armed with active control → bounded emergency continuation**, not an immediate thrust cut; expiry → UNCONTAINED. "Fresh positive status" becomes **fresh authoritative status**; `T_status = k·T_period + J_status + D_transport` |
+| **E** timing budget | amend measurements and clock rules | the observed receiver gap is scored directly against `T_watchdog − M` and is **not** summed with the component terms; the design bound is **two timer periods**; `M` is a stated fixed reserve, not a percentile; five explicit clock-discontinuity rules; receipt-time instrumentation added to the stand-in |
+
+## 2. Pass 3 claims verified here
+
+| Claim | Our check |
+|---|---|
+| Rotor-force clipping changes delivered collective force and torque; attitude correction can produce nonzero rotor thrust at low collective | [V] confirmed: `f = inv_ * (T, τx, τy, τz)` with each component clamped to `[0, f_max]` ([standin.cpp:64-71](../../src/reef_fc_standin/src/standin.cpp#L64-L71)); the torques follow attitude error ([:61-63](../../src/reef_fc_standin/src/standin.cpp#L61-L63)), so a low `T` still yields positive rotor forces |
+| `cmd_age` does not measure receiver inter-arrival gaps | [V] confirmed: `age = now − cmd_stamp_` with `cmd_stamp_` taken from the command header ([standin_node.cpp:193](../../src/reef_fc_standin/src/standin_node.cpp#L193), [:107](../../src/reef_fc_standin/src/standin_node.cpp#L107)) — source age. Registered as instrumentation task NC1a-I, which requires `reef_check.sh control` |
+| A periodic check republishing after one period of age permits nearly two periods between commands | Accepted as a design bound; the preferred implementation schedules against an exact publication deadline |
+| Receiver gaps measure the whole path and must not be added to the component terms | Accepted; this was a double-count in rev 3 |
+| Immediate thrust withholding on stale status in established flight is inappropriate | Accepted, and it is the finding that blocked confirmation. Rev 3's single ARMING_UNKNOWN state is withdrawn |
+| A fresh negative status also resolves uncertainty | Accepted; "fresh authoritative status" replaces "fresh positive status" |
+| Low range plus low rate can mean hover near the ground, a nearby object, or a stuck reading | Accepted; prerequisites, dwell, rate validity, detector reset and entry conditions added, with tests for all three confounds |
+| Request publication is not completion | Accepted; terminal persists until fresh DISARMED, with failure-to-acknowledge reported |
+| Indefinite minimum-thrust publication contradicts UNCONTAINED suppression | Accepted; a single validated transition command, then suppression |
+| A stopped clock cannot distinguish pause from failure | Accepted; freezing requires explicit fresh pause confirmation, and five discontinuity rules are specified |
+| Forward jumps need their own rule | Accepted; expire overdue inputs and absolute deadlines immediately, no catch-up commands, requalify |
+
+Nothing in pass 3 was rejected.
+
+## 3. What changed in the plan
+
+Revision 4 is **amendments, not restructuring**: the correction set, IDs,
+landing order, interaction tests and phase boundary are unchanged from
+revision 3. Amended: NC1a (timing budget, two-period bound, instrumentation
+prerequisite), NC1b (five clock rules), NC1c (fallback table, delivered-force
+reporting, activation evidence, landing criterion, termination and disarm,
+UNCONTAINED suppression) and KC5a (arming contract split by history, status
+freshness formula). Two new tasks are registered: NC1a-I (receipt-time
+instrumentation) and the descent-versus-suppression evidence task that gates
+the simulation default.
+
+## 4. Status
+
+Final confirmation is **withheld** until the amendments are signed off. They
+are listed for that purpose in
+[Codex_Phase1_Amendments.md](Codex_Phase1_Amendments.md). No further
+architectural review is expected.

@@ -5,14 +5,21 @@ the ports reproduce the pinned originals bit for bit, legacy defects
 included. This document is the register of deliberate departures from that
 baseline on `main`.
 
-**Revision 3 (2026-10-06)**, after two independent Codex design review passes
+**Revision 4 (2026-10-06)**, after three independent Codex review passes
 ([pass 1](reviews/Codex_Phase1_Review.md),
-[pass 2](reviews/Codex_Phase1_Review_V2.md); resolutions for both in
-[Codex_Phase1_Resolutions.md](reviews/Codex_Phase1_Resolutions.md)). Pass 2's
-verdict: "a sound architectural direction, but I would not approve
-implementation exactly as written", with the remaining work concentrated in
-the fallback contract, C8's noise model, and contradictory acceptance
-statements. Revision 3 reconciles those. **Nothing is implemented yet.**
+[pass 2](reviews/Codex_Phase1_Review_V2.md),
+[pass 3, the targeted confirmation](reviews/Codex_Phase1_Review_V3.md);
+resolutions for all three in
+[Codex_Phase1_Resolutions.md](reviews/Codex_Phase1_Resolutions.md)). Pass 3
+**withheld final confirmation**: contract B1 was accepted for simulation,
+while D1 required amendment ("losing arming-status messages during
+established flight must not immediately cut thrust") and contracts A, C and E
+needed reconciliation. Revision 4 carries those amendments; they are
+contract changes inside the agreed architecture, and pass 3 states no wider
+architectural review is needed for them. The amendments are listed for
+sign-off in
+[Codex_Phase1_Amendments.md](reviews/Codex_Phase1_Amendments.md).
+**Nothing is implemented yet.**
 
 **USER decisions (2026-10-06).**
 1. Corrections are **on by default in the shipped configuration**; the legacy
@@ -35,6 +42,18 @@ statements. Revision 3 reconciles those. **Nothing is implemented yet.**
    in phase 2.
 7. The third review pass is a **targeted confirmation** of the fallback
    contracts, not another architectural review.
+
+**Review-driven amendments carried in rev 4** (pass 3): the arming contract
+is split by history, so a status dropout in established flight no longer cuts
+thrust; UNCONTAINED suppresses publication and is recorded as an uncontained
+failure; termination publishes a single validated transition command rather
+than an indefinite minimum-thrust stream; the landing detector is a
+range-based **criterion**, not proof of contact; `descent_max_s` is an
+emergency-action budget, not an inferred time to landing; the timing budget
+scores the observed receiver gap and assumes a two-timer-period bound; clock
+discontinuities have five explicit rules; delivered rotor force is
+distinguished from requested collective force; and activating the simulation
+descent default requires a comparison against command suppression.
 
 ## 1. Rules
 
@@ -94,6 +113,8 @@ Phase 1 is **15 corrections, 15 toggles** (plus C1, already shipped).
 | NC1c | `correction_nc1c_degraded_policy` | no degraded state, no arbitration, no escalation | 1 | proposed (rev 3) |
 | NC2 | `correction_nc2_setpoint_health` | no setpoint freshness or validity check | 1 | proposed |
 | C11 | — | XY process-noise discretization: units, stochastic model and discretization undocumented | research | **registered** (rev 3, USER 5) |
+| NC1a-I | — | the stand-in reports command **source age**, not receiver inter-arrival gap | 1 | **instrumentation task** (rev 4); needs `reef_check.sh control` |
+| — | — | descent versus command-suppression comparison within a stated envelope | 1 | **evidence task** (rev 4), gates the simulation default |
 | KC1, KC2 | — | K1, K2 | 2 | flight-safety issues (both passes); phase 2 with re-tuning |
 | KC3, KC4 | — | K3, K4 in steady state | 2 | not specified |
 | KC9, KC11 | — | K9, K11 | 2 | not specified |
@@ -179,33 +200,44 @@ commands stop when estimates stop, and the stand-in drops the vehicle
 supervisor's arbitrated command whenever the estimate-driven path has not
 published within one period.
 
-**Timing budget** (pass 2; replaces rev 2's "5× margin", which was a
-frequency ratio and not a margin):
+**Timing budget, amended (pass 3).** Rev 3's budget double-counted and
+under-bounded. Two accounting corrections:
+
+1. A receiver inter-command gap measures the **whole publication and
+   transport path**, so it must not be added to the timer and processing
+   terms. The **scored** quantity is the observed receiver gap against
+   `T_watchdog − M`; the separately measured components (timer period,
+   scheduling jitter, processing, transport) only *explain* the budget.
+2. A periodic check that republishes once the command age exceeds one period
+   permits nearly **two timer periods** between commands. That two-period
+   bound is the design figure unless the implementation schedules against an
+   exact publication deadline, which is the preferred option.
 
 ```
-T_timer + J_scheduling + T_processing + T_transport  <  T_watchdog − M
+observed receiver inter-command gap  <  T_watchdog − M        (scored)
+T_watchdog = 100 ms;  design bound on the gap = 2 / command_rate_hz
+M = a stated FIXED reserve, justified by worst observed gaps and stress tests
 ```
 
-Each term is **measured**, not assumed: `T_timer` from the configured rate,
-`J_scheduling` and `T_processing` from the run, `T_transport` from
-**inter-command gaps observed at the receiver** (the stand-in records
-`cmd_age`), and `M` an explicit stated reserve. `command_rate_hz` is chosen
-from that inequality and its measured terms; 50 Hz is the starting candidate
-only.
+`M` is a fixed reserve for the stated simulation envelope, not a percentile:
+a percentile leaves the tail unprotected. [A] 20 ms is an initial experiment,
+not evidence of adequacy on this host. A passing run establishes empirical
+margin, never a scheduling guarantee on a non-real-time host.
 
-**Scope limit** (pass 2, accepted). NC1a covers **estimator loss while the
-controller is alive**. It cannot cover its own process death: a timer in a
-dead process publishes nothing, so the `controller_restart` scenario (3.7 s
-without the process) is **out of scope** and needs a surviving component or a
-firmware fallback. Rev 2's acceptance claim for that scenario is withdrawn
-and the gap is registered for P10.
+**Instrumentation task (new, rev 4).** [V] The stand-in's `cmd_age` is
+`now − command.header.stamp`
+([standin_node.cpp:193](../src/reef_fc_standin/src/standin_node.cpp#L193),
+stamp captured at [:107](../src/reef_fc_standin/src/standin_node.cpp#L107)) —
+**source age, not receiver inter-arrival gap**. Receipt-time instrumentation
+must be added to the stand-in, preserving the existing source-age field.
+Changing `reef_fc_standin` requires `reef_check.sh control` (AGENTS).
 
-**Expected result.** With estimates stopped while armed, commands continue at
-the scheduled rate and the measured receiver-side gap satisfies the budget
-with the stated reserve.
+**Scope limit** (pass 2, unchanged). NC1a covers **estimator loss while the
+controller is alive**. It cannot cover its own process death, so
+`controller_restart` (3.7 s) is out of scope and registered for P10.
 
-**Tests.** Node test with the estimate stream stopped; receiver-side gap
-distribution recorded; `dropout_long`.
+**Tests.** Estimate stream stopped while armed; receiver-gap distribution
+recorded and scored; stress runs under adverse scheduling; `dropout_long`.
 
 **Parity impact.** None with the toggle off (no timer).
 
@@ -218,116 +250,179 @@ horizontal observations.
 **Proposed fix.** Per input: monotonic **receipt** age for liveness,
 validated source-stamp age for measurement age, ordering and duplicate
 policy, and a reset/startup epoch. Required inputs are **mode-dependent**.
-Capabilities are derived from NC4's health message plus these ages:
+Capabilities derive from NC4's health message plus these ages:
 
 | Capability | Lost when |
 |---|---|
 | `estimate` | no estimate received within `estimate_timeout_s`, or state validity false, or epoch unqualified |
 | `horizontal` | no horizontal observation **fused** within `horizontal_timeout_s` (NC4 reports it) |
 | `altitude` | no altitude observation fused within `altitude_timeout_s`, or z invalid |
-| `attitude` | attitude input non-finite or stale. **Two distinct cases** (pass 2): loss of the *companion attitude input* while firmware stabilization survives — level commands remain meaningful; versus *flight-controller attitude failure* — level commands are meaningless and nothing the controller publishes helps. Only the first is addressable here; the second is recorded as UNCONTAINED |
+| `attitude` | **two distinct cases**: loss of the *companion attitude input* while firmware stabilization survives — level commands remain meaningful; versus *flight-controller attitude failure* — level commands are meaningless, and this is UNCONTAINED. Absent attitude-control authority may not select a level-attitude action (pass 3) |
 | `setpoint` | NC2 |
 
-**Simulation pause versus failure** (pass 2). [V] `pause_resume` pauses
-Gazebo for 2 s of **wall** time
+**Clock discontinuity rules, amended (pass 3).** A stopped clock alone cannot
+distinguish a pause from a failure, so the adapter supplies the distinction
+explicitly:
+
+| Situation | Rule |
+|---|---|
+| **Confirmed pause** | freeze simulation-action time and simulation-input ages **only** with explicit, fresh pause confirmation |
+| **Clock stopped, pause not confirmed** | classify clock liveness as unknown or failed using monotonic time; freshness is **not** suspended indefinitely |
+| **Large forward discontinuity** | expire overdue inputs and absolute action deadlines **immediately**; do not integrate the jump and do not emit catch-up commands; requalify affected state and epochs |
+| **Backward jump** | invalidate the epoch and require readiness again |
+| **Normal positive advancement** | process normally within the timing and outage bounds |
+| **Resume** | reject pre-pause queued data that fails ordering or freshness |
+
+[V] `pause_resume` pauses Gazebo for 2 s of **wall** time
 ([pause_resume.yaml](../src/reef_sim/config/closed_loop/pause_resume.yaml)),
-which a monotonic receipt-age timeout would report as input failure. The
-adapter must distinguish a paused clock from failed inputs: while sim time is
-not advancing and the pause is observable, liveness ages are not accrued. A
-**backward** time jump **invalidates the epoch and requires readiness
-again** — it does not preserve stale readiness. Rev 2's criterion "no
-spurious capability loss" is corrected accordingly: pause must not fabricate
-a failure, and a backward jump must not be silently survived.
+which a naive monotonic timeout reports as input failure; hence the
+confirmation requirement rather than a blanket freeze.
 
-**Thresholds.** Candidates only, each REPORTED with measured margins before
-promotion, and derived per failure class from: permitted initial speed, tilt,
-altitude and obstacle proximity; sensor age, health-transport delay,
-supervisor scheduling delay, actuator response; estimation error and
+**Thresholds.** Candidates only, REPORTED with measured margins, derived per
+failure class from permitted speed, tilt, altitude and obstacle proximity;
+sensor, health-transport, scheduling and actuator delays; estimation and
 missing-input uncertainty; available braking or vertical authority; and the
-**whole trajectory through detection, BRIDGE and TERMINAL**. Horizontal
-stopping distance alone cannot justify a timeout during altitude loss;
-vertical clearance is assessed separately. Levelling removes commanded
-acceleration but does not brake existing velocity.
+whole trajectory through detection, BRIDGE and TERMINAL. Vertical clearance
+is assessed separately from horizontal stopping distance, and levelling
+removes commanded acceleration without braking existing velocity.
 
-**Tests.** Supervisor unit tests over synthetic age/validity/epoch sequences
-(future stamps, duplicates, out-of-order, pause, backward jump); fault
-injection at several speeds and flight phases; adverse scheduling and
-transport conditions.
+**Tests.** Synthetic age/validity/epoch sequences (future stamps, duplicates,
+out-of-order, confirmed pause, unconfirmed clock stop, forward jump, backward
+jump, resume with stale queue); fault injection at several speeds and flight
+phases; adverse scheduling and transport.
 
 **Parity impact.** None with the toggle off.
 
 ### NC1c — degraded policy, arbitration and escalation (`correction_nc1c_degraded_policy`)
 
-**Proposed fix.** A capability-driven state machine with explicit precedence,
-one arbitration point, bridge content specified **per capability loss**, and
-a bounded, non-recursive invalid-command path.
+A capability-driven state machine with explicit precedence, one arbitration
+point, a deterministic fallback table, and a bounded non-recursive
+invalid-command path.
 
-| State | Entry | Command |
-|---|---|---|
-| NORMAL | all capabilities required by the active mode | the controller's output |
-| DEGRADED(`setpoint`) | NC2 | zero horizontal velocity, zero yaw rate, last valid altitude setpoint |
-| DEGRADED(`horizontal`) | horizontal capability lost | level attitude, zero yaw rate, horizontal authority removed; altitude control retained while `altitude` holds |
-| BRIDGE(cause) | `estimate` or `altitude` lost | **content specified per cause**, not the last normal command (pass 2: validation establishes admissibility, not suitability — a last command may hold sustained tilt, a yaw turn or saturated thrust). Level attitude, zero yaw rate, and the thrust the cause permits: for `altitude` loss, the last thrust **validated as non-saturated and within a stated band**; for `estimate` loss, likewise. Absolute expiry `bridge_max_s`, chosen from the maximum acceptable trajectory under the bridge command (velocity, tilt, altitude, thrust uncertainty, transfer latency), **not** from watchdog periods |
-| TERMINAL | bridge expiry, or a terminal-only cause | `degraded_terminal_action` (below) |
-| UNCONTAINED | no valid command exists, or attitude authority is absent | recorded, reported, and **not described as safe** (pass 2). No hardware output path exists until P10 supplies a verified command and failsafe contract |
-| ARMING_UNKNOWN | arming status stale or never received | not "disarmed" and not permission to generate thrust: no thrust-generating command is published; the state is reported and requires a fresh positive arming status to leave |
+**Fallback table (new, rev 4; pass 3 B2).** Selection is deterministic:
+capability state in, exactly one action out. A prerequisite that is not met
+disqualifies the action, and the next eligible row is taken.
 
-**Expiry cannot be refreshed** by repeated bad packets, a changing failure
-reason, or command republication. **Simultaneous losses escalate immediately**
-by stated precedence (attitude > estimate > altitude > horizontal >
-setpoint), without traversing intermediate states.
+| Capabilities lost | Action | Prerequisites | Command fields and thrust source | Expiry |
+|---|---|---|---|---|
+| none | NORMAL | all mode-required inputs fresh, valid, ordered, current epoch | controller output | — |
+| `setpoint` | DEGRADED(setpoint) | `estimate`, `altitude`, `attitude` held | zero horizontal velocity, zero yaw rate, altitude from the last valid setpoint | none (steady) |
+| `horizontal` | DEGRADED(horizontal) | `altitude`, `attitude` held | level attitude, zero yaw rate, thrust from the altitude controller | none (steady) |
+| `altitude` | BRIDGE(altitude) | `attitude` held; a last thrust **validated as non-saturated and inside a stated band** | level attitude, zero yaw rate, that banded thrust | `bridge_max_s`, absolute |
+| `estimate` | BRIDGE(estimate) | as above | as above | `bridge_max_s`, absolute |
+| bridge expired, or `estimate`+`altitude` together | TERMINAL | `attitude` held | `degraded_terminal_action` | `descent_max_s`, absolute |
+| `attitude` (flight-controller failure), or no eligible row, or the fallback fails validation | UNCONTAINED | — | **publication suppressed** | latched |
 
-**Terminal action** (USER 4):
+Precedence for simultaneous losses: attitude > estimate > altitude >
+horizontal > setpoint, escalating **directly** without traversing
+intermediate states. An expiry is **absolute**: it cannot be refreshed by
+repeated bad packets, a changing failure reason, republication, or capability
+flicker.
 
-| Value | Definition | Default |
-|---|---|---|
-| `descent_command` | a **model-based descent command**: level attitude, zero yaw rate, and a thrust from the characterized map chosen to produce descent, with **bounded command values**. The resulting descent speed is **REPORTED, not bounded** — a speed bound needs feedback or a justified finite-horizon argument, and the vertical state whose loss caused this is unavailable | simulation default |
-| `handoff` | release authority to the flight controller | **requires P10**; a failed handoff falls to UNCONTAINED |
-| `hold` | frozen thrust | **defined and explicitly rejected**: it retains the original hazard indefinitely. Available only as a documented non-option, so configurations naming it are refused at startup |
+**Single arbitration.** Every publication path — timer or callback — takes
+exactly one supervisor decision per published command. A fresh estimate
+callback cannot overwrite a latched TERMINAL or UNCONTAINED command.
 
-Truth may **score** descent behaviour; it may never drive it (rule 6). The
-hardware gate is **enforced in the implementation**, not only documented: the
-command sink refuses any hardware output path until an approved
-command-and-failsafe contract parameter exists, which it does not before P10,
-so a simulation terminal policy cannot become a hardware default through an
-omitted override.
+**Terminal action** (USER): `descent_command`, a model-based descent command
+with bounded command values and the resulting speed **REPORTED, never
+bounded**. `handoff` requires P10 and a failed handoff falls to UNCONTAINED.
+`hold` means frozen thrust, is **rejected** as a terminal policy, and a
+configuration naming it is refused at startup.
 
-**Contact and disarm authority, without truth** (USER 4). Terminal behaviour
-must end, not descend forever at non-zero thrust:
+**Requested force versus delivered force, amended (pass 3 A2).** Bounding the
+thrust *command* does not bound delivered force. [V] The stand-in allocates
+collective thrust and attitude torques and then clamps **each rotor force**
+to `[0, f_max]`
+([standin.cpp:64-71](../src/reef_fc_standin/src/standin.cpp#L64-L71)), so
+clipping changes the delivered collective force and torques; and because the
+torques follow attitude error
+([:61-63](../src/reef_fc_standin/src/standin.cpp#L61-L63)), a low collective
+command can still yield nonzero rotor thrust. The contract therefore
+distinguishes **requested collective force** from **delivered rotor forces**,
+and every descent run reports rotor saturation and the actual attitude
+response throughout.
 
-- While `altitude` is healthy: contact is declared when the range-derived
-  height is below `contact_height_m` and its rate is below
-  `contact_rate_mps` for `contact_samples` consecutive fused observations;
-  the controller then commands zero thrust and publishes a **disarm request**
-  on its own interface.
-- With no vertical state: the descent command is bounded in **duration** by
-  `descent_max_s`, after which the controller commands minimum thrust, issues
-  the disarm request, and enters UNCONTAINED — an explicit, bounded
-  give-up rather than an indefinite descent.
-- The disarm **request** is published; honouring it belongs to the firmware
-  (P10) or, in simulation, to the labelled stand-in. The controller never
-  asserts disarm authority it does not have, and never consults truth.
-- IMU-based contact detection is registered as a later candidate; phase 1
-  does not rely on it.
+**Evidence required before activation, amended (pass 3 A1).** Characterizing
+the descent does not establish "better than nothing". Within a stated finite
+envelope and duration, each descent case is recorded **alongside the
+command-suppression case from equivalent initial conditions**: initial
+height, vertical and horizontal velocity, tilt, failure cause; commands,
+actual attitude, actuator saturation, trajectory, termination time, disarm
+acknowledgment; peak descent speed, touchdown speed, horizontal displacement,
+contact outcome; and the conditions under which descent **worsens** the
+outcome or never reaches the landing criterion. "No commanded climb" is an
+intent statement, not a guarantee of monotonic descent — a descending thrust
+command may initially accompany upward motion. The mechanism may be
+implemented before this evidence exists; the simulation **default** is
+activated only after it, and the word "safer" is used only with the
+comparison in hand.
 
-**Invalid-command path** (pass 2, bounded and non-recursive): validate the
-normal candidate; on failure latch the reason and select a
-capability-compatible fallback; validate the fallback through the **same**
-final gate; if that also fails, invoke the terminal failure response and
-record UNCONTAINED. No bouncing between validator and supervisor. Fallback
-parameters are validated **at startup**, and failure of the fallback itself
-is tested. **Never publish an invalid command to satisfy continuity.**
+**Range-based landing criterion, amended (pass 3 C3).** Not a proof of
+contact, and renamed accordingly. It is a safety-critical landing detector
+with prerequisites: a valid, fresh range from the designated source, with
+known sensor offset and usable surface and tilt geometry; **distinct
+advancing observations over a minimum dwell**, never repeated fusion of one
+reading; a valid rate estimate; detector reset after invalid or gapped
+observations; and entry **only** during landing or terminal descent. The
+constrained simulation envelope states the maximum residual height and drop
+accepted when zero thrust is requested. Tests: low stationary hover near the
+ground, a frozen range reading, and a false close surface.
+
+**Termination, amended (pass 3 B1/C1/C2).**
+
+- With the landing criterion met: command zero collective thrust, publish the
+  **disarm request**, and remain terminal until a **fresh DISARMED status**
+  confirms the result; otherwise report failure to acknowledge. Zero
+  collective does **not** prove the motors stopped (attitude torque
+  allocation can still produce rotor thrust), so motor shutdown is confirmed
+  after the stand-in accepts the disarm.
+- With no vertical state: `descent_max_s` is a **maximum emergency-action
+  budget**, chosen from the permitted flight envelope — **not** an inferred
+  time to landing. A recent qualified last-known altitude may refine it only
+  with a stated age horizon and uncertainty growth, and must never be
+  *required* to enter emergency descent, since it may be exactly what was
+  lost. Expiry means "the supported emergency-action budget ended", not
+  "landing completed".
+- A separate timeout covers **failure to obtain the landing criterion while
+  `altitude` is nominally healthy**.
+- At timed termination the minimum-thrust command is a **single validated
+  transition command**, followed by suppression — never indefinite
+  minimum-thrust publication — and it is omitted entirely if it fails
+  validation. The outcome is recorded as UNCONTAINED.
+
+**Disarm request interface.** Its recipient is defined; acknowledgment is a
+fresh status; retries are bounded; and it takes **priority over a scenario
+runner's arm request**, so a competing publisher cannot undo terminal
+disarming. Publication of the request is not completion.
+
+**UNCONTAINED, accepted for simulation (pass 3 B1).** When neither the normal
+candidate nor an eligible fallback passes validation: suppress actuator-command
+publication, latch UNCONTAINED, and **continue health reporting**. Do not
+revive a cached command because it once passed validation. Cancel scheduled
+republication, and test that queued or in-flight commands cannot restart an
+indefinite stream. This lets the stand-in's watchdog expire; that is an
+**uncontained failure**, not a safe landing and not a guaranteed motor
+shutdown. It is a simulation policy only: P10 must establish what silence
+actually does on hardware — RC fallback, mode transitions, firmware
+failsafe — and the policy does not transfer automatically.
+
+**Invalid-command path.** Validate the normal candidate at the single gate;
+on failure latch the reason and select a capability-compatible fallback from
+the table; validate it at the **same** gate; on failure invoke the terminal
+response and record UNCONTAINED. No recursion and no bouncing between
+validator and supervisor. Fallback parameters are validated **at startup**,
+and failure of the fallback itself is tested.
 
 **Recovery.** Exit age below entry age; `recover_samples` distinct advancing
 samples over `recover_duration_s`; epoch agreement; KC5b reseeding; bounded
-transition. A late queued command must not regain authority after disarm.
-TERMINAL and UNCONTAINED never auto-resume the mission.
+transition. TERMINAL and UNCONTAINED never auto-resume the mission, and a
+late queued command never regains authority after disarm.
 
-**Tests.** State-machine unit tests for every transition and precedence
-combination; alternating good/bad samples; burst recovery; delayed queues;
-simultaneous estimate and setpoint loss; fallback-parameter failure;
-both-candidates-invalid; disarm during each state; the P07b scenarios both
-ways.
+**Tests.** Every transition and precedence combination; the fallback table
+row by row including disqualified prerequisites; alternating good/bad
+samples; burst recovery; delayed queues; simultaneous losses; fallback
+parameter failure; both candidates invalid; disarm during each state; descent
+versus suppression comparisons; the P07b scenarios both ways.
 
 **Parity impact.** None with the toggle off; the legacy crash outcomes stay
 reproducible with their characterizations.
@@ -405,23 +500,48 @@ non-finite estimate followed by valid data.
 **Defect** (K5). Commands are published from the first estimate on, armed or
 not.
 
-**Proposed fix.**
+**Proposed fix.** Readiness gating, plus an arming contract **split by
+history** (pass 3 D1, which refused rev 3's version: withholding thrust the
+moment status goes stale in established flight converts a status-channel
+dropout into a deliberate loss of lift).
 
 | Situation | Behaviour |
 |---|---|
-| positively disarmed, fresh status | publish nothing; prevent entry into autonomous control where the interface allows |
-| arming status unknown or stale | ARMING_UNKNOWN: no thrust-generating command, reported, requires a fresh positive status to leave |
-| armed, not ready | the supervisor's arbitrated command — **not** silence, which the watchdog punishes |
+| positively disarmed, fresh status | publish nothing; block entry into autonomous control where the interface allows |
+| status unknown, **never confirmed armed** or last confirmed **disarmed** | publish no flight commands; do not initiate autonomous thrust |
+| status unknown, **previously confirmed armed with active control** | **block mission continuation** and enter a bounded emergency policy, continuing while commands remain valid and the required capabilities survive. This preserves previously established emergency authority; it grants no new normal-flight authority from a stale status |
+| emergency budget expired, or no valid fallback | UNCONTAINED, with the publication-suppression policy |
+| armed, fresh status, not ready | the supervisor's arbitrated command — not silence, which the watchdog punishes |
 | flying, readiness lost | NC1c degradation, never a publication stop |
 
-"Ready" means every mode-required input is fresh **and** valid **and**
-ordered **and** from the current epoch. Arming status itself carries a
-freshness contract. A late queued command must not regain authority after
-disarm.
+**Leaving uncertainty** requires **fresh authoritative status**, not a fresh
+*positive* one (pass 3): a fresh DISARMED report resolves the uncertainty and
+**immediately terminates publication**; a fresh ARMED report permits
+requalification but must not automatically resume a latched terminal mission.
 
-**Tests.** Startup with unknown status; stale previously-armed status;
-confirmed disarm; arm, disarm, rearm; restart while armed; a queued command
-arriving after disarm.
+**Status freshness horizon (D2).** The ~10 Hz rate gives an expected period,
+not a deadline:
+
+```
+T_status = k * T_period + J_status + D_transport
+```
+
+with an explicit allowed missed-message count `k` and a measured delay
+budget. [A] Three periods plus a measured allowance is an initial simulation
+candidate, not an approved safety limit. Source age and receipt liveness are
+measured **separately**; identity, order and epoch are validated, so repeated
+old "armed" messages cannot refresh trust. The status-loss deadline is kept
+**separate** from the bounded emergency-continuation deadline.
+
+"Ready" means every mode-required input is fresh **and** valid **and**
+ordered **and** from the current epoch. A late queued command must not regain
+authority after disarm.
+
+**Tests.** Startup with unknown status; stale status after confirmed armed
+flight (must not cut thrust); stale status never armed; fresh DISARMED during
+each state; fresh ARMED after terminal; repeated stale "armed" messages;
+arm, disarm, rearm; restart while armed; a queued command arriving after
+disarm.
 
 **Parity impact.** None with the toggle off.
 
