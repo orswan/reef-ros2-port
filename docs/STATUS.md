@@ -405,6 +405,7 @@ closed-loop runs. Checks after the fix, original container:
 | `scripts/regress_x3_scenario.sh` (full, GUI case included) | 0 | 13/13 PASS (`log/checks/regress_x3_20261006_041439`, repeated with the exit code recorded) |
 | `scripts/reef_check.sh control` | 0 | 5/5 assertions; closed loop 26/26 and 19/19 (`log/checks/reef_check_control_20261006_043047`); both closed-loop manifests name the REEF controller and the stand-in |
 | `reef_sim` pytest | 0 | 31/31 (28 before; `test/test_manifest.py` adds 3) |
+| `scripts/reef_check.sh faults` (USER decision: historical evidence on the baseline commit) | 0 | PASS, 27 min, on `5af39af`, 0 uncommitted paths: F1–F12 36/36; the 11 closed-loop scenarios 87 judged (81 acceptance + 6 characterizations) + 3 REPORTED; 163 PASS lines, 0 FAIL (`log/checks/reef_check_faults_20261006_044758`) |
 
 Not re-run for the fix: the release gate itself. The delta from the H11
 commit is one manifest string and one test file, and the gate's own runs
