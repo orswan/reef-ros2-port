@@ -29,3 +29,6 @@ __pycache__/
 
 # Downloaded third-party assets (see src/reef_sim/assets/*.json, scripts/setup_assets.py)
 /assets/
+
+# Human-readable summaries kept out of the repository (not normative)
+/notes/
