@@ -579,15 +579,22 @@ and the annotated tag `sim-baseline-v0.1.0` applied there. Remaining USER
 step: push `main` and the tag to GitHub from the Mac.
 
 **Next milestone: P09.5 Modernization** on `main`, branch `p09.5-safety` for
-phase 1. Kickoff order:
-1. Update AGENTS.md: the rules that keep K1–K13, the estimator D-items and
-   the `rgbd_to_velocity` Q-items belong to the tagged baseline; replace them
-   with the correction workflow below. No correction is implied by this
-   change — each still needs its own decision.
-2. Write `docs/CORRECTIONS.md`: one entry per defect (D-, K-, Q-item or R2
-   follow-up) with a reproducing case, the justified expected result, the
-   test that pins it, and the before/after comparison. Fix the acceptance
-   criteria for a correction in ACCEPTANCE.md before implementing it.
+phase 1. USER decisions (2026-10-06): **corrections default ON** (the shipped
+configuration is the safest version, because the goal is physical flight; the
+legacy path is reachable only through per-correction toggles, used by the
+parity runs), and the **independent review is Codex**, before any phase-1
+code. Kickoff status:
+1. **done**: AGENTS.md now carries the correction workflow instead of the
+   rules that kept the legacy behaviour on `main` (the tagged baseline still
+   owns those). No correction is implied by the change; each needs its own
+   decision.
+2. **done (draft)**: [CORRECTIONS.md](CORRECTIONS.md) is the register
+   (IDs `C*` estimator, `KC*` controller, `NC*` chain-level), with phase-1
+   entries NC1, NC2, KC5, KC6, C7–C10; criteria drafted in ACCEPTANCE.md
+   ("`corrections` (P09.5 phase 1)"), and the review packet is
+   [reviews/Codex_Phase1_Packet.md](reviews/Codex_Phase1_Packet.md).
+   **Blocked on**: the Codex review and the USER's approval of the criteria
+   before any code.
 3. Phase 1, safety, in this order: invalid and NaN input handling (D7, D9,
    K6), covariance validation (R1 findings 3 and 4), controller output
    inhibition (K5), stale estimate and setpoint handling (P07b item 27).

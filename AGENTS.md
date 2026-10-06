@@ -20,6 +20,27 @@ with this file, this file wins.
   codes, skipped checks, human checks still needed, next milestone) and add
   brief evidence in `docs/reviews/<milestone>.md`.
 
+## Correction workflow (P09.5, docs/CORRECTIONS.md)
+
+- Every correction has an ID (`C*` estimator, `KC*` controller where the
+  number is the K-item it fixes, `NC*` chain-level behaviour with no legacy
+  counterpart), one named boolean parameter, **default true**, whose false
+  value reproduces the legacy path exactly.
+- Before code: a register entry (defect, failure scenario, proposed fix,
+  justified expected result, test, parity impact) and acceptance criteria in
+  ACCEPTANCE.md. Before merging: a reproducing case that fails with the
+  toggle off and passes with it on, a focused regression test separate from
+  the legacy tests, and a before/after record.
+- Never weaken or overwrite a legacy test or golden file to accommodate a
+  correction. The legacy suites keep asserting the legacy path with the
+  toggles off; they are the evidence that the port reproduces the originals.
+- One correction per commit. A correction that changes tuning (for example a
+  PID sign or anti-windup fix) states the effect on the simulation gains in
+  the same commit, and gains still change only in explained configuration
+  commits.
+- Safety corrections may not depend on a test hook, on truth, or on anything
+  unavailable on hardware.
+
 ## Environment rules
 
 - Two containers share this project, both Ubuntu 24.04, x86_64, ROS 2 Jazzy,
@@ -76,12 +97,17 @@ with this file, this file wins.
 - Never use port output as its own reference. Golden files change only via
   `check_baseline.py --update-golden "<reason>"`, and only with an explained
   source or algorithm decision (the reason is stored in `golden/index.json`).
-- Legacy defects (D1–D10) stay in the reference. Corrections (C1–C6) need
-  explicit approval and are separate, documented deviations with their own
-  tests. USER decisions: C1–C6 were deferred to R1 so that the port first
-  reproduced master exactly; after R1 (2026-09-30) C1 is approved and on by
-  default, C2–C6 remain deferred, and the simulation keeps the IMU vibration
-  assumption.
+- Legacy defects (D1–D10) stay **in the reference**, which is historical
+  evidence and never changes. What changes is the port.
+- **P09.5 (USER, 2026-10-06): corrections are the default.** The faithful
+  baseline is frozen at the tag `sim-baseline-v0.1.0`; on `main` the shipped
+  default configuration is the safest corrected version, because the goal is
+  physical flight. Legacy behaviour is reachable only by explicit toggles,
+  and those are used by the parity runs. Each correction still needs its own
+  USER decision, its own commit, a register entry in
+  [docs/CORRECTIONS.md](docs/CORRECTIONS.md) and its own tests; a correction
+  that is not in the register and approved is not implemented.
+- The IMU vibration assumption stays (USER, 2026-09-30) until C6 is decided.
 - Port tolerances are fixed in ACCEPTANCE.md §4; do not loosen them to make a
   port pass.
 
@@ -98,14 +124,19 @@ with this file, this file wins.
 
 ## Estimator port rules (P04, docs/INTERFACES.md §3)
 
-- The port must stay bit-identical to the reference:
-  `baseline/tools/check_port.py` (via `reef_check.sh baseline`) after any
-  change to `src/reef_estimator` or `reef_msgs` helpers. Physical plausibility
-  is `reef_check.sh estimator`; fault behaviour is `reef_check.sh faults`.
-- Correction C1 was approved at R1 and is on by default
-  (`correction_c1_clear_xy_flag`); parity with master is always checked with
-  it off, and the default output against the independent model with C1.
-  C2–C6 stay deferred; each needs its own decision, commit, and tests.
+- **With every correction toggled off, the port must stay bit-identical to
+  the reference**: `baseline/tools/check_port.py` (via `reef_check.sh
+  baseline`) after any change to `src/reef_estimator` or `reef_msgs`
+  helpers. That parity is the historical evidence and may never be traded
+  away; a correction that cannot be switched off is not acceptable.
+  Physical plausibility is `reef_check.sh estimator`; fault behaviour is
+  `reef_check.sh faults`.
+- The default configuration (corrections on) is checked against the
+  independent model, not against master. C1 (`correction_c1_clear_xy_flag`)
+  is the pattern every later correction follows: one named parameter,
+  default true, false reproducing the legacy path.
+- C2–C6 and the later corrections stay unimplemented until each is approved
+  and registered (docs/CORRECTIONS.md).
 - Messages must carry the state at the original's publish point (before the
   takeoff check; R1 finding 1); `check_port.py` compares them with what the
   original published.
@@ -120,10 +151,12 @@ with this file, this file wins.
 
 ## Controller port rules (P06, docs/CONTROL_CHAIN.md, INTERFACES.md §4)
 
-- USER (2026-09-30): the `reef_control` port is strictly faithful and
-  bit-exact to `12237b76`; no robustness changes or algorithm improvements.
-  Legacy behaviour K1–K13 stays and is asserted; changing it needs an
-  explicit decision, its own commit, and tests (none approved).
+- The tagged baseline (`sim-baseline-v0.1.0`) is a strictly faithful,
+  bit-exact port of `12237b76` (USER, 2026-09-30). On `main`, P09.5 corrects
+  K-items under the same rules as the estimator: corrections default on,
+  each with a named toggle whose off state reproduces `12237b76` bit for
+  bit, a register entry and its own tests. K-items that have no approved
+  correction yet stay and stay asserted.
 - After any change to `src/reef_control`, run `reef_check.sh control`
   (original in `baseline/control` vs port, core and node, independent model).
   Never patch the pinned sources; harness adaptations go in
@@ -141,8 +174,13 @@ with this file, this file wins.
 - Test hooks (P07b) are labelled, default off, and enabled only by the
   scenario overlays in `src/reef_sim/config/closed_loop/`; never enable them
   in nominal runs or demos, and never add hooks to the controller or
-  estimator cores. No failsafes beyond the legacy behaviour (USER): crashes
-  in the dropout and stand-in-exit cases are the documented result.
+  estimator cores.
+- Safety behaviour that the legacy system lacks (freshness checks, output
+  inhibition, non-finite containment) is **in scope from P09.5 phase 1** and
+  belongs behind a registered correction, not in a test hook. Until the
+  correction that covers a case is approved, that case's documented outcome
+  stands, including the crashes in the dropout and stand-in-exit scenarios.
+  The legacy outcome must stay reproducible with the toggles off.
 
 ## Simulation data rules (`src/reef_sim`, docs/X3_SCENARIO.md)
 

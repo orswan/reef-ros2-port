@@ -606,3 +606,44 @@ USER decisions (2026-10-02):
 Wrappers: `reef_check.sh release [--profile core|vision]`,
 `scripts/reproduce_release.sh`, `scripts/ci.sh`. Physical-drone support stays
 pending until P10.
+
+### `corrections` (P09.5 phase 1, safety) — DRAFT 2026-10-06, to be fixed before any P09.5 code
+
+Proposed by the implementer, pending the USER's approval and the independent
+Codex review ([reviews/Codex_Phase1_Packet.md](reviews/Codex_Phase1_Packet.md)).
+Nothing here is scored until it is approved; review may change the numbers,
+which is the point of fixing them first.
+
+USER decisions (2026-10-06):
+- **Defaults:** corrections are **on** in the shipped configuration. The
+  legacy path is reachable only through each correction's named toggle.
+- **History:** the legacy goldens, fixtures and reference tests are never
+  overwritten; they keep asserting the legacy path with the toggles off.
+- **Review:** independent (Codex) before phase 1 code; R3 still required
+  before any flight.
+
+The register, with one entry per correction, is
+[CORRECTIONS.md](CORRECTIONS.md). Phase 1 covers NC1, NC2, KC5, KC6, C7, C8,
+C9, C10.
+
+| Area | Judged |
+|---|---|
+| Legacy parity preserved | with every correction toggle off, `check_port.py` 253/253 and `check_control.py` 106/106 stay bit-identical to the originals, and the D- and K-item characterizations still pass. Any change here fails the milestone outright |
+| Corrected output | with the defaults on, the estimator matches the independent step-wise model on all 50 streams within the ACCEPTANCE §4 tolerances, and the controller matches the independent model with the corrections modelled |
+| Per correction | a reproducing case that fails with the toggle off and passes with it on; a focused regression test separate from the legacy tests; a before/after record in the commit. A correction without all three is not merged |
+| Toggle coverage | every correction's parameter is exercised in both states by the test suite; a correction that cannot be switched off fails |
+| NC1 estimate timeout | `dropout_long`: no crash — tilt within 0.1 rad of level, descent rate ≤ 1 m/s, vehicle intact at the end. `velocity_loss`: horizontal drift ≤ 0.5 m in 10 s (2.7 m in the baseline). Both re-scored with the toggle off, reproducing the documented legacy outcome |
+| NC2 setpoint timeout | `setpoint_stale`: horizontal speed ≤ 0.1 m/s within 1 s of the timeout, altitude held within 0.1 m, no crash (the baseline keeps moving for 6 s) |
+| KC5 output inhibition | zero commands published before arming in every scenario; the nominal closed-loop run still 26/26 and the causality run 19/19 |
+| KC6 non-finite containment | one injected NaN estimate costs at most one control step: commands finite throughout, tracking recovered within 1 s, and no NaN in any motor command. Permanent-NaN latching must be reproducible with the toggle off |
+| C7 attitude validity | a NaN, zero-norm or norm-1.1 quaternion skips the sample; the estimate stays finite. Attitude normalization is a separate toggle, scored against the independent model |
+| C8 dt continuity | after a skipped sample the next dt equals the true sample interval; 50 consecutive skips produce no covariance blow-up; `s11` still asserts the double dt with the toggle off |
+| C9 gate validity | per source (range, RGB-D XY, mocap Z, mocap XY) and per fault (NaN measurement, NaN covariance, zero variance, negative variance): the observation is rejected, the state is unchanged, and the rejection is counted on `diagnostics`. With the toggle off, master's accept-on-NaN behaviour is reproduced |
+| C10 covariance parameters | an indefinite covariance parameter stops startup with a message naming the parameter and its minimum eigenvalue; every shipped YAML still starts. Not toggleable (parameter validation is already a deliberate deviation, D10) |
+| No regression in nominal runs | the nominal closed-loop run keeps all 26 judged items, and estimate age p99 stays ≤ 20 ms on an idle host. No correction may add work to the estimate→command path that moves p99 by more than 2 ms |
+| Scenario accounting | the P07b scenarios whose documented outcome changes (dropout_long, setpoint_stale, velocity_loss) gain corrected-mode criteria and keep their legacy-mode characterizations. Test accounting classes (acceptance / characterization / REPORTED) are unchanged |
+| Documentation | CORRECTIONS.md entry per correction; STATUS and the review packet record the before/after; AGENTS.md's correction workflow is followed |
+
+Wrapper: `reef_check.sh corrections` (new target, exit 0/1/2 as the others),
+which runs the legacy-parity profile and the corrected profile and fails if
+either side moves. `reef_check.sh baseline` keeps meaning legacy parity.
