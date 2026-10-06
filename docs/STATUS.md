@@ -485,7 +485,8 @@ produce the corrected label.
     10 s); without range, altitude error 0.27 m in 10 s; `face_target` makes
     the heading wander inside the dead zone (K10). Position mode uses an
     IDEALIZED (truth) mocap pose.
-28. **R2 follow-ups (code, open)**: compare `node_id` in the P06 parity;
+28. **R2 follow-ups (code): deferred to P09.5** (USER, 2026-10-06; the
+    baseline is frozen as verified). The items are: compare `node_id` in the P06 parity;
     legacy helper vectors for `get_yaw`; assert K11's "differentiators never
     reset"; report the K10 heading error at 6 s again; report the three
     always-pass characterization items as REPORTED instead of counting them
@@ -509,6 +510,8 @@ produce the corrected label.
     regenerates both vision worlds and changes their SHA-256s, so it is
     deferred past the tag (`src/reef_sim/test/test_manifest.py` strips
     comments before parsing rather than depending on the defect).
+    **Deferred to P09.5** (USER, 2026-10-06): fixing it before the tag would
+    invalidate the SHA-256 values the release check recorded.
 30. (resolved, `e743179`) `manifest.yaml` named the stock truth-fed
     controller in closed-loop runs.
 
@@ -573,11 +576,12 @@ outstanding before the tag: a short demo re-check of the manifest-label fix
 6 h 15 min gate stays valid at `09b9a5e`). Then: merge into `main` and apply
 the annotated tag `sim-baseline-v0.1.0`.
 
-Open USER decisions for the tag: whether to run `reef_check.sh faults` once
-in a container first (§7, in neither release profile); whether the seven R2
-code follow-ups (item 28) go in before the tag or into P09.5; and open item
-29 (the invalid XML in the generated vision world), which is recommended for
-after the tag.
+USER decisions for the tag (2026-10-06), all in the direction of freezing the
+baseline exactly as verified: `reef_check.sh faults` is run once before the
+tag as historical evidence on the baseline commit (§5n); the seven R2 code
+follow-ups (item 28) and the invalid XML in the generated vision world
+(item 29) are both deferred to P09.5, so that no SHA-256 recorded by the
+release check is invalidated.
 
 **After P09 (USER, 2026-10-02):**
 
@@ -596,6 +600,10 @@ after the tag.
    - **Phase 2, control logic:** D-term anti-damping (K1), ineffective
      anti-windup (K2), heading wrapping (K9), differentiator and reset
      behaviour (K3, K4, K6, K11).
+   - **Also in P09.5 scope** (USER, 2026-10-06): the seven R2 code
+     follow-ups (item 28) and the invalid XML in the generated vision
+     worlds (item 29), both deferred from P09 to keep the tagged baseline
+     exactly as verified.
 4. **Testing methodology for corrections.** Never overwrite the legacy golden
    outputs or reference tests; they stay as historical evidence that the
    original behaviour is reproduced. Each correction gets:
