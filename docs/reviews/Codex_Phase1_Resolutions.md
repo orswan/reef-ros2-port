@@ -130,3 +130,84 @@ corrections and 14 toggles (counting C1, already shipped):
    normalization is off, in which a norm-1.1 quaternion is accepted and
    scales the rotation matrix? (Our answer: yes, deliberately, because that
    is master's behaviour for valid input — but it should be challenged.)
+
+---
+
+# Pass 2 resolutions (revision 2 → revision 3)
+
+Review: [Codex_Phase1_Review_V2.md](Codex_Phase1_Review_V2.md) (independent,
+Codex, 2026-10-06, against HEAD `067f603`). Verdict: **"a sound architectural
+direction, but I would not approve implementation exactly as written"**, with
+the remaining work in the fallback contract, C8's noise model, and
+contradictory acceptance statements. The reviewer again states it ran nothing
+and changed no files.
+
+As in pass 1, every code claim was re-checked here before acceptance. **Three
+of this pass's findings are against claims we made**, and all three stand.
+
+## 1. Claims of ours that pass 2 refuted
+
+| Our claim (rev 2) | Status |
+|---|---|
+| XY process noise does not grow with the gap, because `xyEst.Q` is scaled at the nominal `dt²` | **Refuted.** [V] The contribution is `ΔP = G Q_xy Gᵀ Δt`, which already grows linearly with elapsed `dt`. Whether further scaling is correct depends on what `Q_param` means, and `xy_Q` has no documented units or stochastic assumptions ([estimator_master.yaml:32](../../src/reef_estimator/config/estimator_master.yaml#L32)). We inferred a defect from a double-integrator intuition the XY state may not satisfy. The rescaling is removed from C8 and registered as research item C11 (USER decision) |
+| 50 Hz gives a 5× safety margin on the 100 ms watchdog | **Refuted.** A frequency ratio is not a margin. Replaced by the budget `T_timer + J_scheduling + T_processing + T_transport < T_watchdog − M`, every term measured, transport from receiver-side inter-command gaps |
+| With C7a on and C7b off, a norm-1.1 quaternion is accepted | **Refuted.** C7a rejects any norm outside 1 ± 1e-3 regardless of C7b, and our own C7b fixture used norm 1.01, which C7a also rejects. The fixture is now norm 1.0005; 1.01 and 1.1 are rejection fixtures; the four-row behaviour table is specified, including C7a-off/C7b-on |
+| `bounded_descent` bounds the descent rate | **Refuted.** A thrust map gives force, not speed: constant thrust below weight accelerates downward with no speed-limiting mechanism, and enforcing a bound would need the vertical state whose loss triggered the fallback. The terminal action is now a model-based **descent command** with bounded command values and the speed **REPORTED** (USER decision) |
+| `controller_restart` gains corrected-mode criteria under NC1a | **Refuted.** A timer inside a dead process publishes nothing. NC1a covers estimator loss while the controller lives; process death is registered for P10 and that scenario keeps only its legacy characterization |
+| "No spurious capability loss" across a ROS-time pause and backward jump | **Refuted as written.** It would have preserved stale readiness. Now: a pause accrues no liveness age and fabricates no failure, while a **backward jump invalidates the epoch and requires readiness again** |
+| 50 skips propagate with covariance growth | **Refuted as self-contradictory** against a ten-period step limit. Withdrawn; growth within an admissible gap and invalidation beyond the outage boundary are now separate criteria, and the noise question is C11 |
+
+## 2. Pass 2 claims verified here
+
+| Claim | Our check |
+|---|---|
+| Estimator diagnostics fire about once per 250 IMU callbacks | [V] confirmed: [sensor_manager.cpp:221-224](../../src/reef_estimator/src/sensor_manager.cpp#L221-L224), ~1 Hz at 250 Hz IMU → NC4 |
+| `update()` and `partialUpdate()` still use unchecked inverses | [V] confirmed: `K = P Hᵀ S⁻¹` at [estimator.cpp:33](../../src/reef_estimator/src/estimator.cpp#L33) and [:47](../../src/reef_estimator/src/estimator.cpp#L47). Our C9 covered only the gate → split into C9a and C9b |
+| A timer cannot cover its own process restart | [V] confirmed by construction against the documented 3.7 s restart |
+| Monotonic liveness conflicts with a deliberate pause | [V] confirmed: [pause_resume.yaml](../../src/reef_sim/config/closed_loop/pause_resume.yaml) pauses 2 s of wall time, which a 0.2 s receipt-age timeout would report as failure |
+| Bridge content must be specified per cause | Accepted: validation establishes admissibility, not suitability; a last validated command may hold sustained tilt, a yaw turn or saturated thrust |
+| Both candidate commands can be invalid | Accepted: bounded non-recursive path, startup validation of fallback parameters, UNCONTAINED recorded rather than called safe |
+| Unknown arming status is a distinct state | Accepted: ARMING_UNKNOWN, with startup, stale-armed and confirmed-disarm behaviour and no late queued command regaining authority |
+| One arbitration decision per published command | Accepted: a fresh estimate callback cannot overwrite a latched terminal command |
+| Blind reinitialization can be worse than bounded propagation | Accepted: mark unusable / propagate where justified / requalify, mode-aware, never re-entering ground calibration while airborne |
+| Rejection status must reach command assembly | Accepted: KC6 propagates it; a counter alone is insufficient |
+| NC3 and KC5a cannot exercise a supervisor that does not exist | Accepted: landing order reordered (NC4 → NC1a/b/c → NC3 → KC6/KC5a/KC5b → C8/C7 → C9a/C9b/C10 → NC2) and staged activation adopted (USER): toggles land default false, a capstone commit flips them |
+| The P10 gate must be enforced in the implementation | Accepted: the sink refuses hardware output until an approved contract parameter exists; scored by a negative test |
+| Companion attitude-input loss differs from flight-controller attitude failure | Accepted: NC1b distinguishes them; the latter is UNCONTAINED |
+| KC5b must cover every authority transition, per-axis and mode changes, and define integrator behaviour | Accepted |
+| Terminal behaviour needs a terminal objective | Accepted: contact detection from range while `altitude` is healthy, otherwise a duration-bounded descent, then minimum thrust, a published **disarm request** and UNCONTAINED; never truth-driven |
+| Threshold derivation needs envelope, uncertainty, BRIDGE motion and fallback capability | Accepted, with vertical clearance assessed separately from horizontal stopping distance |
+| `hold` is not intrinsically safer | Accepted, and stronger (USER): `hold` means frozen thrust, retains the original hazard, and is **rejected** as a terminal policy — a configuration naming it is refused at startup |
+| D5 may remain a documented gate approximation if the fusion is validated | Accepted: D5 stays registered for phase 2, C9b supplies the condition |
+| The three narrowings are defensible | Noted; KC5b's widening to every authority transition is folded in |
+
+Nothing in pass 2 was rejected.
+
+## 3. What changed in the plan
+
+Revision 2 had 13 phase-1 corrections and 14 toggles; revision 3 has **15
+and 15**:
+
+- **New:** NC4 (estimator health interface), C9b (fusion-solve validity).
+- **Rewritten:** NC1a gains a measured timing budget and an explicit scope
+  limit; NC1b gains pause/backward-jump semantics, the attitude-loss
+  distinction and NC4 as its source; NC1c gains per-cause bridge content, an
+  unrefreshable expiry, precedence, single arbitration, ARMING_UNKNOWN,
+  UNCONTAINED, the invalid-command path and a terminal objective with disarm
+  authority; KC5a gains the arming contract; KC5b widens to every authority
+  transition; KC6 gains rejection propagation; C7b gains the behaviour table
+  and corrected fixtures; C8 is cut to `dt` bounding plus a separate outage
+  boundary; C9 splits.
+- **Process:** staged activation (toggles default false, capstone flip), and
+  a new rule that a quantitative claim without units, assumptions and a
+  derivation is REPORTED and unproven — written because pass 2 caught two
+  such claims.
+- **Registered:** C11 (XY process-noise discretization), controller-process
+  death, IMU-based contact detection.
+
+## 4. Open for the targeted confirmation pass
+
+See [Codex_Phase1_Confirmation_Packet.md](Codex_Phase1_Confirmation_Packet.md):
+the fallback contracts only — terminal semantics and termination, the
+invalid-command path and UNCONTAINED, arming-status states, and the timing
+budget.

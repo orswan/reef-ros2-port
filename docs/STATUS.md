@@ -593,36 +593,36 @@ code. Kickoff status:
    entries NC1, NC2, KC5, KC6, C7–C10; criteria drafted in ACCEPTANCE.md
    ("`corrections` (P09.5 phase 1)"), and the review packet is
    [reviews/Codex_Phase1_Packet.md](reviews/Codex_Phase1_Packet.md).
-   **Revision 2 (2026-10-06)** after the independent Codex design review
-   (verdict: revise before implementation; raw review
-   [reviews/Codex_Phase1_Review.md](reviews/Codex_Phase1_Review.md),
-   resolutions
+   **Revision 3 (2026-10-06)** after **two** independent Codex design
+   review passes (raw: [pass 1](reviews/Codex_Phase1_Review.md),
+   [pass 2](reviews/Codex_Phase1_Review_V2.md); resolutions for both:
    [reviews/Codex_Phase1_Resolutions.md](reviews/Codex_Phase1_Resolutions.md)).
-   Every finding accepted, three narrowed with reasons; phase 1 grew from 8
-   corrections to 13 (14 toggles) and gained a supervisor architecture:
-   NC1a command continuity (the old design could not detect total estimate
-   loss, because commands are computed only in the estimate callback, and
-   its 200 ms threshold was slower than the stand-in's 100 ms watchdog),
-   NC1b input health and capability (publication freshness cannot see
-   `velocity_loss`), NC1c degraded policy with a bounded bridge and a
-   parameterized terminal action, NC3 outgoing-command validation. C8's
-   premise was wrong and is replaced: the post-skip double dt is real
-   elapsed time, and the hazards are unbounded dt and XY process noise that
-   does not grow with the gap. USER decisions: build the mechanism with the
-   terminal action parameterized (`bounded_descent` in simulation, hardware
-   default gated on P10); every correction gets a toggle, C10 included;
-   timestamp and derivative reseeding enters phase 1 as KC5b, K1 and K2 stay
-   in phase 2.
-   **Blocked on**: the second Codex pass
-   ([reviews/Codex_Phase1_Packet_V2.md](reviews/Codex_Phase1_Packet_V2.md))
-   and the USER's approval of the revision-2 criteria before any code.
-3. Phase 1, safety, in this order: invalid and NaN input handling (D7, D9,
-   K6), covariance validation (R1 findings 3 and 4), controller output
-   inhibition (K5), stale estimate and setpoint handling (P07b item 27).
-4. Phase 2, control logic: K1 D-term anti-damping, K2 anti-windup, K9
-   heading wrapping, K3/K4/K6/K11 differentiator and reset behaviour.
-5. The deferred items from P09: the seven R2 code follow-ups (item 28) and
-   the invalid XML in the generated vision worlds (item 29).
+   Pass 1: "revise the design before implementation". Pass 2: "a sound
+   architectural direction, but I would not approve implementation exactly as
+   written". Nothing from either pass was rejected, and **three pass-2
+   findings refuted claims of ours**: the XY process-noise defect (the
+   contribution already grows linearly with elapsed dt, and `xy_Q` has no
+   documented units — removed from C8 and registered as research item C11),
+   50 Hz as a "5× margin" (a frequency ratio is not a margin — replaced by a
+   measured timing budget), and `bounded_descent` bounding a descent rate (a
+   thrust map gives force, not speed). Also refuted: the C7a/C7b fixture
+   contradiction, NC1a covering `controller_restart` (a timer in a dead
+   process publishes nothing), "no spurious capability loss" across a
+   backward time jump, and the 50-skip covariance criterion.
+   Phase 1 is now **15 corrections, 15 toggles**, adding NC4 (an estimator
+   health interface, because `diagnostics` is ~1 Hz) and C9b (the fusion
+   solve, where `update()`/`partialUpdate()` still use unchecked inverses —
+   a checked gate solve does not protect it).
+   USER decisions (2026-10-06): the terminal action is a model-based descent
+   **command** with the resulting speed REPORTED, not bounded; `hold` (frozen
+   thrust) is rejected as a terminal policy; contact and disarm authority are
+   defined without truth; C8 is cut to `dt` bounding plus a separate outage
+   boundary; **staged activation** — every correction lands with its toggle
+   default false and a capstone commit flips the phase-1 defaults; the third
+   pass is a targeted confirmation of the fallback contracts only.
+   **Blocked on**: that targeted confirmation
+   ([reviews/Codex_Phase1_Confirmation_Packet.md](reviews/Codex_Phase1_Confirmation_Packet.md))
+   and the USER's approval of the revision-3 criteria before any code.
 
 Methodology, unchanged from the USER's 2026-10-02 decision: the legacy
 goldens and reference tests are never overwritten. They stay as historical

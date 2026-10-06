@@ -607,68 +607,83 @@ Wrappers: `reef_check.sh release [--profile core|vision]`,
 `scripts/reproduce_release.sh`, `scripts/ci.sh`. Physical-drone support stays
 pending until P10.
 
-### `corrections` (P09.5 phase 1, safety) — DRAFT rev 2, 2026-10-06, to be fixed before any P09.5 code
+### `corrections` (P09.5 phase 1, safety) — DRAFT rev 3, 2026-10-06, to be fixed before any P09.5 code
 
-Revision 2 after the independent Codex design review
-([reviews/Codex_Phase1_Review.md](reviews/Codex_Phase1_Review.md),
-resolutions in [reviews/Codex_Phase1_Resolutions.md](reviews/Codex_Phase1_Resolutions.md)),
-whose verdict on revision 1 was "revise the design before implementation".
-Pending the USER's approval and a second review pass. Nothing here is scored
-until it is approved; the register is [CORRECTIONS.md](CORRECTIONS.md).
+Revision 3 after two independent Codex design review passes
+([pass 1](reviews/Codex_Phase1_Review.md),
+[pass 2](reviews/Codex_Phase1_Review_V2.md); resolutions in
+[reviews/Codex_Phase1_Resolutions.md](reviews/Codex_Phase1_Resolutions.md)).
+Pass 2 would not approve revision 2 as written; the contradictions it found
+are resolved below. Pending the USER's approval and a **targeted
+confirmation** pass on the fallback contracts only. The register is
+[CORRECTIONS.md](CORRECTIONS.md); phase 1 is 15 corrections and 15 toggles.
 
 USER decisions (2026-10-06):
-- **Defaults:** corrections are **on** in the shipped configuration; the
-  legacy path is reachable only through each correction's named toggle.
-- **No toggle exceptions**, including C10, so legacy parity needs no caveat.
-- **Degraded flight:** the mechanism is built now; the terminal action is a
-  parameter, `bounded_descent` in simulation, the hardware default gated on
-  P10 firmware verification.
-- **Phase boundary:** timestamp and derivative reseeding enters phase 1
-  (KC5b); K1 and K2 stay in phase 2.
-- **History:** legacy goldens, fixtures and reference tests are never
-  overwritten; they keep asserting the legacy path with the toggles off.
+- Corrections are **on in the shipped configuration**; legacy is reachable
+  only through each correction's toggle, which the parity runs use.
+- **No toggle exceptions**, C10 included.
+- **Staged activation:** each correction lands with its toggle **default
+  false**; a capstone commit flips the phase-1 defaults and carries the
+  end-to-end scoring. Partially assembled defaults never ship.
+- **Terminal policy:** a model-based **descent command** with bounded command
+  values and the resulting speed **REPORTED, not bounded**. `hold` (frozen
+  thrust) is defined and **rejected** as a terminal policy. Contact and
+  disarm authority are defined without truth.
+- **C8 scope cut:** `dt` bounding and the outage boundary only; the XY
+  process-noise discretization becomes research item C11.
+- Reseeding is in phase 1 (KC5b); K1 and K2 stay in phase 2.
 
-Phase 1 covers NC1a, NC1b, NC1c, NC2, NC3, KC5a, KC5b, KC6, C7a, C7b, C8,
-C9, C10.
-
-**Thresholds are candidates, not limits.** `estimate_timeout_s` 0.2,
-`setpoint_timeout_s` 0.5, `horizontal_timeout_s` 1.0, `altitude_timeout_s`
-1.0, `bridge_max_s` 0.3, `command_rate_hz` 50, `recover_samples` 5–10,
-`recover_duration_s` 0.05–0.1 are initial test values. They are derived from
-detection delay, actuation delay, speed and clearance, **not** from nominal
-latency (a p99 of 10–20 ms bounds no scheduling stall), and each is REPORTED
-with its measured margin before any is promoted to a judged limit.
+**No threshold here is a limit.** `command_rate_hz`, `estimate_timeout_s`,
+`setpoint_timeout_s`, `horizontal_timeout_s`, `altitude_timeout_s`,
+`bridge_max_s`, `descent_max_s`, `contact_*`, `recover_samples`,
+`recover_duration_s`, `max_propagation_dt` and the outage boundary are
+candidates. Each is REPORTED with its measured margin, derived per failure
+class from permitted speed, tilt, altitude and clearance; sensor,
+health-transport, scheduling and actuator delays; estimation and
+missing-input uncertainty; available braking or vertical authority; and the
+whole trajectory through detection, BRIDGE and TERMINAL. Nominal p99 latency
+justifies nothing, and a frequency ratio is not a margin.
 
 | Area | Judged |
 |---|---|
-| Legacy parity preserved | with every correction toggle off, `check_port.py` 253/253 and `check_control.py` 106/106 stay bit-identical to the originals, and every D- and K-item characterization still passes. Any movement fails the milestone outright |
-| Corrected output | with the defaults on, the estimator matches the independent step-wise model on all 50 streams within the §4 tolerances, and the controller matches the independent model with the corrections modelled |
-| Per correction | a reproducing case that fails with the toggle off and passes with it on; a focused regression test separate from the legacy tests; a before/after record in the commit. All three, or it is not merged |
-| Toggle coverage | every toggle exercised in both states; the all-off and all-on profiles; and the named interaction set (CORRECTIONS.md §5): C7a×C8, C9×C1, KC5a×KC6, KC5b×NC1c, NC1b×NC2, NC1a×NC3, C10×C9. Transition coverage: startup, arm, disarm, rearm, restart while armed, degradation, recovery, double degradation, ROS-time pause and backward jump |
-| NC1a command continuity | with the estimate stream stopped while armed, commands continue at `command_rate_hz`, command age at the stand-in never exceeds 2 / `command_rate_hz`, and `offboard_timeouts` stays 0. Detection must act before the 100 ms `offboard_timeout_ms`, not after it |
-| NC1b capability detection | `velocity_loss` is detected as loss of `horizontal` within `horizontal_timeout_s` **while the estimate stream is still fresh** (publication age alone cannot see it); `range_loss` as loss of `altitude`; `estimator_reset` as an epoch change. Future, duplicate and out-of-order inputs are rejected per the stated policy; a ROS-time pause and backward jump produce no spurious capability loss |
-| NC1c degraded policy | `dropout_long`: no crash — attitude within 0.1 rad of level, descent rate within `descent_rate_max`, vehicle intact at the end. `setpoint_stale`: horizontal speed ≤ 0.1 m/s within 1 s of the timeout, altitude held within 0.1 m. `velocity_loss`: commanded horizontal velocity ≤ 0.05 m/s after the transition, with the resulting truth drift **REPORTED** (revision 1's 0.5 m limit had no mechanism behind it and is withdrawn). BRIDGE never exceeds `bridge_max_s`; expiry forces TERMINAL. No frozen-thrust descent-rate guarantee is claimed or scored |
-| NC1c recovery | leaving a degraded state requires an exit age below the entry threshold, `recover_samples` distinct advancing samples over `recover_duration_s`, epoch agreement and KC5b reseeding. Alternating good/bad samples, burst recovery and delayed queues produce no oscillation (bounded by a measured transition count). TERMINAL does not auto-resume the mission |
-| NC2 setpoint health | stale, non-finite, out-of-order, duplicate and mode-mismatched setpoints each enter DEGRADED(`setpoint`) and are reported; the legacy "keeps moving for 6 s" outcome stays reproducible with the toggle off |
-| NC3 command validation | no command with an unknown mode, inconsistent `ignore` bits, a non-finite used field, or an out-of-limit used field reaches the sink on **any** path, attitude mode included; fields the mode ignores carry a defined value. A validation failure escalates through the supervisor and never results in silence while armed. Scored by a per-mode table test, a fuzz test over the command struct, and an assertion over every scenario's recorded commands |
-| KC5a readiness gate | zero commands published while positively disarmed, in every scenario; armed-but-not-ready produces the supervisor's command, never silence; readiness lost in flight produces degradation, never a publication stop. Nominal closed-loop still 26/26 and causality 19/19 |
-| KC5b reseeding | at every enable and every recovery, the first step shows no derivative kick and no first-dt artefact; steady-state output is unchanged. A degrade-and-recover-twice scenario shows no command spike beyond the attitude limits at either recovery |
-| KC6 non-finite containment | a single non-finite **state** costs at most one control step, with automatic recovery on the next finite sample; a non-finite **setpoint** with a finite state never touches the differentiator (revision 1's "every non-finite error latches" is withdrawn as too broad). Scored on **command safety**, not only finiteness: no NaN, no unintended zero-thrust command, and outputs within limits throughout. Permanent latching stays reproducible with the toggle off |
-| C7a IMU validity | NaN, **±inf**, zero-norm and norm-1.1 inputs are each rejected with the state unchanged and the reason reported, on the running **and** the initialization paths. The infinity case is a new finding: `isnan(sqrt(inf))` is false, so the baseline accepts it |
-| C7b normalization | a 1.01-norm quaternion matches the independent model with the toggle on and master with it off |
-| C8 gap handling | after a skipped sample the next step integrates the **true elapsed** interval — the timestamp is never advanced on rejection — **and** the covariance grows with the gap (revision 1's "50 skips produce no covariance blow-up" is withdrawn: growth is the correct response, and its absence is unjustified confidence). A gap beyond `max_propagation_dt` invalidates the affected state and reports it instead of propagating. Backward stamps are never accepted as a new baseline. `s11` still asserts the legacy behaviour with the toggle off |
-| C9 observation validity | per source (range, RGB-D XY, mocap Z, mocap XY) × fault (NaN or inf measurement, NaN covariance, zero variance, negative variance, indefinite covariance, ill-conditioned `S`): the observation makes **no measurement-update contribution**, judged against an otherwise identical trajectory with the observation absent — not against a bare "state unchanged". `S` is validated by a checked solve, not `S.inverse()`. Rejections are counted and attributed per source, separating invalid data from innovation outliers, and feed NC1b. With the toggle off, master's accept-on-non-finite behaviour is reproduced |
-| C10 covariance contract | `P0`/`Q` require positive semidefiniteness with scale-aware tolerance and an inspected eigensolver status (intentional singularity allowed, warned where operationally relevant); measurement `R` requires strict positive definiteness; failure stops startup naming the parameter and the eigenvalue; every shipped YAML still starts; with the toggle off the legacy acceptance is restored exactly |
-| No regression in nominal runs | the nominal closed-loop run keeps all 26 judged items, and estimate age p99 stays ≤ 20 ms on an idle host. No correction may move p99 by more than 2 ms, and NC1a's scheduler must not add a publication path that changes the nominal command rate |
-| Scenario accounting | the P07b scenarios whose documented outcome changes (`dropout_long`, `setpoint_stale`, `velocity_loss`, `controller_restart`) gain corrected-mode criteria and keep their legacy-mode characterizations. The accounting classes (acceptance / characterization / REPORTED) are unchanged, and every new measurement without a justified limit is REPORTED |
-| Documentation | a CORRECTIONS.md entry per correction; the resolution document updated if a review finding is rejected, with the reason; STATUS and the review packet record the before/after; AGENTS.md's correction workflow is followed |
+| Legacy parity preserved | with every toggle off, `check_port.py` 253/253 and `check_control.py` 106/106 stay bit-identical, and every D- and K-item characterization passes. Any movement fails the milestone. Solve-for-inverse substitutions (C9a, C9b) keep the legacy expression in their toggle-off path, since a factorized solve is not bit-identical |
+| Corrected output | with the capstone defaults on, the estimator matches the independent step-wise model on all 50 streams within the §4 tolerances, and the controller matches the independent model with the corrections modelled |
+| Staged activation | every correction merges with its toggle default false and its own tests passing; no intermediate commit changes a shipped default; the capstone commit flips the phase-1 defaults, records the end-to-end before/after, and is the only place the corrected profile is scored as a whole |
+| Per correction | a reproducing case that fails with the toggle off and passes with it on; a focused regression test separate from the legacy tests; a before/after record. All three, or it is not merged |
+| Toggle and interaction coverage | each toggle in both states; all-off and all-on profiles; C7a×C8, C9a×C1, C9a×C9b, C9b×C10, KC5a×KC6, KC5b×NC1c, NC1b×NC2, NC1a×NC3, NC4×NC1b, NC1c×KC5a. Transitions: startup, arm, disarm, rearm, restart while armed, degradation, recovery, double degradation, simultaneous losses with precedence, ROS-time pause, backward jump, queued command after disarm |
+| NC4 estimator health | `estimator_health` carries per-source **fused**-observation age, split rejection counts, estimator epoch, per-state validity, its own stamp and a validity horizon, at `health_rate_hz` and on every validity or epoch change. Re-fusing one old observation does **not** refresh the reported age; a stopped estimator's health expires. Safety never depends on the ~1 Hz `diagnostics` cadence |
+| NC1a command continuity | with estimates stopped while armed, commands continue at `command_rate_hz`, and the **timing budget** `T_timer + J_scheduling + T_processing + T_transport < T_watchdog − M` holds with every term measured — transport from **inter-command gaps observed at the receiver** (the stand-in's `cmd_age`), not from publication times — and `M` stated explicitly. `offboard_timeouts` stays 0. **Scope:** estimator loss while the controller lives. `controller_restart` is explicitly **out of scope** (a timer in a dead process publishes nothing); rev 2's claim for that scenario is withdrawn |
+| NC1b capability detection | `velocity_loss` is detected as lost `horizontal` from NC4's fused-observation age while the estimate stream is still fresh; `range_loss` as lost `altitude`; `estimator_reset` as an epoch change. Future, duplicate and out-of-order inputs are rejected per the stated policy. A **simulation pause** accrues no liveness age and fabricates no failure; a **backward time jump invalidates the epoch and requires readiness again** (rev 2's "no spurious capability loss" is withdrawn as it would have preserved stale readiness). Companion attitude-input loss is distinguished from flight-controller attitude failure; only the former is addressable, and the latter is recorded UNCONTAINED |
+| NC1c states and precedence | every transition and precedence combination is exercised, including simultaneous losses escalating directly by the stated precedence (attitude > estimate > altitude > horizontal > setpoint) without traversing intermediate states. One arbitration decision per published command on every path: a fresh estimate callback cannot overwrite a latched TERMINAL or UNCONTAINED command |
+| NC1c BRIDGE | bridge content is specified **per cause** — level attitude, zero yaw rate, and a thrust validated as non-saturated and within a stated band — never "the last validated command", since validation establishes admissibility and not suitability. The expiry is absolute and **cannot** be refreshed by repeated bad packets, a changing failure reason, or republication; expiry forces TERMINAL. `bridge_max_s` is justified from the maximum acceptable trajectory under the bridge command, not from watchdog periods |
+| NC1c terminal behaviour | `descent_command` issues level attitude, zero yaw rate and a bounded thrust command from the characterized map; **the resulting descent speed is REPORTED, never judged as bounded** (rev 2's ≤ 1 m/s guarantee is withdrawn: constant thrust below weight accelerates downward with no speed-limiting mechanism, and the vertical state that could enforce a bound is the one that was lost). Simulation truth may score it and must never drive it. A configuration naming `hold` is refused at startup. `handoff` is unavailable until P10, and a failed handoff falls to UNCONTAINED |
+| NC1c termination | terminal behaviour **ends**: with `altitude` healthy, contact is declared from range-derived height below `contact_height_m` with rate below `contact_rate_mps` for `contact_samples` fused observations, then zero thrust and a **disarm request**; with no vertical state, the descent is bounded by `descent_max_s`, then minimum thrust, disarm request and UNCONTAINED. The disarm request is published, never asserted as authority the controller lacks, and never derived from truth. "Vehicle intact" alone is not a terminal objective |
+| NC1c invalid-command path | bounded and non-recursive: validate the normal candidate, latch the reason, select a capability-compatible fallback, validate it through the **same** gate, and on failure invoke the terminal response and record **UNCONTAINED** — which is reported as uncontained, never described as safe, until P10 establishes a downstream failsafe contract. **No invalid command is ever published to satisfy continuity.** Fallback parameters are validated at startup and their failure is tested |
+| NC1c recovery | exit age below entry age, `recover_samples` distinct advancing samples over `recover_duration_s`, epoch agreement, KC5b reseeding, bounded transition. Alternating good/bad samples, burst recovery and delayed queues produce no oscillation, bounded by a measured transition count. TERMINAL and UNCONTAINED never auto-resume the mission; a late queued command never regains authority after disarm |
+| NC2 setpoint health | stale, non-finite, out-of-order, duplicate and mode-mismatched setpoints each enter DEGRADED(`setpoint`): horizontal speed ≤ 0.1 m/s within 1 s of the timeout, altitude held within 0.1 m. The legacy 6 s "keeps moving" outcome stays reproducible with the toggle off |
+| NC3 command validation | no command with an unknown mode, inconsistent `ignore` bits, a non-finite or out-of-limit used field, or a float overflow reaches the sink on any path, attitude mode included; ignored fields carry a defined value. Scored by per-mode table tests, a fuzz test over the command struct, and an assertion over every scenario's recorded commands |
+| KC5a readiness and arming | zero commands while positively disarmed with fresh status; **ARMING_UNKNOWN** (stale or never-received status) publishes no thrust-generating command and requires a fresh positive status to leave; armed-but-not-ready produces the supervisor's command, never silence; readiness lost in flight degrades, never stops publication. Nominal closed-loop still 26/26 and causality 19/19 |
+| KC5b transition seeding | at **every** control-authority transition — arm, readiness gained, recovery from each degraded state, per-axis recovery, mode change — the first step shows no derivative kick and no first-dt artefact, with integrator freeze/reset behaviour defined per transition type and per axis. Steady-state output unchanged. Scored on transitions, since reseeding changes transition trajectories |
+| KC6 containment | one non-finite **state** costs at most one control step with automatic recovery; a non-finite **setpoint** with a finite state never touches the differentiator. Rejection status is **propagated into command assembly**, so a rejected step cannot become an unintended zero-thrust command: scored on command safety (no NaN, no unintended zero thrust, outputs in limits), not on finiteness alone. Permanent latching stays reproducible with the toggle off |
+| C7a IMU validity | NaN, **±inf**, zero-norm, norm-1.01 and norm-1.1 inputs are rejected with the state unchanged and the reason reported, on the running **and** initialization paths |
+| C7b normalization | the four-row behaviour table is asserted, including C7a-off/C7b-on with zero-norm and non-finite input (no division by zero). The normalization fixture uses **norm 1.0005**, inside C7a's tolerance; 1.01 and 1.1 are rejection fixtures. C7a-on/C7b-off is compatibility evidence retaining small rotation errors, not an equivalent of the normalized profile |
+| C8 `dt` bound and outage boundary | the elapsed time is preserved and the reference stamp never moves backward; a `dt` beyond `max_propagation_dt` is not integrated as one step, with substeps addressing integration error only — it is stated that substeps do not reconstruct missing acceleration or attitude. The **outage boundary is separate** from the step limit: beyond it the state is marked unusable for control, propagated internally only where justified, and **requalified** before authority returns. No blind reinitialization, and no re-entry to ground calibration while airborne. Rev 2's "50 skips with covariance growth" criterion is withdrawn: it contradicted the step limit, and the process-noise question moved to C11 |
+| C9a gate validity | per source × (NaN or ±inf measurement, NaN covariance, zero variance, negative variance, indefinite covariance, ill-conditioned `S`): no measurement-update contribution, judged against an otherwise identical trajectory with the observation **absent**. `D²` must be finite **and** within threshold to accept, computed through a checked solve whose factorization status is inspected. Rejections are counted, attributed, split into invalid-data and outlier, and reported via NC4 |
+| C9b fusion validity | `update()` and `partialUpdate()` factorize `S` with an inspected status, form the candidate state and covariance, and commit **only if** the candidate is finite and the covariance stays symmetric and PSD within tolerance; otherwise the fusion is rejected, reported, and the state left bit-identical to the no-observation trajectory. Scored because a checked **gate** solve does not protect a later fusion with a different `S` |
+| C10 covariance contract | `P0`/`Q` positive semidefinite with scale-aware tolerance and inspected eigensolver status (intentional singularity allowed, warned where operationally relevant); measurement `R` strictly positive definite; failure stops startup naming the parameter and the eigenvalue; every shipped YAML still starts; toggle-off restores legacy acceptance exactly |
+| No regression in nominal runs | the nominal closed-loop run keeps all 26 judged items; estimate age p99 ≤ 20 ms on an idle host; no correction moves p99 by more than 2 ms; NC1a's scheduler does not change the nominal command rate |
+| Hardware gate enforced in code | the command sink refuses every hardware output path until an approved command-and-failsafe contract parameter exists, which it cannot before P10. A simulation terminal policy cannot become a hardware default through an omitted configuration override. Scored by a negative test asserting refusal |
+| Scenario accounting | `dropout_long`, `setpoint_stale`, `velocity_loss` gain corrected-mode criteria and keep their legacy-mode characterizations; `controller_restart` keeps only its legacy characterization, since NC1a cannot cover process death. Accounting classes (acceptance / characterization / REPORTED) are unchanged, and every new measurement without a justified limit is REPORTED |
+| Documentation | a register entry per correction; the resolution document updated whenever a review finding is narrowed or rejected, with the reason; STATUS and the confirmation packet record the before/after; AGENTS.md's correction workflow followed |
 
 Wrapper: `reef_check.sh corrections` (new target, exit 0/1/2 as the others),
-which runs the legacy-parity profile and the corrected profile and fails if
+running the legacy-parity profile and the corrected profile and failing if
 either side moves. `reef_check.sh baseline` keeps meaning legacy parity.
 
-**Out of scope here, registered for later:** K1, K2 and the general K3/K4
-behaviour (phase 2, with re-tuning); C2–C6; D5 (the XY gates' use of the
-previous `R`, newly registered from this review); the R2 follow-ups; the
-vision-world XML defect; and everything that depends on the unverified
-firmware contract, including the `handoff` terminal action (P10).
+**Out of scope here, registered:** K1, K2 and general K3/K4 (phase 2, with
+re-tuning); C11 (XY process-noise discretization — units, stochastic
+assumptions and discretization to be established before any equation
+changes); C2–C6; D5, permitted as a documented gate approximation now that
+C9b validates the fusion; controller-process death; the range-only altitude
+fallback; IMU-based contact detection; and everything resting on the
+unverified firmware contract, including `handoff` (P10).
