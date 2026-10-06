@@ -1,6 +1,6 @@
 # REEF ROS 2: project status
 
-Updated 2026-10-06 (P09 H11 PASS; manifest-label fix). `main` contains P00–P07, P07b,
+Updated 2026-10-06 (**P09 done: merged to `main` and tagged `sim-baseline-v0.1.0`**). `main` contains P00–P07, P07b,
 the R1 fixes, and the R2 documentation corrections, all merged by
 fast-forward at the user's request (P07: §5i, P07b: §5j, R2: §5k).
 Section 3 reconciles
@@ -16,7 +16,7 @@ project by the implementer, with logs or manifests in the repository tree.
 
 | Branch | Head | Contents | Merged to `main`? |
 |---|---|---|---|
-| `main` | see `git log -1 main` | starter, checker fixes, dev container, P00–P07, P07b, R1 fixes, R2 documentation corrections | — |
+| `main` | `7590a97`, tagged **`sim-baseline-v0.1.0`** | starter, checker fixes, dev container, P00–P07, P07b, R1 fixes, R2 documentation corrections, P08, P09 | — |
 | `feature/x3-sim-dataset`, `p00-status-and-wrappers` | merged | P01, P00 | yes (fast-forward, 2026-09-30) |
 | `p02-baseline` | `04c9b19` | P02: reference harness, fixtures, independent check, baseline decision, `reef_check.sh baseline` | yes (fast-forward, 2026-09-30) |
 | `p03-msgs-interfaces` | `65bd779` | P03: `reef_msgs`, vendored `rosflight_msgs`, parameter contract, interface contract | yes (fast-forward, 2026-09-30; USER: `interfaces` passed in the dev container) |
@@ -25,9 +25,12 @@ project by the implementer, with logs or manifests in the repository tree.
 | `r1-fixes` | `1ee999b` | R1 decisions: finding 1 (publish point), C1 default, published-message parity, doc fixes | yes (fast-forward, 2026-09-30; USER: `baseline`, `faults` passed in the dev container) |
 | `p06-controller` | `0f2aa63` | P06: control-chain spec, `reef_control` port (history imported), reference harness, fixtures, model, `control` target, dry-run sink | yes (fast-forward, 2026-10-01; USER: `control` 106/106 and `interfaces` passed in the dev container) |
 | `p07b-faults-position` | merged | P07b: closed-loop fault scenarios (test hooks), position mode with idealized mocap, K9/K10, `faults` target extension, R2 packet, R2 doc corrections | yes (fast-forward, 2026-10-01, after R2) |
+| `p09-release` | `7590a97` | P09: release criteria and gates, licences, code quality and sanitizers, local CI, fresh-clone reproduction, H11 results, the manifest-label fix, `faults` on the baseline commit | yes (fast-forward, 2026-10-06; USER: H11 PASS on a fresh image, Block D label re-check PASS) |
 | `p07-closed-loop` | merged | P07: criteria, `reef_fc_standin`, closed-loop world/launch/runner/analyzer, recorded runs, `control` closed-loop steps, `reef_demo.sh closed-loop` | yes (fast-forward, 2026-10-01; USER: headless `control` passed in the dev container) |
 
-No Git remote, pull request, or tag exists; the repository is local. Upstream
+The annotated tag **`sim-baseline-v0.1.0`** marks `7590a97` on `main`
+(2026-10-06). The remote `origin` is a GitHub repository; pushing `main` and
+the tag is a USER step from the Mac. Upstream
 references are pinned in [MIGRATION.md §2](MIGRATION.md): `reef_estimator`
 `e4179f48c3f26e22bd1366b71ee1e117ce2f5f7f` (master) and the simulation-bundle
 pin `95987b5118b624208910d9e51424300022e1f512`.
@@ -88,7 +91,7 @@ wrapper boundary ([INTERFACES.md §1](INTERFACES.md#1-command-interface)).
 | P07b closed-loop faults and position mode | done, merged: 11 scenarios (estimate dropout short/long, estimator reset, controller restart, stale setpoint, range and velocity loss, pause, stand-in exit, position square with K9, `face_target` K10); crashes documented where the legacy system has no protection (USER) | `reef_check.sh faults`; [ACCEPTANCE §5 P07b](ACCEPTANCE.md), [reviews/P07b.md](reviews/P07b.md) |
 | R2 independent review | **PASS (SELF-REVIEW)**, USER 2026-10-01: an independent Claude session reviewed `p07b-faults-position` (code `bb47cf0`); minor documentation corrections applied (§5k) | [reviews/R2.md](reviews/R2.md), [reviews/R2_packet.md](reviews/R2_packet.md) |
 | P08 RGB-D | **done, merged** (USER 2026-10-02: H12 dev-container `vision` PASS; cleared to merge): `rgbd_to_velocity` ported bit-exact (53/53); camera interface; replacement OpenCV odometry; open loop 20/20; faults 24/24; closed loop on vision 17/17 (staleness p99 14 ms after the `/clock` fixes, USER option 2); capability matrix; `reef_demo.sh vision` | `reef_check.sh vision` PASS (§5l); [VISION.md](VISION.md), [reviews/P08.md](reviews/P08.md) |
-| P09 simulation release | **every gate PASS on `p09-release`, H11 included** (gates at `132c27c`, H11 at `09b9a5e`, manifest fix `e743179`; §5n): release vision profile PASS; fresh-clone offline reproduction PASS; `faults` PASS; CI 6/6; code quality (0 warnings, ASan/UBSan clean). Licence: public open source (MIT, Hunter Swan; ports MIT UF REEF AVL) | `reef_check.sh release`; [RELEASE_SIMULATION.md](RELEASE_SIMULATION.md), [reviews/P09.md](reviews/P09.md) |
+| P09 simulation release | **done, merged, tagged `sim-baseline-v0.1.0`** (2026-10-06). Every gate PASS, H11 included (gates at `132c27c`, H11 at `09b9a5e`, manifest fix `e743179`; §5n): release vision profile PASS; fresh-clone offline reproduction PASS; `faults` PASS; CI 6/6; code quality (0 warnings, ASan/UBSan clean). Licence: public open source (MIT, Hunter Swan; ports MIT UF REEF AVL) | `reef_check.sh release`; [RELEASE_SIMULATION.md](RELEASE_SIMULATION.md), [reviews/P09.md](reviews/P09.md) |
 | P10–P13 hardware | blocked: target hardware unknown | |
 
 ## 5. Checks run for P00 (original container, 2026-09-29, base `9af00d2`)
@@ -555,10 +558,10 @@ produce the corrected label.
   pending input, and the archived run directory
   (`log/h11_attempt1_nominal_result.json`) shows the queued samples the
   drain needs.
-- **H11b (P09, Mac, about 5 min):** demo re-check of the manifest-label fix
-  `e743179` in the H11 container: `git pull --ff-only` in the H11 clone, then
-  `scripts/reef_demo.sh closed-loop`, and confirm `manifest.yaml` names the
-  REEF controller and the stand-in. The release gate is not re-run (§5n).
+- **H11b (P09):** **done, PASS** (USER, 2026-10-06, `7590a97` in the H11
+  container): `scripts/reef_demo.sh closed-loop` 26/26 judged items, estimate
+  age p99 12 ms, and `manifest.yaml` names the REEF controller and the
+  stand-in. The release gate was not re-run (§5n).
 - **H3:** open the three plots and `manifest.yaml` of a recent
   `recordings/x3_*` run, and check them against
   [X3_SCENARIO.md](X3_SCENARIO.md). (`feature/x3-sim-dataset` is already
@@ -570,12 +573,34 @@ produce the corrected label.
 
 ## 8. Next milestone
 
-**P09**: every gate passed on `p09-release`, **H11 included** (gates at
-`132c27c`, H11 at `09b9a5e`; §5n, RELEASE_SIMULATION.md §4). One item is
-outstanding before the tag: a short demo re-check of the manifest-label fix
-`e743179` in the H11 container (`reef_demo.sh closed-loop`, about 5 min; the
-6 h 15 min gate stays valid at `09b9a5e`). Then: merge into `main` and apply
-the annotated tag `sim-baseline-v0.1.0`.
+**P09 is closed** (2026-10-06): every gate passed, H11 and the H11b label
+re-check included; `p09-release` was fast-forwarded into `main` at `7590a97`
+and the annotated tag `sim-baseline-v0.1.0` applied there. Remaining USER
+step: push `main` and the tag to GitHub from the Mac.
+
+**Next milestone: P09.5 Modernization** on `main`, branch `p09.5-safety` for
+phase 1. Kickoff order:
+1. Update AGENTS.md: the rules that keep K1–K13, the estimator D-items and
+   the `rgbd_to_velocity` Q-items belong to the tagged baseline; replace them
+   with the correction workflow below. No correction is implied by this
+   change — each still needs its own decision.
+2. Write `docs/CORRECTIONS.md`: one entry per defect (D-, K-, Q-item or R2
+   follow-up) with a reproducing case, the justified expected result, the
+   test that pins it, and the before/after comparison. Fix the acceptance
+   criteria for a correction in ACCEPTANCE.md before implementing it.
+3. Phase 1, safety, in this order: invalid and NaN input handling (D7, D9,
+   K6), covariance validation (R1 findings 3 and 4), controller output
+   inhibition (K5), stale estimate and setpoint handling (P07b item 27).
+4. Phase 2, control logic: K1 D-term anti-damping, K2 anti-windup, K9
+   heading wrapping, K3/K4/K6/K11 differentiator and reset behaviour.
+5. The deferred items from P09: the seven R2 code follow-ups (item 28) and
+   the invalid XML in the generated vision worlds (item 29).
+
+Methodology, unchanged from the USER's 2026-10-02 decision: the legacy
+goldens and reference tests are never overwritten. They stay as historical
+evidence that the port reproduces the originals, and each correction is a
+separate, documented deviation with its own tests, kept switchable where the
+parity runs need the legacy path (as `correction_c1_clear_xy_flag` is).
 
 USER decisions for the tag (2026-10-06), all in the direction of freezing the
 baseline exactly as verified: `reef_check.sh faults` is run once before the

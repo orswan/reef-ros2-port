@@ -4,8 +4,10 @@ Status: **every gate PASS, including H11**. The release gates, the
 fresh-clone offline reproduction and `faults` passed in the original
 container (§4), and the human reproduction H11 passed on a fresh image on the
 Mac (USER, 2026-10-06, commit `09b9a5e`, §4 and §6). The annotated tag
-`sim-baseline-v0.1.0` is applied after the manifest-label fix `e743179` is
-confirmed by a short demo re-check (USER, P09).
+`sim-baseline-v0.1.0` was applied to `main` `7590a97` on 2026-10-06, after
+H11 and the USER's demo re-check of the manifest-label fix `e743179`
+(26/26, estimate age p99 12 ms, the manifest naming the REEF controller and
+the stand-in).
 
 This checkpoint is the **faithful baseline**. The ported components
 reproduce the original code bit for bit, including its documented legacy
@@ -33,7 +35,7 @@ pending until P10 supplies the target hardware.
 
 | | |
 |---|---|
-| Version | `sim-baseline-v0.1.0` (annotated tag, after H11) |
+| Version | `sim-baseline-v0.1.0` (annotated tag on `main` `7590a97`, applied 2026-10-06 after H11) |
 | Commit | code verified at **`132c27c`** (the fresh-clone reproduction, §4). The later commits on `p09-release` change documentation only |
 | Criteria | [ACCEPTANCE.md `release` (P09)](ACCEPTANCE.md) |
 | Evidence | §4, [reviews/P09.md](reviews/P09.md), review packet [reviews/P09_packet.md](reviews/P09_packet.md) |
